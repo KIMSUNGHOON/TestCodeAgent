@@ -295,6 +295,11 @@ class CodingWorkflow:
 
 Your role is to analyze the user's coding request and create a checklist of tasks.
 
+IMPORTANT CONSTRAINTS:
+- Maximum 9 tasks allowed (MUST be less than 10 tasks)
+- If the request is complex, group related steps into single tasks
+- Focus on essential implementation steps only
+
 OUTPUT FORMAT (strictly follow this format):
 1. [Task description]
 2. [Task description]
@@ -575,9 +580,16 @@ Keep feedback concise. Only list actual issues found."""
             }
 
             # Step 3: Review - show status, then result
+            # Build review content from final artifacts only (not intermediate streaming text)
+            review_code_content = []
+            for artifact in all_artifacts:
+                review_code_content.append(
+                    f"```{artifact['language']} {artifact['filename']}\n{artifact['content']}\n```"
+                )
+
             review_message = ChatMessage(
                 role="user",
-                text=f"Please review this code:\n\n{code_text}"
+                text=f"Please review the following code:\n\n" + "\n\n".join(review_code_content)
             )
 
             yield {
