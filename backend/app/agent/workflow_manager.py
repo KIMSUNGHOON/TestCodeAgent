@@ -1,5 +1,7 @@
 """Workflow-based coding agent using Microsoft Agent Framework."""
 import logging
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, AsyncGenerator, Optional
 from dataclasses import dataclass, field
 from agent_framework import (
@@ -16,9 +18,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class Response:
-    """Simple response wrapper for chat completion."""
+    """Response wrapper matching agent framework expectations."""
     messages: List[ChatMessage] = field(default_factory=list)
     conversation_id: Optional[str] = None
+    response_id: Optional[str] = None
+    object: str = "response"
+    created_at: Optional[datetime] = None
+    status: str = "completed"
+
+    def __post_init__(self):
+        """Initialize default values."""
+        if self.response_id is None:
+            self.response_id = f"resp_{uuid.uuid4().hex[:24]}"
+        if self.created_at is None:
+            self.created_at = datetime.now()
 
     @property
     def text(self) -> str:
