@@ -1,6 +1,7 @@
 """Workflow-based coding agent using Microsoft Agent Framework."""
 import logging
 from typing import List, Dict, Any, AsyncGenerator, Optional
+from dataclasses import dataclass, field
 from agent_framework import (
     WorkflowBuilder,
     ChatAgent,
@@ -11,6 +12,18 @@ from agent_framework import (
 from app.services.vllm_client import vllm_router
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Response:
+    """Simple response wrapper for chat completion."""
+    messages: List[ChatMessage] = field(default_factory=list)
+    conversation_id: Optional[str] = None
+
+    @property
+    def text(self) -> str:
+        """Get text from first message."""
+        return self.messages[0].text if self.messages else ""
 
 
 class VLLMChatClient(BaseChatClient):
@@ -29,7 +42,7 @@ class VLLMChatClient(BaseChatClient):
         self,
         messages: List[ChatMessage],
         **kwargs
-    ) -> str:
+    ) -> Response:
         """Get a non-streaming response from vLLM.
 
         Args:
@@ -37,7 +50,7 @@ class VLLMChatClient(BaseChatClient):
             **kwargs: Additional arguments (temperature, max_tokens, etc.)
 
         Returns:
-            Response content as string
+            Response object with messages and conversation_id
         """
         # Convert ChatMessage to dict format for vLLM
         # Role is an enum, so we need to get its string value
@@ -49,14 +62,24 @@ class VLLMChatClient(BaseChatClient):
             for msg in messages
         ]
 
-        response = await self.vllm_client.chat_completion(
+        vllm_response = await self.vllm_client.chat_completion(
             messages=vllm_messages,
             temperature=kwargs.get("temperature", 0.7),
             max_tokens=kwargs.get("max_tokens", 2048),
             stream=False
         )
 
-        return response.choices[0].message.content
+        # Create response message
+        response_message = ChatMessage(
+            role="assistant",
+            text=vllm_response.choices[0].message.content
+        )
+
+        # Return Response object with conversation_id
+        return Response(
+            messages=[response_message],
+            conversation_id=kwargs.get("conversation_id")
+        )
 
     async def _inner_get_streaming_response(
         self,
