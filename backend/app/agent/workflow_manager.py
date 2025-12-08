@@ -176,7 +176,7 @@ Output:
         logger.info(f"Executing workflow for request: {user_request[:100]}...")
 
         # Create initial message
-        initial_message = ChatMessage(role="user", content=user_request)
+        initial_message = ChatMessage(role="user", text=user_request)
 
         # Run the workflow
         result = await self.workflow.run(
@@ -203,7 +203,7 @@ Output:
         logger.info(f"Streaming workflow for request: {user_request[:100]}...")
 
         # Create initial message
-        initial_message = ChatMessage(role="user", content=user_request)
+        initial_message = ChatMessage(role="user", text=user_request)
 
         # For now, we'll execute each step and yield progress
         # TODO: Implement proper streaming when agent-framework supports it
@@ -220,7 +220,7 @@ Output:
             yield {
                 "agent": "PlanningAgent",
                 "status": "completed",
-                "content": plan_result
+                "content": plan_result.text
             }
 
             # Step 2: Coding
@@ -233,14 +233,14 @@ Output:
             # Pass plan to coding agent
             coding_message = ChatMessage(
                 role="user",
-                content=f"Based on this plan:\n\n{plan_result}\n\nPlease implement the code."
+                text=f"Based on this plan:\n\n{plan_result.text}\n\nPlease implement the code."
             )
             code_result = await self.coding_agent.run(coding_message)
 
             yield {
                 "agent": "CodingAgent",
                 "status": "completed",
-                "content": code_result
+                "content": code_result.text
             }
 
             # Step 3: Review
@@ -253,21 +253,21 @@ Output:
             # Pass code to review agent
             review_message = ChatMessage(
                 role="user",
-                content=f"Please review this code:\n\n{code_result}"
+                text=f"Please review this code:\n\n{code_result.text}"
             )
             review_result = await self.review_agent.run(review_message)
 
             yield {
                 "agent": "ReviewAgent",
                 "status": "completed",
-                "content": review_result
+                "content": review_result.text
             }
 
             # Final result
             yield {
                 "agent": "Workflow",
                 "status": "finished",
-                "content": f"✅ Workflow completed!\n\n**Final Code:**\n{code_result}\n\n**Review:**\n{review_result}"
+                "content": f"✅ Workflow completed!\n\n**Final Code:**\n{code_result.text}\n\n**Review:**\n{review_result.text}"
             }
 
         except Exception as e:
