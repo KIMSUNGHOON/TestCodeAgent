@@ -25,12 +25,20 @@ class VLLMChatClient(BaseChatClient):
         self.vllm_client = vllm_router.get_client(model_type)
         self.model_type = model_type
 
-    async def create(
+    async def _inner_get_response(
         self,
         messages: List[ChatMessage],
         **kwargs
-    ) -> Any:
-        """Create a chat completion."""
+    ) -> str:
+        """Get a non-streaming response from vLLM.
+
+        Args:
+            messages: List of chat messages
+            **kwargs: Additional arguments (temperature, max_tokens, etc.)
+
+        Returns:
+            Response content as string
+        """
         # Convert ChatMessage to dict format for vLLM
         vllm_messages = [
             {"role": msg.role, "content": msg.content}
@@ -40,10 +48,38 @@ class VLLMChatClient(BaseChatClient):
         response = await self.vllm_client.chat_completion(
             messages=vllm_messages,
             temperature=kwargs.get("temperature", 0.7),
-            max_tokens=kwargs.get("max_tokens", 2048)
+            max_tokens=kwargs.get("max_tokens", 2048),
+            stream=False
         )
 
         return response.choices[0].message.content
+
+    async def _inner_get_streaming_response(
+        self,
+        messages: List[ChatMessage],
+        **kwargs
+    ) -> AsyncGenerator[str, None]:
+        """Get a streaming response from vLLM.
+
+        Args:
+            messages: List of chat messages
+            **kwargs: Additional arguments (temperature, max_tokens, etc.)
+
+        Yields:
+            Chunks of response content
+        """
+        # Convert ChatMessage to dict format for vLLM
+        vllm_messages = [
+            {"role": msg.role, "content": msg.content}
+            for msg in messages
+        ]
+
+        async for chunk in self.vllm_client.stream_chat_completion(
+            messages=vllm_messages,
+            temperature=kwargs.get("temperature", 0.7),
+            max_tokens=kwargs.get("max_tokens", 2048)
+        ):
+            yield chunk
 
 
 class CodingWorkflow:
