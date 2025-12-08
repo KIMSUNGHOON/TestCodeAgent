@@ -27,8 +27,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ sessionId, taskType, init
     scrollToBottom();
   }, [messages]);
 
-  // Load conversation history on mount or when initial messages change
+  // Load conversation history on mount or when session/initial messages change
   useEffect(() => {
+    // If we have initial messages from a loaded conversation, use them
     if (initialMessages && initialMessages.length > 0) {
       // Convert StoredMessage to ChatMessage format
       const convertedMessages: ChatMessageType[] = initialMessages.map((msg) => ({
@@ -37,19 +38,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ sessionId, taskType, init
       }));
       setMessages(convertedMessages);
     } else {
-      loadHistory();
-    }
-  }, [sessionId, initialMessages]);
-
-  const loadHistory = async () => {
-    try {
-      const status = await apiClient.getAgentStatus(sessionId);
-      setMessages(status.history);
-    } catch (error) {
-      console.error('Failed to load history:', error);
+      // For new sessions, start with empty messages
+      // Don't call loadHistory as it fetches from agent memory, not DB
       setMessages([]);
     }
-  };
+  }, [sessionId, initialMessages]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;

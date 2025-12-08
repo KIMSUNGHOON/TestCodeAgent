@@ -37,9 +37,16 @@ function App() {
 
       if (conversation.mode === 'workflow') {
         setMode('workflow');
-        // Convert stored messages to workflow updates if available
+        // Extract workflow updates from stored state (saved as { updates: [...] })
         if (fullConversation.workflow_state) {
-          setLoadedWorkflowState(fullConversation.workflow_state as unknown as WorkflowUpdate[]);
+          const workflowState = fullConversation.workflow_state as { updates?: WorkflowUpdate[] };
+          if (workflowState.updates && Array.isArray(workflowState.updates)) {
+            setLoadedWorkflowState(workflowState.updates);
+          } else {
+            setLoadedWorkflowState([]);
+          }
+        } else {
+          setLoadedWorkflowState([]);
         }
       } else {
         setMode('chat');
