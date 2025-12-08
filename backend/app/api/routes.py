@@ -1,5 +1,6 @@
 """API routes for the coding agent."""
 import logging
+import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -13,6 +14,7 @@ from app.api.models import (
     ChatMessage
 )
 from app.agent.agent_manager import agent_manager
+from app.agent.workflow_manager import workflow_manager
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -195,3 +197,86 @@ async def list_models():
     ]
 
     return ModelsResponse(models=models)
+
+
+# ==================== Workflow Endpoints ====================
+
+
+@router.post("/workflow/execute")
+async def execute_workflow(request: ChatRequest):
+    """Execute coding workflow: Planning -> Coding -> Review.
+
+    This endpoint uses multi-agent workflow to automatically:
+    1. Analyze requirements and create a plan (DeepSeek-R1)
+    2. Generate code based on the plan (Qwen3-Coder)
+    3. Review and improve the code (Qwen3-Coder)
+
+    Args:
+        request: Chat request with coding task
+
+    Returns:
+        Streaming response with workflow progress
+    """
+    try:
+        # Get or create workflow for session
+        workflow = workflow_manager.get_or_create_workflow(request.session_id)
+
+        # Create streaming response
+        async def generate():
+            try:
+                async for update in workflow.execute_stream(
+                    user_request=request.message
+                ):
+                    # Send update as JSON
+                    yield json.dumps(update) + "\n"
+            except Exception as e:
+                logger.error(f"Error in workflow execution: {e}")
+                yield json.dumps({
+                    "agent": "Workflow",
+                    "status": "error",
+                    "content": f"Error: {str(e)}"
+                }) + "\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="application/x-ndjson"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in workflow endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/workflow/sessions")
+async def list_workflow_sessions():
+    """List all active workflow sessions.
+
+    Returns:
+        List of active workflow session IDs
+    """
+    try:
+        sessions = workflow_manager.get_active_sessions()
+        return {"sessions": sessions, "count": len(sessions)}
+
+    except Exception as e:
+        logger.error(f"Error listing workflow sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/workflow/session/{session_id}")
+async def delete_workflow_session(session_id: str):
+    """Delete a workflow session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Success message
+    """
+    try:
+        workflow_manager.delete_workflow(session_id)
+        return {"message": f"Workflow session {session_id} deleted successfully"}
+
+    except Exception as e:
+        logger.error(f"Error deleting workflow session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
