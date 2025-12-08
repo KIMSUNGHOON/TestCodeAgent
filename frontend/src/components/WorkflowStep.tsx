@@ -11,6 +11,43 @@ interface WorkflowStepProps {
   update: WorkflowUpdate;
 }
 
+// Separate component for artifact display to properly use hooks
+interface ArtifactDisplayProps {
+  artifact: Artifact;
+  defaultExpanded: boolean;
+}
+
+const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) => {
+  const [artifactExpanded, setArtifactExpanded] = useState(defaultExpanded);
+
+  return (
+    <div className="mt-3 rounded-lg overflow-hidden border border-[#404040]">
+      <div
+        className="bg-[#1A1A1A] px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-[#2A2A2A]"
+        onClick={() => setArtifactExpanded(!artifactExpanded)}
+      >
+        <div className="flex items-center space-x-2">
+          <span className="text-[#9B9B9B] text-sm">
+            {artifactExpanded ? '▼' : '▶'}
+          </span>
+          <span className="text-sm text-[#ECECF1] font-mono">{artifact.filename}</span>
+        </div>
+        <span className="text-xs text-[#9B9B9B] uppercase">{artifact.language}</span>
+      </div>
+      {artifactExpanded && (
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={artifact.language}
+          customStyle={{ margin: 0, borderRadius: 0, maxHeight: '400px' }}
+          showLineNumbers
+        >
+          {artifact.content}
+        </SyntaxHighlighter>
+      )}
+    </div>
+  );
+};
+
 const WorkflowStep = ({ update }: WorkflowStepProps) => {
   // Default: expanded when running, collapsed when completed
   const [isExpanded, setIsExpanded] = useState(update.status === 'running');
@@ -124,36 +161,6 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
     </div>
   );
 
-  const renderArtifact = (artifact: Artifact, defaultExpanded: boolean = false) => {
-    const [artifactExpanded, setArtifactExpanded] = useState(defaultExpanded);
-
-    return (
-      <div className="mt-3 rounded-lg overflow-hidden border border-[#404040]">
-        <div
-          className="bg-[#1A1A1A] px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-[#2A2A2A]"
-          onClick={() => setArtifactExpanded(!artifactExpanded)}
-        >
-          <div className="flex items-center space-x-2">
-            <span className="text-[#9B9B9B] text-sm">
-              {artifactExpanded ? '▼' : '▶'}
-            </span>
-            <span className="text-sm text-[#ECECF1] font-mono">{artifact.filename}</span>
-          </div>
-          <span className="text-xs text-[#9B9B9B] uppercase">{artifact.language}</span>
-        </div>
-        {artifactExpanded && (
-          <SyntaxHighlighter
-            style={vscDarkPlus}
-            language={artifact.language}
-            customStyle={{ margin: 0, borderRadius: 0, maxHeight: '400px' }}
-            showLineNumbers
-          >
-            {artifact.content}
-          </SyntaxHighlighter>
-        )}
-      </div>
-    );
-  };
 
   const renderReview = () => (
     <div className="mt-3 space-y-4">
@@ -183,7 +190,9 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
         {update.approved ? '✓ APPROVED' : '⚠ NEEDS REVISION'}
       </div>
       {update.corrected_artifacts?.map((artifact, i) => (
-        <div key={i}>{renderArtifact(artifact, false)}</div>
+        <div key={i}>
+          <ArtifactDisplay artifact={artifact} defaultExpanded={false} />
+        </div>
       ))}
     </div>
   );
@@ -256,7 +265,12 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
             <div className="mt-3">
               <p className="text-sm text-gray-400 mb-2">Artifacts created:</p>
               {update.task_result.artifacts.map((artifact, i) => (
-                <div key={i}>{renderArtifact(artifact, i === update.task_result!.artifacts.length - 1)}</div>
+                <div key={i}>
+                  <ArtifactDisplay
+                    artifact={artifact}
+                    defaultExpanded={i === update.task_result!.artifacts.length - 1}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -272,7 +286,7 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
             renderCompletedTasks(update.completed_tasks)
           )}
           <p className="text-[#ECECF1] mb-2">{update.message}</p>
-          {renderArtifact(update.artifact, true)}
+          <ArtifactDisplay artifact={update.artifact} defaultExpanded={true} />
         </div>
       );
     }
@@ -292,7 +306,9 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
             <div className="mt-4">
               <p className="text-sm text-gray-400 mb-2">All artifacts ({update.artifacts.length}):</p>
               {update.artifacts.map((artifact, i) => (
-                <div key={i}>{renderArtifact(artifact, false)}</div>
+                <div key={i}>
+                  <ArtifactDisplay artifact={artifact} defaultExpanded={false} />
+                </div>
               ))}
             </div>
           </div>
