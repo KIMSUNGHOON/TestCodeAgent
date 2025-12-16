@@ -241,6 +241,101 @@ class ApiClient {
       `/conversations/${sessionId}/artifacts?${params.toString()}`
     );
   }
+
+  // ==================== Framework Info ====================
+
+  /**
+   * Get current agent framework info
+   */
+  async getFrameworkInfo(): Promise<{
+    framework: string;
+    agent_manager: string;
+    workflow_manager: string;
+  }> {
+    const response = await this.client.get('/framework/current');
+    return response.data;
+  }
+
+  // ==================== Tool Execution ====================
+
+  /**
+   * Execute a tool
+   */
+  async executeTool(
+    toolName: string,
+    params: Record<string, unknown>,
+    sessionId: string = 'default'
+  ): Promise<{
+    success: boolean;
+    output: unknown;
+    error?: string;
+    metadata?: Record<string, unknown>;
+  }> {
+    const response = await this.client.post('/tools/execute', null, {
+      params: { tool_name: toolName, session_id: sessionId },
+      data: params,
+    });
+    return response.data;
+  }
+
+  /**
+   * Save code to a file
+   */
+  async saveFile(
+    path: string,
+    content: string,
+    sessionId: string = 'default'
+  ): Promise<{
+    success: boolean;
+    output: string;
+    error?: string;
+  }> {
+    const response = await this.client.post('/tools/execute', {
+      tool_name: 'write_file',
+      params: { path, content },
+      session_id: sessionId,
+    });
+    return response.data;
+  }
+
+  /**
+   * Execute Python code
+   */
+  async executePython(
+    code: string,
+    timeout: number = 30,
+    sessionId: string = 'default'
+  ): Promise<{
+    success: boolean;
+    output: {
+      stdout: string;
+      stderr: string;
+      returncode: number;
+    };
+    error?: string;
+  }> {
+    const response = await this.client.post('/tools/execute', {
+      tool_name: 'execute_python',
+      params: { code, timeout },
+      session_id: sessionId,
+    });
+    return response.data;
+  }
+
+  /**
+   * List available tools
+   */
+  async listTools(): Promise<{
+    tools: Array<{
+      name: string;
+      description: string;
+      category: string;
+      parameters: Record<string, unknown>;
+    }>;
+  }> {
+    const response = await this.client.get('/tools/list');
+    return response.data;
+  }
 }
 
 // Export singleton instance

@@ -8,6 +8,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import PromptViewer from './PromptViewer';
 import AgentSpawnViewer from './AgentSpawnViewer';
 import WorkflowViewer from './WorkflowViewer';
+import apiClient from '../api/client';
 
 interface WorkflowStepProps {
   update: WorkflowUpdate;
@@ -18,8 +19,67 @@ interface ArtifactDisplayProps {
   defaultExpanded: boolean;
 }
 
+interface ExecutionResult {
+  success: boolean;
+  stdout?: string;
+  stderr?: string;
+  error?: string;
+}
+
 const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) => {
   const [artifactExpanded, setArtifactExpanded] = useState(defaultExpanded);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [executeStatus, setExecuteStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [savePath, setSavePath] = useState(`./output/${artifact.filename}`);
+
+  const handleSave = async () => {
+    setSaveStatus('saving');
+    try {
+      const result = await apiClient.saveFile(savePath, artifact.content);
+      if (result.success) {
+        setSaveStatus('saved');
+        setShowSaveDialog(false);
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      } else {
+        setSaveStatus('error');
+        alert(`Save failed: ${result.error}`);
+      }
+    } catch (err) {
+      setSaveStatus('error');
+      alert(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (artifact.language !== 'python' && artifact.language !== 'py') {
+      alert('Only Python files can be executed directly.');
+      return;
+    }
+
+    setExecuteStatus('running');
+    setExecutionResult(null);
+
+    try {
+      const result = await apiClient.executePython(artifact.content, 30);
+      setExecutionResult({
+        success: result.success,
+        stdout: result.output?.stdout,
+        stderr: result.output?.stderr,
+        error: result.error
+      });
+      setExecuteStatus(result.success ? 'done' : 'error');
+    } catch (err) {
+      setExecutionResult({
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error'
+      });
+      setExecuteStatus('error');
+    }
+  };
+
+  const isPython = artifact.language === 'python' || artifact.language === 'py';
 
   return (
     <div className="mt-3 rounded-xl overflow-hidden border border-[#E5E5E5] bg-white">
@@ -35,6 +95,8 @@ const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) =>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-[#999999] uppercase bg-[#F5F4F2] px-2 py-0.5 rounded">{artifact.language}</span>
+
+          {/* Copy Button */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -44,8 +106,87 @@ const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) =>
           >
             Copy
           </button>
+
+          {/* Save Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowSaveDialog(true);
+            }}
+            disabled={saveStatus === 'saving'}
+            className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+              saveStatus === 'saved' ? 'text-green-600 bg-green-50' :
+              saveStatus === 'saving' ? 'text-blue-600 bg-blue-50' :
+              saveStatus === 'error' ? 'text-red-600 bg-red-50' :
+              'text-[#666666] hover:text-[#1A1A1A] hover:bg-[#F5F4F2]'
+            }`}
+          >
+            {saveStatus === 'saving' && (
+              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            )}
+            {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? 'Saving...' : 'Save'}
+          </button>
+
+          {/* Execute Button (Python only) */}
+          {isPython && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleExecute();
+              }}
+              disabled={executeStatus === 'running'}
+              className={`text-xs px-2 py-0.5 rounded flex items-center gap-1 ${
+                executeStatus === 'done' ? 'text-green-600 bg-green-50' :
+                executeStatus === 'running' ? 'text-blue-600 bg-blue-50' :
+                executeStatus === 'error' ? 'text-red-600 bg-red-50' :
+                'text-[#16A34A] hover:text-[#15803D] hover:bg-green-50'
+              }`}
+            >
+              {executeStatus === 'running' && (
+                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
+              {executeStatus === 'running' ? 'Running...' : '▶ Run'}
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Save Dialog */}
+      {showSaveDialog && (
+        <div className="px-4 py-3 bg-blue-50 border-t border-blue-100" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-blue-700 font-medium">Save to:</label>
+            <input
+              type="text"
+              value={savePath}
+              onChange={(e) => setSavePath(e.target.value)}
+              className="flex-1 text-xs px-2 py-1 border border-blue-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
+              placeholder="./output/filename.py"
+            />
+            <button
+              onClick={handleSave}
+              disabled={saveStatus === 'saving'}
+              className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setShowSaveDialog(false)}
+              className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-100 rounded"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Code Display */}
       {artifactExpanded && (
         <SyntaxHighlighter
           style={oneDark}
@@ -55,6 +196,42 @@ const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) =>
         >
           {artifact.content}
         </SyntaxHighlighter>
+      )}
+
+      {/* Execution Result */}
+      {executionResult && (
+        <div className={`px-4 py-3 border-t ${executionResult.success ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className={`text-xs font-medium ${executionResult.success ? 'text-green-700' : 'text-red-700'}`}>
+              {executionResult.success ? '✓ Execution Successful' : '✗ Execution Failed'}
+            </span>
+            <button
+              onClick={() => setExecutionResult(null)}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              ✕ Close
+            </button>
+          </div>
+          {executionResult.stdout && (
+            <div className="mb-2">
+              <div className="text-xs text-gray-500 mb-1">Output:</div>
+              <pre className="text-xs bg-gray-900 text-green-400 p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                {executionResult.stdout}
+              </pre>
+            </div>
+          )}
+          {executionResult.stderr && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1">Errors:</div>
+              <pre className="text-xs bg-gray-900 text-red-400 p-2 rounded overflow-x-auto max-h-48 overflow-y-auto">
+                {executionResult.stderr}
+              </pre>
+            </div>
+          )}
+          {executionResult.error && !executionResult.stderr && (
+            <div className="text-xs text-red-600">{executionResult.error}</div>
+          )}
+        </div>
       )}
     </div>
   );

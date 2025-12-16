@@ -1,7 +1,7 @@
 /**
  * Main App component - Claude.ai inspired UI
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import ChatInterface from './components/ChatInterface';
 import WorkflowInterface from './components/WorkflowInterface';
 import AgentStatus from './components/AgentStatus';
@@ -11,15 +11,35 @@ import apiClient from './api/client';
 
 type Mode = 'chat' | 'workflow';
 
+interface FrameworkInfo {
+  framework: string;
+  agent_manager: string;
+  workflow_manager: string;
+}
+
 function App() {
   const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
   const [taskType, setTaskType] = useState<'reasoning' | 'coding'>('coding');
   const [mode, setMode] = useState<Mode>('workflow');
   const [showSidebar, setShowSidebar] = useState(true);
+  const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
 
   // Loaded conversation state
   const [loadedMessages, setLoadedMessages] = useState<StoredMessage[]>([]);
   const [loadedWorkflowState, setLoadedWorkflowState] = useState<WorkflowUpdate[]>([]);
+
+  // Load framework info on mount
+  useEffect(() => {
+    const loadFrameworkInfo = async () => {
+      try {
+        const info = await apiClient.getFrameworkInfo();
+        setFrameworkInfo(info);
+      } catch (err) {
+        console.error('Failed to load framework info:', err);
+      }
+    };
+    loadFrameworkInfo();
+  }, []);
 
   const handleNewConversation = useCallback(() => {
     const newSessionId = `session-${Date.now()}`;
@@ -145,10 +165,32 @@ function App() {
             </button>
           </div>
 
-          {/* Session Info */}
-          <div className="flex items-center gap-2 text-sm text-[#999999]">
-            <div className="w-2 h-2 rounded-full bg-[#16A34A]"></div>
-            <span>{sessionId.slice(-8)}</span>
+          {/* Framework & Session Info */}
+          <div className="flex items-center gap-4">
+            {/* Framework Badge */}
+            {frameworkInfo && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5]">
+                <div className={`w-2 h-2 rounded-full ${
+                  frameworkInfo.framework === 'langchain' ? 'bg-[#3B82F6]' :
+                  frameworkInfo.framework === 'microsoft' ? 'bg-[#10B981]' :
+                  'bg-[#8B5CF6]'
+                }`}></div>
+                <span className="text-xs font-medium text-[#666666]">
+                  {frameworkInfo.framework === 'langchain' ? 'LangChain' :
+                   frameworkInfo.framework === 'microsoft' ? 'Microsoft' :
+                   frameworkInfo.framework.charAt(0).toUpperCase() + frameworkInfo.framework.slice(1)}
+                </span>
+                <span className="text-[10px] text-[#999999] border-l border-[#E5E5E5] pl-2">
+                  {frameworkInfo.workflow_manager.replace('WorkflowManager', '').replace('Workflow', '')}
+                </span>
+              </div>
+            )}
+
+            {/* Session Info */}
+            <div className="flex items-center gap-2 text-sm text-[#999999]">
+              <div className="w-2 h-2 rounded-full bg-[#16A34A]"></div>
+              <span>{sessionId.slice(-8)}</span>
+            </div>
           </div>
         </div>
 
