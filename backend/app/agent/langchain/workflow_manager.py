@@ -176,21 +176,58 @@ def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
 
 
 def parse_review(text: str) -> Dict[str, Any]:
-    """Parse review text into structured format."""
+    """Parse review text into structured format.
+
+    Expected format:
+    ANALYSIS: [summary]
+    ISSUES:
+    - Issue: [problem]
+    SUGGESTIONS:
+    - Suggest: [improvement]
+    STATUS: APPROVED or NEEDS_REVISION
+    """
     issues = []
     suggestions = []
     approved = False
 
-    if re.search(r'(?:approved|lgtm|looks good|no issues)', text, re.IGNORECASE):
-        approved = True
+    # Parse STATUS field explicitly - this takes precedence
+    status_match = re.search(r'STATUS:\s*(APPROVED|NEEDS_REVISION)', text, re.IGNORECASE)
+    if status_match:
+        approved = status_match.group(1).upper() == "APPROVED"
+    else:
+        # Fallback: if no explicit status, check for approval keywords
+        # But ONLY if there are no issues
+        if re.search(r'\b(?:lgtm|looks good|no issues found)\b', text, re.IGNORECASE):
+            approved = True
 
-    issue_pattern = r'(?:^|\n)\s*[-*]?\s*(?:issue|bug|error|problem|warning)[:.]?\s*(.+?)(?=\n|$)'
-    for match in re.finditer(issue_pattern, text, re.IGNORECASE):
-        issues.append(match.group(1).strip())
+    # Parse ISSUES section
+    issues_section = re.search(r'ISSUES:\s*(.*?)(?=SUGGESTIONS:|STATUS:|```|$)', text, re.IGNORECASE | re.DOTALL)
+    if issues_section:
+        issue_lines = issues_section.group(1).strip()
+        # Match "- Issue: description" or "- description" patterns
+        for match in re.finditer(r'[-*]\s*(?:Issue:\s*)?(.+?)(?=\n[-*]|\n\n|$)', issue_lines, re.IGNORECASE):
+            issue_text = match.group(1).strip()
+            if issue_text and len(issue_text) > 2:  # Filter out empty/trivial matches
+                issues.append(issue_text)
 
-    suggestion_pattern = r'(?:^|\n)\s*[-*]?\s*(?:suggest|recommend|consider|improvement)[:.]?\s*(.+?)(?=\n|$)'
-    for match in re.finditer(suggestion_pattern, text, re.IGNORECASE):
-        suggestions.append(match.group(1).strip())
+    # Parse SUGGESTIONS section
+    suggestions_section = re.search(r'SUGGESTIONS:\s*(.*?)(?=STATUS:|ISSUES:|```|$)', text, re.IGNORECASE | re.DOTALL)
+    if suggestions_section:
+        suggestion_lines = suggestions_section.group(1).strip()
+        for match in re.finditer(r'[-*]\s*(?:Suggest(?:ion)?:\s*)?(.+?)(?=\n[-*]|\n\n|$)', suggestion_lines, re.IGNORECASE):
+            suggestion_text = match.group(1).strip()
+            if suggestion_text and len(suggestion_text) > 2:
+                suggestions.append(suggestion_text)
+
+    # If issues exist but STATUS says APPROVED, still consider it not approved
+    # (indicates model inconsistency - be conservative)
+    if issues and approved:
+        # Check if issues are critical
+        critical_keywords = ['error', 'bug', 'crash', 'security', 'vulnerability', 'missing', 'required']
+        for issue in issues:
+            if any(kw in issue.lower() for kw in critical_keywords):
+                approved = False
+                break
 
     return {
         "issues": issues,
@@ -901,43 +938,59 @@ PRIORITY: [high/medium/low for each]
                         }
                     }
 
-            # Final summary
+            # Final result summary
+            final_status = "approved" if approved else "max_iterations_reached"
+            final_message = (
+                f"Code review passed. Generated {len(all_artifacts)} file(s)."
+                if approved else
+                f"Review loop ended after {review_iteration} iterations. Generated {len(all_artifacts)} file(s)."
+            )
+
+            # Orchestrator completion
             yield {
-                "agent": "Workflow",
+                "agent": "Orchestrator",
                 "type": "completed",
-                "status": "finished",
-                "summary": {
+                "status": "completed",
+                "message": final_message,
+                "final_result": {
+                    "success": approved,
+                    "message": final_message,
                     "tasks_completed": sum(1 for item in checklist if item["completed"]),
                     "total_tasks": len(checklist),
-                    "artifacts_count": len(all_artifacts),
-                    "review_approved": approved,
-                    "review_iterations": review_iteration,
-                    "max_iterations": max_iterations
+                    "artifacts": [{"filename": a["filename"], "language": a["language"]} for a in all_artifacts],
+                    "review_status": "approved" if approved else "needs_revision",
+                    "review_iterations": review_iteration
                 },
+                "artifacts": all_artifacts,
                 "workflow_info": {
                     "workflow_id": workflow_id,
                     "workflow_type": template["name"],
                     "task_type": task_type,
                     "nodes": template["nodes"],
                     "current_node": "END",
-                    "final_status": "approved" if approved else "max_iterations_reached",
+                    "final_status": final_status,
                     "dynamically_created": True
                 }
             }
         else:
             # No review loop - just finish
+            final_message = f"Completed. Generated {len(all_artifacts)} file(s)."
+
             yield {
-                "agent": "Workflow",
+                "agent": "Orchestrator",
                 "type": "completed",
-                "status": "finished",
-                "summary": {
+                "status": "completed",
+                "message": final_message,
+                "final_result": {
+                    "success": True,
+                    "message": final_message,
                     "tasks_completed": len(checklist),
                     "total_tasks": len(checklist),
-                    "artifacts_count": len(all_artifacts),
-                    "review_approved": True,
-                    "review_iterations": 0,
-                    "max_iterations": 0
+                    "artifacts": [{"filename": a["filename"], "language": a["language"]} for a in all_artifacts],
+                    "review_status": "skipped",
+                    "review_iterations": 0
                 },
+                "artifacts": all_artifacts,
                 "workflow_info": {
                     "workflow_id": workflow_id,
                     "workflow_type": template["name"],

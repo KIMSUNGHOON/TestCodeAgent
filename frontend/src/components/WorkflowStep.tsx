@@ -551,6 +551,89 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
           </div>
         );
       }
+      // Orchestrator final result
+      if (update.agent === 'Orchestrator' && update.final_result) {
+        const { success, message, tasks_completed, total_tasks, artifacts, review_status, review_iterations } = update.final_result;
+        return (
+          <div>
+            {/* Final Result Card */}
+            <div className={`p-5 rounded-xl border-2 ${success ? 'bg-green-50 border-green-300' : 'bg-amber-50 border-amber-300'}`}>
+              <div className="flex items-center gap-3 mb-4">
+                {success ? (
+                  <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-amber-500 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                )}
+                <div>
+                  <h3 className={`text-lg font-bold ${success ? 'text-green-700' : 'text-amber-700'}`}>
+                    {success ? 'Workflow Completed Successfully' : 'Workflow Completed with Issues'}
+                  </h3>
+                  <p className="text-sm text-gray-600">{message}</p>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div className="bg-white p-3 rounded-lg text-center border">
+                  <div className="text-2xl font-bold text-[#16A34A]">{tasks_completed}/{total_tasks}</div>
+                  <div className="text-xs text-gray-500">Tasks</div>
+                </div>
+                <div className="bg-white p-3 rounded-lg text-center border">
+                  <div className="text-2xl font-bold text-[#DA7756]">{artifacts.length}</div>
+                  <div className="text-xs text-gray-500">Files</div>
+                </div>
+                <div className="bg-white p-3 rounded-lg text-center border">
+                  <div className={`text-2xl font-bold ${review_status === 'approved' ? 'text-green-600' : review_status === 'skipped' ? 'text-gray-400' : 'text-amber-600'}`}>
+                    {review_status === 'approved' ? '✓' : review_status === 'skipped' ? '-' : '!'}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {review_status === 'approved' ? 'Approved' : review_status === 'skipped' ? 'No Review' : `${review_iterations} Iterations`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Generated Files List */}
+              {artifacts.length > 0 && (
+                <div className="bg-white p-3 rounded-lg border">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Generated Files:</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {artifacts.map((artifact, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                        <span className="text-gray-500">{artifact.language}</span>
+                        <span className="text-gray-900">{artifact.filename}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Show all artifacts */}
+            {update.artifacts && update.artifacts.length > 0 && (
+              <div className="mt-4 space-y-2">
+                {update.artifacts.map((artifact, i) => (
+                  <ArtifactDisplay key={i} artifact={artifact} defaultExpanded={false} />
+                ))}
+              </div>
+            )}
+
+            {/* Show workflow info */}
+            {update.workflow_info && (
+              <div className="mt-4">
+                <WorkflowViewer workflowInfo={update.workflow_info} />
+              </div>
+            )}
+          </div>
+        );
+      }
     }
     if (update.type === 'error') return <p className="text-red-500 text-sm">{update.message}</p>;
     if (update.content) return <pre className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{update.content}</pre>;

@@ -122,6 +122,17 @@ export interface IterationInfo {
   max: number;
 }
 
+// Final result from workflow completion
+export interface FinalResult {
+  success: boolean;
+  message: string;
+  tasks_completed: number;
+  total_tasks: number;
+  artifacts: Array<{ filename: string; language: string }>;
+  review_status: 'approved' | 'needs_revision' | 'skipped';
+  review_iterations: number;
+}
+
 export interface WorkflowUpdate {
   agent: string;
   type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision';
@@ -154,6 +165,8 @@ export interface WorkflowUpdate {
   // Decision and iteration fields
   decision?: DecisionInfo;
   iteration_info?: IterationInfo;
+  // Final result
+  final_result?: FinalResult;
 }
 
 export interface WorkflowRequest {
