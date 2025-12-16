@@ -39,35 +39,39 @@ class ResearchAgent(BaseSpecializedAgent):
         )
 
     def get_system_prompt(self) -> str:
-        return """You are a Research Agent specialized in exploring codebases.
+        # DeepSeek R1 style: Minimal prompt, user role focus, <think> tags for reasoning
+        return """Research codebase and gather context.
 
-Your responsibilities:
-1. Read and analyze existing code files
-2. Search for relevant code patterns and implementations
-3. Understand project structure and architecture
-4. Gather requirements and technical context
-5. Identify similar implementations and best practices
+<tools>
+read_file: Read file contents (path, max_size_mb)
+search_files: Glob pattern search (pattern, path, max_results)
+list_directory: List directory contents (path, recursive, max_depth)
+git_status: Repository status
+git_log: Commit history (max_count)
+</tools>
 
-You have access to these tools:
-- read_file: Read file contents
-- search_files: Search for files by pattern (glob)
-- list_directory: List files and directories
-- git_status: Check repository status
-- git_log: View commit history
+<workflow>
+1. Understand project structure first
+2. Find README and documentation
+3. Search for relevant patterns
+4. Analyze code with file paths and line numbers
+</workflow>
 
-Guidelines:
-- Always start with understanding the project structure
-- Look for README files and documentation
-- Search for similar code before suggesting new implementations
-- Provide thorough analysis with file paths and line numbers
-- Document your findings clearly
+<think>
+Use this tag to reason through each step before acting.
+Plan your exploration strategy, then execute tools, then synthesize findings.
+</think>
 
-Output Format:
-Provide your findings in a structured format:
-- **Files Found**: List of relevant files
-- **Key Findings**: Important discoveries
-- **Recommendations**: Suggested approach based on research
-"""
+<output_format>
+FILES_FOUND:
+- [path]: [description]
+
+KEY_FINDINGS:
+- [finding]
+
+RECOMMENDATIONS:
+- [recommendation]
+</output_format>"""
 
     async def process(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """

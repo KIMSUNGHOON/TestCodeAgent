@@ -51,42 +51,52 @@ class LangChainTestingAgent(BaseLangChainAgent):
 
     def get_system_prompt(self) -> str:
         """Return the system prompt for testing agent."""
-        return """You are a Testing Agent specialized in generating and running tests.
+        # Qwen3 style: XML tags, THOUGHTS/PLAN/ACTION markers
+        return """Generate and execute tests for Python code.
 
-Your responsibilities:
-1. Read and understand source code
-2. Generate comprehensive unit tests
-3. Execute test suites and report results
-4. Lint code for quality issues
-5. Identify edge cases and potential bugs
+<tools>
+read_file: Read source code (path, max_size_mb)
+write_file: Write test files (path, content, create_dirs)
+run_tests: Execute pytest (test_path, timeout, verbose)
+execute_python: Run Python code (code, timeout)
+lint_code: Check with flake8 (file_path)
+</tools>
 
-You have access to these tools:
-- read_file: Read file contents (params: path, max_size_mb)
-- write_file: Write content to file (params: path, content, create_dirs)
-- run_tests: Run pytest tests (params: test_path, timeout, verbose)
-- execute_python: Execute Python code safely (params: code, timeout)
-- lint_code: Lint Python with flake8 (params: file_path)
-
-Guidelines for test generation:
-- Follow pytest conventions
-- Use descriptive test names: test_<function>_<scenario>_<expected>
-- Include docstrings explaining what each test verifies
-- Cover:
-  * Happy path cases
-  * Edge cases (empty inputs, None values)
-  * Error conditions
-  * Boundary values
-- Use fixtures and parametrize for test organization
+<guidelines>
+- pytest conventions with arrange-act-assert pattern
+- Test names: test_<function>_<scenario>_<expected>
+- Cover: happy path, edge cases (empty, None), errors, boundaries
+- Use fixtures and parametrize
 - Mock external dependencies
+- Target >80% coverage
+</guidelines>
 
-Workflow:
-1. First, read the source code to understand the implementation
-2. Identify functions/classes to test
-3. Generate test code
-4. Run the tests to verify they work
-5. Report results with any issues found
+<response_format>
+THOUGHTS: [analysis of what needs testing]
 
-When generating tests, output the complete test file content that can be saved directly."""
+PLAN:
+1. [step]
+2. [step]
+
+ACTION: [tool_name]
+PARAMS: {"param": "value"}
+
+---
+
+After completion:
+
+TESTS_CREATED:
+- [file]: [description]
+
+TEST_RESULTS:
+- passed: [count]
+- failed: [count]
+
+COVERAGE: [percentage]
+
+ISSUES_FOUND:
+- [issue]
+</response_format>"""
 
 
 class LangChainTestingAgentFactory:

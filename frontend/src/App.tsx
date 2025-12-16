@@ -1,5 +1,5 @@
 /**
- * Main App component
+ * Main App component - Claude.ai inspired UI
  */
 import { useState, useCallback } from 'react';
 import ChatInterface from './components/ChatInterface';
@@ -73,7 +73,7 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-[#1A1A1A]">
+    <div className="flex h-screen bg-[#FAF9F7]">
       {/* Conversation List Sidebar */}
       {showSidebar && (
         <ConversationList
@@ -87,62 +87,74 @@ function App() {
       {/* Main Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b border-[#404040] flex items-center justify-between bg-[#1A1A1A]">
-          {/* Sidebar Toggle */}
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="p-2 text-[#9B9B9B] hover:text-[#ECECF1] hover:bg-[#2A2A2A] rounded-lg transition-colors"
-            title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+        <div className="px-6 py-4 border-b border-[#E5E5E5] flex items-center justify-between bg-white">
+          {/* Left Section: Toggle + Logo */}
+          <div className="flex items-center gap-4">
+            {/* Sidebar Toggle */}
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="p-2 text-[#666666] hover:text-[#1A1A1A] hover:bg-[#F5F4F2] rounded-lg"
+              title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
+              </svg>
+            </button>
+
+            {/* Logo */}
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center">
+                <span className="text-white font-semibold text-sm">C</span>
+              </div>
+              <span className="font-semibold text-[#1A1A1A]">Code Agent</span>
+            </div>
+          </div>
 
           {/* Mode Switcher */}
-          <div className="flex space-x-2">
+          <div className="flex bg-[#F5F4F2] rounded-lg p-1">
             <button
               onClick={() => handleModeChange('chat')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 mode === 'chat'
-                  ? 'bg-[#10A37F] text-white hover:bg-[#0E8C6F]'
-                  : 'bg-[#2A2A2A] text-[#ECECF1] hover:bg-[#343434]'
+                  ? 'bg-white text-[#1A1A1A] shadow-sm'
+                  : 'text-[#666666] hover:text-[#1A1A1A]'
               }`}
             >
-              Chat Mode
+              Chat
             </button>
             <button
               onClick={() => handleModeChange('workflow')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 mode === 'workflow'
-                  ? 'bg-[#10A37F] text-white hover:bg-[#0E8C6F]'
-                  : 'bg-[#2A2A2A] text-[#ECECF1] hover:bg-[#343434]'
+                  ? 'bg-white text-[#1A1A1A] shadow-sm'
+                  : 'text-[#666666] hover:text-[#1A1A1A]'
               }`}
             >
-              Workflow Mode
+              Workflow
             </button>
           </div>
 
           {/* Session Info */}
-          <div className="text-sm text-[#9B9B9B]">
-            Session: {sessionId.slice(-8)}
+          <div className="flex items-center gap-2 text-sm text-[#999999]">
+            <div className="w-2 h-2 rounded-full bg-[#16A34A]"></div>
+            <span>{sessionId.slice(-8)}</span>
           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 p-4 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
             {mode === 'chat' ? (
               <ChatInterface
                 key={sessionId}

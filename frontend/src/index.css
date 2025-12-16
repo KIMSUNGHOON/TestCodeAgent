@@ -3,13 +3,34 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  /* Claude.ai inspired color palette */
+  --color-bg-primary: #FAF9F7;
+  --color-bg-secondary: #FFFFFF;
+  --color-bg-tertiary: #F5F4F2;
+  --color-bg-sidebar: #FAF9F7;
+
+  --color-accent-primary: #DA7756;
+  --color-accent-hover: #C86A4A;
+  --color-accent-light: #DA775620;
+
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #666666;
+  --color-text-tertiary: #999999;
+
+  --color-border: #E5E5E5;
+  --color-border-light: #EFEFEF;
+
+  --color-success: #16A34A;
+  --color-error: #DC2626;
+  --color-warning: #F59E0B;
+
+  font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  line-height: 1.6;
   font-weight: 400;
 
   color-scheme: light;
-  color: #2D2D2D;
-  background-color: #F7F7F8;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,7 +43,7 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #F7F7F8;
+  background-color: var(--color-bg-primary);
 }
 
 #root {
@@ -30,21 +51,108 @@ body {
   margin: 0 auto;
 }
 
-/* Custom scrollbar - Claude light style */
+/* Custom scrollbar - Claude style */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #F7F7F8;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #D1D1D6;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #B8B8BD;
+}
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Code block styling for Claude-like appearance */
+.prose pre {
+  background-color: #1E1E1E;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.prose code {
+  font-family: 'Söhne Mono', Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+  font-size: 0.875em;
+}
+
+.prose :not(pre) > code {
+  background-color: #F5F4F2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #1A1A1A;
+}
+
+/* Markdown styling */
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose p {
+  margin-bottom: 1em;
+}
+
+.prose ul, .prose ol {
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.prose li {
+  margin-bottom: 0.25em;
+}
+
+.prose a {
+  color: var(--color-accent-primary);
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Chat message animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-enter {
+  animation: slideIn 0.3s ease-out;
 }

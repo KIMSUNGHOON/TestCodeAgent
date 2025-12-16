@@ -288,85 +288,88 @@ class CodingWorkflow(BaseWorkflow):
         self.coding_client = VLLMChatClient("coding")
 
         # Create agents with structured output prompts
+        # DeepSeek R1 style for planning (reasoning model)
         self.planning_agent = ChatAgent(
             name="PlanningAgent",
             description="Analyzes requirements and creates implementation plan",
             chat_client=self.reasoning_client,
-            system_message="""You are a software architect and planning expert.
+            system_message="""Analyze request and create implementation checklist.
 
-Your role is to analyze the user's coding request and create a checklist of tasks.
+<think>
+Break down the request into atomic, sequential steps.
+Consider dependencies between tasks.
+Order by implementation sequence.
+</think>
 
-OUTPUT FORMAT (strictly follow this format):
+<output_format>
 1. [Task description]
 2. [Task description]
 3. [Task description]
-...
+</output_format>
 
-Each task should be:
-- Clear and actionable
-- Focused on a single step
-- Ordered by implementation sequence
-
-Do NOT include explanations or prose. Only output the numbered checklist."""
+Rules:
+- One task per line
+- Clear, actionable steps
+- No explanations, only the numbered list"""
         )
 
+        # Qwen3 style for coding (coding model)
         self.coding_agent = ChatAgent(
             name="CodingAgent",
             description="Implements code based on the plan",
             chat_client=self.coding_client,
-            system_message="""You are an expert software engineer.
+            system_message="""Implement the specified task.
 
-Your role is to implement the SPECIFIC task given to you.
-
-OUTPUT FORMAT (strictly follow this format):
-Output a code block with filename:
+<response_format>
+THOUGHTS: [brief analysis]
 
 ```language filename.ext
-// code here
+// complete code
 ```
+</response_format>
 
-Example:
-```python main.py
-def hello():
-    print("Hello, World!")
-```
-
-Rules:
-- Focus ONLY on the current task
+<rules>
+- Focus ONLY on current task
 - One code block per file
-- Include the filename after the language
+- Include filename after language
 - Write complete, runnable code
-- If updating existing code, include the full updated file
-- Do NOT include explanations outside code blocks"""
+- Full file content for updates
+- No explanations outside code blocks
+</rules>"""
         )
 
+        # Qwen3 style for review (coding model)
         self.review_agent = ChatAgent(
             name="ReviewAgent",
             description="Reviews and improves the generated code",
             chat_client=self.coding_client,
-            system_message="""You are a senior code reviewer.
+            system_message="""Review code and provide structured feedback.
 
-Your role is to review the code and provide structured feedback.
+<response_format>
+ANALYSIS: [brief review summary]
 
-OUTPUT FORMAT (strictly follow this format):
+ISSUES:
+- Issue: [problem description]
 
-## Issues
-- Issue: [description of problem]
-- Issue: [description of problem]
+SUGGESTIONS:
+- Suggest: [improvement]
 
-## Suggestions
-- Suggest: [improvement recommendation]
-- Suggest: [improvement recommendation]
+STATUS: [APPROVED or NEEDS_REVISION]
 
-## Status
-[APPROVED or NEEDS_REVISION]
-
-If code changes are needed, include the corrected code block:
+If changes needed:
 ```language filename.ext
 // corrected code
 ```
+</response_format>
 
-Keep feedback concise. Only list actual issues found."""
+<criteria>
+- Code correctness
+- Best practices
+- Security concerns
+- Performance issues
+</criteria>
+
+Only list actual issues found. Be concise."""
         )
 
         # Build the sequential workflow

@@ -1,5 +1,5 @@
 /**
- * WorkflowInterface component - main UI for multi-agent workflow
+ * WorkflowInterface component - Claude.ai inspired multi-agent workflow UI
  */
 import { useState, useRef, useEffect } from 'react';
 import { WorkflowUpdate } from '../types/api';
@@ -16,6 +16,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates }: WorkflowInterfaceProps
   const [updates, setUpdates] = useState<WorkflowUpdate[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -167,63 +168,99 @@ const WorkflowInterface = ({ sessionId, initialUpdates }: WorkflowInterfaceProps
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#FFFFFF] rounded-lg shadow-xl">
-      {/* Header */}
-      <div className="p-4 border-b border-[#E5E5E7]">
-        <h2 className="text-2xl font-bold text-[#2D2D2D] mb-2">
-          Multi-Agent Workflow
-        </h2>
-        <p className="text-[#6B6B6B] text-sm">
-          Planning → Coding → Review
-        </p>
-      </div>
+    <div className="flex flex-col h-full bg-[#FAF9F7]">
+      {/* Workflow Steps Area */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          {updates.length === 0 && !isRunning && (
+            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
+              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center mb-6 shadow-lg">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-3">Multi-Agent Workflow</h2>
+              <p className="text-[#666666] max-w-md mb-6">
+                Enter a coding task and watch the agents collaborate to plan, code, and review your request.
+              </p>
+              <div className="flex items-center gap-4 text-sm text-[#999999]">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#DA7756]"></div>
+                  <span>Planning</span>
+                </div>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#16A34A]"></div>
+                  <span>Coding</span>
+                </div>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#2563EB]"></div>
+                  <span>Review</span>
+                </div>
+              </div>
+            </div>
+          )}
 
-      {/* Workflow Steps */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {updates.length === 0 && !isRunning && (
-          <div className="text-center text-[#6B6B6B] mt-20">
-            <div className="text-6xl mb-4">🚀</div>
-            <p className="text-xl text-[#2D2D2D]">Enter a coding task to start the workflow</p>
-            <p className="text-sm mt-2">
-              The multi-agent system will plan, code, and review your request
-            </p>
-          </div>
-        )}
+          {updates.length > 0 && (
+            <div className="space-y-4">
+              {updates.map((update, index) => (
+                <WorkflowStep key={`${update.agent}-${index}`} update={update} />
+              ))}
+            </div>
+          )}
 
-        {updates.map((update, index) => (
-          <WorkflowStep key={`${update.agent}-${index}`} update={update} />
-        ))}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Form */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-[#E5E5E7]">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Enter your coding task..."
-            disabled={isRunning}
-            className="flex-1 bg-[#F0F0F0] text-[#2D2D2D] placeholder-[#6B6B6B] px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10A37F] border border-[#E5E5E7] disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={isRunning || !input.trim()}
-            className="bg-[#10A37F] hover:bg-[#0E8C6F] text-white px-6 py-3 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isRunning ? (
-              <span className="flex items-center space-x-2">
-                <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
-                <span>Running...</span>
-              </span>
-            ) : (
-              'Execute Workflow'
-            )}
-          </button>
+          <div ref={messagesEndRef} />
         </div>
-      </form>
+      </div>
+
+      {/* Input Area */}
+      <div className="border-t border-[#E5E5E5] bg-white">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <form onSubmit={handleSubmit}>
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Describe your coding task..."
+                disabled={isRunning}
+                className="w-full px-4 py-3 pr-32 bg-[#F5F4F2] text-[#1A1A1A] placeholder-[#999999] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#DA7756] focus:ring-opacity-50 border border-[#E5E5E5] disabled:opacity-50"
+              />
+              <button
+                type="submit"
+                disabled={isRunning || !input.trim()}
+                className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-[#DA7756] hover:bg-[#C86A4A] disabled:bg-[#E5E5E5] disabled:cursor-not-allowed text-white font-medium text-sm transition-colors flex items-center gap-2"
+              >
+                {isRunning ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Running</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
+                    </svg>
+                    <span>Execute</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+          <p className="mt-2 text-xs text-[#999999] text-center">
+            The workflow will automatically plan, implement, and review your request
+          </p>
+        </div>
+      </div>
     </div>
   );
 };

@@ -39,36 +39,52 @@ class TestingAgent(BaseSpecializedAgent):
         )
 
     def get_system_prompt(self) -> str:
-        return """You are a Testing Agent specialized in creating comprehensive tests.
+        # Qwen3 style: XML tags, THOUGHTS/PLAN/ACTION markers
+        return """Generate and execute tests for Python code.
 
-Your responsibilities:
-1. Generate unit tests for given code
-2. Create integration tests
-3. Write test fixtures and mocks
-4. Run tests and interpret results
-5. Ensure high code coverage
+<tools>
+read_file: Read source code (path, max_size_mb)
+write_file: Write test files (path, content, create_dirs)
+run_tests: Execute pytest (test_path, timeout, verbose)
+execute_python: Run Python code (code, timeout)
+lint_code: Check with flake8 (file_path)
+</tools>
 
-You have access to these tools:
-- read_file: Read code to test
-- write_file: Write test files
-- run_tests: Execute pytest tests
-- execute_python: Run Python code
-- lint_code: Check code quality
-
-Testing Best Practices:
-- Follow arrange-act-assert pattern
-- Use descriptive test names
-- Test edge cases and error conditions
+<guidelines>
+- pytest conventions with arrange-act-assert pattern
+- Test names: test_<function>_<scenario>_<expected>
+- Cover: happy path, edge cases (empty, None), errors, boundaries
+- Use fixtures and parametrize
 - Mock external dependencies
-- Aim for high coverage (>80%)
+- Target >80% coverage
+</guidelines>
 
-Output Format:
-Provide test results in this format:
-- **Tests Created**: List of test files
-- **Test Results**: Pass/fail status
-- **Coverage**: Code coverage percentage
-- **Issues Found**: Any bugs discovered
-"""
+<response_format>
+THOUGHTS: [analysis of what needs testing]
+
+PLAN:
+1. [step]
+2. [step]
+
+ACTION: [tool_name]
+PARAMS: {"param": "value"}
+
+---
+
+After completion:
+
+TESTS_CREATED:
+- [file]: [description]
+
+TEST_RESULTS:
+- passed: [count]
+- failed: [count]
+
+COVERAGE: [percentage]
+
+ISSUES_FOUND:
+- [issue]
+</response_format>"""
 
     async def process(self, task: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """
