@@ -18,9 +18,10 @@ interface ConversationTurn {
 interface WorkflowInterfaceProps {
   sessionId: string;
   initialUpdates?: WorkflowUpdate[];
+  workspace?: string;
 }
 
-const WorkflowInterface = ({ sessionId, initialUpdates }: WorkflowInterfaceProps) => {
+const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInterfaceProps) => {
   const [input, setInput] = useState('');
   const [updates, setUpdates] = useState<WorkflowUpdate[]>([]);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
@@ -173,6 +174,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates }: WorkflowInterfaceProps
         body: JSON.stringify({
           message: userMessage,
           session_id: sessionId,
+          workspace: workspace,
           context: context.messages.length > 0 || context.artifacts.length > 0 ? context : undefined,
         }),
       });

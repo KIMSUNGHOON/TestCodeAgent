@@ -6,6 +6,7 @@ import ChatInterface from './components/ChatInterface';
 import WorkflowInterface from './components/WorkflowInterface';
 import AgentStatus from './components/AgentStatus';
 import ConversationList from './components/ConversationList';
+import WorkspaceSettings from './components/WorkspaceSettings';
 import { Conversation, StoredMessage, WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
 
@@ -23,6 +24,8 @@ function App() {
   const [mode, setMode] = useState<Mode>('workflow');
   const [showSidebar, setShowSidebar] = useState(true);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
+  const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
+  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
 
   // Loaded conversation state
   const [loadedMessages, setLoadedMessages] = useState<StoredMessage[]>([]);
@@ -90,6 +93,16 @@ function App() {
     setMode(newMode);
     // Create new session when switching modes
     handleNewConversation();
+  };
+
+  const handleWorkspaceChange = async (newWorkspace: string) => {
+    setWorkspace(newWorkspace);
+    // Notify backend of workspace change
+    try {
+      await apiClient.setWorkspace(sessionId, newWorkspace);
+    } catch (err) {
+      console.error('Failed to set workspace:', err);
+    }
   };
 
   return (
@@ -165,8 +178,22 @@ function App() {
             </button>
           </div>
 
-          {/* Framework & Session Info */}
+          {/* Framework, Workspace & Session Info */}
           <div className="flex items-center gap-4">
+            {/* Workspace Button */}
+            <button
+              onClick={() => setShowWorkspaceSettings(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5] hover:bg-[#E5E5E5] transition-colors"
+              title={`Workspace: ${workspace}`}
+            >
+              <svg className="w-4 h-4 text-[#DA7756]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+              </svg>
+              <span className="text-xs font-medium text-[#666666] max-w-[120px] truncate">
+                {workspace.split('/').pop() || workspace}
+              </span>
+            </button>
+
             {/* Framework Badge */}
             {frameworkInfo && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5]">
@@ -209,6 +236,7 @@ function App() {
                 key={sessionId}
                 sessionId={sessionId}
                 initialUpdates={loadedWorkflowState}
+                workspace={workspace}
               />
             )}
           </div>
@@ -223,6 +251,15 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Workspace Settings Modal */}
+      {showWorkspaceSettings && (
+        <WorkspaceSettings
+          workspace={workspace}
+          onWorkspaceChange={handleWorkspaceChange}
+          onClose={() => setShowWorkspaceSettings(false)}
+        />
+      )}
     </div>
   );
 }

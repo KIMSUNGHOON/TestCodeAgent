@@ -175,7 +175,7 @@ def parse_checklist(text: str) -> List[Dict[str, Any]]:
 
 
 def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
-    """Extract code blocks from text."""
+    """Extract code blocks from text with unique filename generation."""
     artifacts = []
     pattern = r'```(\w+)?(?:\s+(\S+))?\n(.*?)```'
     matches = re.findall(pattern, text, re.DOTALL)
@@ -187,16 +187,53 @@ def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
         "yaml": "yaml", "sql": "sql", "bash": "sh", "shell": "sh"
     }
 
+    # Track used filenames to generate unique names
+    used_filenames = set()
+    file_counter = {}  # Track counter per extension
+
     for lang, filename, content in matches:
         lang = lang or "text"
+        content = content.strip()
+
+        # Try to extract filename from first comment line if not provided
+        if not filename and content:
+            first_line = content.split('\n')[0] if content else ""
+            # Match patterns like: # filename.py, // filename.js, /* filename.css */
+            comment_match = re.match(r'^(?:#|//|/\*)\s*(?:file(?:name)?:\s*)?(\S+\.\w+)', first_line, re.IGNORECASE)
+            if comment_match:
+                filename = comment_match.group(1)
+
+        # Generate unique filename if still not provided
         if not filename:
             ext = extensions.get(lang.lower(), "txt")
-            filename = f"code.{ext}"
+            base_name = f"code_{lang.lower()}" if lang != "text" else "code"
+
+            # Initialize counter for this extension
+            if ext not in file_counter:
+                file_counter[ext] = 0
+            file_counter[ext] += 1
+
+            # Generate unique name
+            if file_counter[ext] == 1:
+                filename = f"{base_name}.{ext}"
+            else:
+                filename = f"{base_name}_{file_counter[ext]}.{ext}"
+
+        # Ensure filename is unique even if explicitly provided
+        original_filename = filename
+        counter = 1
+        while filename in used_filenames:
+            name, ext = original_filename.rsplit('.', 1) if '.' in original_filename else (original_filename, 'txt')
+            filename = f"{name}_{counter}.{ext}"
+            counter += 1
+
+        used_filenames.add(filename)
+
         artifacts.append({
             "type": "artifact",
             "language": lang,
             "filename": filename,
-            "content": content.strip()
+            "content": content
         })
 
     return artifacts

@@ -32,6 +32,7 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = Field(None, description="Optional system prompt")
     stream: bool = Field(default=False, description="Whether to stream the response")
     context: Optional[ConversationContext] = Field(None, description="Previous conversation context")
+    workspace: Optional[str] = Field(None, description="Workspace directory for file operations")
 
 
 class ChatResponse(BaseModel):

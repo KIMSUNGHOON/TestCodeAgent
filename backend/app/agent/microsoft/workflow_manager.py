@@ -134,6 +134,8 @@ class CodeBlockParser:
         self.in_code_block = False
         self.current_language = ""
         self.current_filename = ""
+        self.used_filenames = set()  # Track used filenames for uniqueness
+        self.file_counter = {}  # Track counter per extension
 
     def add_chunk(self, chunk: str) -> List[Dict[str, Any]]:
         self.buffer += chunk
@@ -145,19 +147,49 @@ class CodeBlockParser:
                 if match:
                     self.in_code_block = True
                     self.current_language = match.group(1) or "text"
-                    self.current_filename = match.group(2) or f"code.{self._get_extension(self.current_language)}"
+                    self.current_filename = match.group(2) or ""  # Will generate later
                     self.buffer = self.buffer[match.end():]
                 else:
                     break
             else:
                 end_match = re.search(r'\n```(?:\s|$)', self.buffer)
                 if end_match:
-                    code_content = self.buffer[:end_match.start()]
+                    code_content = self.buffer[:end_match.start()].strip()
+
+                    # Generate unique filename if not provided
+                    filename = self.current_filename
+                    if not filename:
+                        # Try to extract from first comment line
+                        first_line = code_content.split('\n')[0] if code_content else ""
+                        comment_match = re.match(r'^(?:#|//|/\*)\s*(?:file(?:name)?:\s*)?(\S+\.\w+)', first_line, re.IGNORECASE)
+                        if comment_match:
+                            filename = comment_match.group(1)
+                        else:
+                            # Generate unique name
+                            ext = self._get_extension(self.current_language)
+                            base_name = f"code_{self.current_language.lower()}" if self.current_language != "text" else "code"
+                            if ext not in self.file_counter:
+                                self.file_counter[ext] = 0
+                            self.file_counter[ext] += 1
+                            if self.file_counter[ext] == 1:
+                                filename = f"{base_name}.{ext}"
+                            else:
+                                filename = f"{base_name}_{self.file_counter[ext]}.{ext}"
+
+                    # Ensure uniqueness
+                    original_filename = filename
+                    counter = 1
+                    while filename in self.used_filenames:
+                        name, ext = original_filename.rsplit('.', 1) if '.' in original_filename else (original_filename, 'txt')
+                        filename = f"{name}_{counter}.{ext}"
+                        counter += 1
+                    self.used_filenames.add(filename)
+
                     artifacts.append({
                         "type": "artifact",
                         "language": self.current_language,
-                        "filename": self.current_filename,
-                        "content": code_content.strip()
+                        "filename": filename,
+                        "content": code_content
                     })
                     self.buffer = self.buffer[end_match.end():]
                     self.in_code_block = False
@@ -198,7 +230,7 @@ def parse_checklist(text: str) -> List[Dict[str, Any]]:
 
 
 def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
-    """Extract code blocks from text."""
+    """Extract code blocks from text with unique filename generation."""
     artifacts = []
     pattern = r'```(\w+)?(?:\s+(\S+))?\n(.*?)```'
     matches = re.findall(pattern, text, re.DOTALL)
@@ -206,19 +238,57 @@ def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
     extensions = {
         "python": "py", "javascript": "js", "typescript": "ts",
         "java": "java", "go": "go", "rust": "rs", "cpp": "cpp",
-        "c": "c", "html": "html", "css": "css", "json": "json"
+        "c": "c", "html": "html", "css": "css", "json": "json",
+        "yaml": "yaml", "sql": "sql", "bash": "sh", "shell": "sh"
     }
+
+    # Track used filenames to generate unique names
+    used_filenames = set()
+    file_counter = {}  # Track counter per extension
 
     for lang, filename, content in matches:
         lang = lang or "text"
+        content = content.strip()
+
+        # Try to extract filename from first comment line if not provided
+        if not filename and content:
+            first_line = content.split('\n')[0] if content else ""
+            # Match patterns like: # filename.py, // filename.js, /* filename.css */
+            comment_match = re.match(r'^(?:#|//|/\*)\s*(?:file(?:name)?:\s*)?(\S+\.\w+)', first_line, re.IGNORECASE)
+            if comment_match:
+                filename = comment_match.group(1)
+
+        # Generate unique filename if still not provided
         if not filename:
             ext = extensions.get(lang.lower(), "txt")
-            filename = f"code.{ext}"
+            base_name = f"code_{lang.lower()}" if lang != "text" else "code"
+
+            # Initialize counter for this extension
+            if ext not in file_counter:
+                file_counter[ext] = 0
+            file_counter[ext] += 1
+
+            # Generate unique name
+            if file_counter[ext] == 1:
+                filename = f"{base_name}.{ext}"
+            else:
+                filename = f"{base_name}_{file_counter[ext]}.{ext}"
+
+        # Ensure filename is unique even if explicitly provided
+        original_filename = filename
+        counter = 1
+        while filename in used_filenames:
+            name, ext = original_filename.rsplit('.', 1) if '.' in original_filename else (original_filename, 'txt')
+            filename = f"{name}_{counter}.{ext}"
+            counter += 1
+
+        used_filenames.add(filename)
+
         artifacts.append({
             "type": "artifact",
             "language": lang,
             "filename": filename,
-            "content": content.strip()
+            "content": content
         })
 
     return artifacts

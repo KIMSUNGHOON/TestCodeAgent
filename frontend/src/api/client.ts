@@ -336,6 +336,130 @@ class ApiClient {
     const response = await this.client.get('/tools/list');
     return response.data;
   }
+
+  // ==================== Workspace Operations ====================
+
+  /**
+   * List directory contents
+   */
+  async listDirectory(path: string): Promise<{
+    success: boolean;
+    contents?: Array<{
+      path: string;
+      name: string;
+      is_directory: boolean;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get('/workspace/list', {
+        params: { path }
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to list directory'
+      };
+    }
+  }
+
+  /**
+   * Set workspace directory
+   */
+  async setWorkspace(
+    sessionId: string,
+    workspacePath: string
+  ): Promise<{
+    success: boolean;
+    workspace: string;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.post('/workspace/set', {
+        session_id: sessionId,
+        workspace_path: workspacePath
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        workspace: workspacePath,
+        error: err instanceof Error ? err.message : 'Failed to set workspace'
+      };
+    }
+  }
+
+  /**
+   * Get current workspace
+   */
+  async getWorkspace(sessionId: string): Promise<{
+    success: boolean;
+    workspace: string;
+  }> {
+    try {
+      const response = await this.client.get('/workspace/current', {
+        params: { session_id: sessionId }
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        workspace: ''
+      };
+    }
+  }
+
+  /**
+   * Write file to workspace
+   */
+  async writeWorkspaceFile(
+    sessionId: string,
+    filename: string,
+    content: string
+  ): Promise<{
+    success: boolean;
+    path?: string;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.post('/workspace/write', {
+        session_id: sessionId,
+        filename,
+        content
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to write file'
+      };
+    }
+  }
+
+  /**
+   * Read file from workspace
+   */
+  async readWorkspaceFile(
+    sessionId: string,
+    filename: string
+  ): Promise<{
+    success: boolean;
+    content?: string;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get('/workspace/read', {
+        params: { session_id: sessionId, filename }
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to read file'
+      };
+    }
+  }
 }
 
 // Export singleton instance

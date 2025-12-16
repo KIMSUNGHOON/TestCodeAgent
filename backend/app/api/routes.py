@@ -254,9 +254,19 @@ async def execute_workflow(request: ChatRequest):
     Returns:
         Streaming response with workflow progress
     """
+    import os
+
     try:
         # Get or create workflow for session
         workflow = workflow_manager.get_or_create_workflow(request.session_id)
+
+        # Store workspace for this session if provided
+        workspace = request.workspace or _session_workspaces.get(request.session_id, "/home/user/workspace")
+        _session_workspaces[request.session_id] = workspace
+
+        # Ensure workspace exists
+        if not os.path.exists(workspace):
+            os.makedirs(workspace, exist_ok=True)
 
         # Build context-aware request
         context_str = ""
@@ -280,12 +290,47 @@ async def execute_workflow(request: ChatRequest):
         if context_str:
             full_request = f"{context_str}\n<current_request>\n{request.message}\n</current_request>"
 
+        # Helper to write artifact to workspace
+        def write_artifact_to_workspace(artifact: dict) -> str:
+            """Write artifact to workspace and return file path."""
+            try:
+                filename = artifact.get("filename", "code.py")
+                content = artifact.get("content", "")
+
+                file_path = os.path.join(workspace, filename)
+                file_dir = os.path.dirname(file_path)
+
+                if file_dir and not os.path.exists(file_dir):
+                    os.makedirs(file_dir, exist_ok=True)
+
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+
+                logger.info(f"Auto-saved artifact to: {file_path}")
+                return file_path
+            except Exception as e:
+                logger.error(f"Failed to auto-save artifact: {e}")
+                return ""
+
         # Create streaming response
         async def generate():
             try:
                 async for update in workflow.execute_stream(
                     user_request=full_request
                 ):
+                    # Auto-save artifacts to workspace
+                    if update.get("type") == "artifact" and update.get("artifact"):
+                        saved_path = write_artifact_to_workspace(update["artifact"])
+                        if saved_path:
+                            update["artifact"]["saved_path"] = saved_path
+
+                    # Also save artifacts from completed updates
+                    if update.get("type") == "completed" and update.get("artifacts"):
+                        for artifact in update["artifacts"]:
+                            saved_path = write_artifact_to_workspace(artifact)
+                            if saved_path:
+                                artifact["saved_path"] = saved_path
+
                     # Send update as JSON
                     yield json.dumps(update) + "\n"
             except Exception as e:
@@ -973,3 +1018,157 @@ async def process_agent_task(agent_id: str, task: str, context: dict = None):
     except Exception as e:
         logger.error(f"Error processing task: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Workspace Endpoints ====================
+
+# Store workspace for each session
+_session_workspaces: dict = {}
+
+
+@router.get("/workspace/list")
+async def list_directory(path: str = "/home"):
+    """List contents of a directory.
+
+    Args:
+        path: Directory path to list
+
+    Returns:
+        List of files and directories
+    """
+    import os
+    try:
+        if not os.path.exists(path):
+            return {"success": False, "error": f"Path does not exist: {path}"}
+
+        if not os.path.isdir(path):
+            return {"success": False, "error": f"Not a directory: {path}"}
+
+        contents = []
+        for item in os.listdir(path):
+            item_path = os.path.join(path, item)
+            contents.append({
+                "path": item_path,
+                "name": item,
+                "is_directory": os.path.isdir(item_path)
+            })
+
+        return {"success": True, "contents": contents}
+
+    except PermissionError:
+        return {"success": False, "error": f"Permission denied: {path}"}
+    except Exception as e:
+        logger.error(f"Error listing directory: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/workspace/set")
+async def set_workspace(request: dict):
+    """Set workspace directory for a session.
+
+    Args:
+        request: Contains session_id and workspace_path
+
+    Returns:
+        Success status and current workspace
+    """
+    import os
+    session_id = request.get("session_id", "default")
+    workspace_path = request.get("workspace_path", "/home/user/workspace")
+
+    try:
+        # Create directory if it doesn't exist
+        if not os.path.exists(workspace_path):
+            os.makedirs(workspace_path, exist_ok=True)
+
+        _session_workspaces[session_id] = workspace_path
+        logger.info(f"Set workspace for {session_id}: {workspace_path}")
+
+        return {"success": True, "workspace": workspace_path}
+
+    except Exception as e:
+        logger.error(f"Error setting workspace: {e}")
+        return {"success": False, "workspace": workspace_path, "error": str(e)}
+
+
+@router.get("/workspace/current")
+async def get_workspace(session_id: str = "default"):
+    """Get current workspace for a session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Current workspace path
+    """
+    workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+    return {"success": True, "workspace": workspace}
+
+
+@router.post("/workspace/write")
+async def write_workspace_file(request: dict):
+    """Write a file to the workspace.
+
+    Args:
+        request: Contains session_id, filename, and content
+
+    Returns:
+        Success status and file path
+    """
+    import os
+    session_id = request.get("session_id", "default")
+    filename = request.get("filename", "")
+    content = request.get("content", "")
+
+    try:
+        workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+
+        # Ensure workspace exists
+        if not os.path.exists(workspace):
+            os.makedirs(workspace, exist_ok=True)
+
+        # Handle nested paths
+        file_path = os.path.join(workspace, filename)
+        file_dir = os.path.dirname(file_path)
+        if file_dir and not os.path.exists(file_dir):
+            os.makedirs(file_dir, exist_ok=True)
+
+        # Write file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
+        logger.info(f"Wrote file: {file_path}")
+        return {"success": True, "path": file_path}
+
+    except Exception as e:
+        logger.error(f"Error writing file: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/workspace/read")
+async def read_workspace_file(session_id: str = "default", filename: str = ""):
+    """Read a file from the workspace.
+
+    Args:
+        session_id: Session identifier
+        filename: File to read (relative to workspace)
+
+    Returns:
+        File content
+    """
+    import os
+    try:
+        workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+        file_path = os.path.join(workspace, filename)
+
+        if not os.path.exists(file_path):
+            return {"success": False, "error": f"File not found: {filename}"}
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        return {"success": True, "content": content}
+
+    except Exception as e:
+        logger.error(f"Error reading file: {e}")
+        return {"success": False, "error": str(e)}
