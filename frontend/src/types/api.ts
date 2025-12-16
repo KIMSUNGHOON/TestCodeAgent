@@ -68,9 +68,37 @@ export interface TaskResult {
   artifacts: Artifact[];
 }
 
+// Agent spawn event info
+export interface AgentSpawnInfo {
+  agent_id: string;
+  agent_type: string;
+  parent_agent?: string;
+  spawn_reason: string;
+  timestamp: string;
+}
+
+// Prompt execution info for debugging/transparency
+export interface PromptInfo {
+  system_prompt: string;
+  user_prompt: string;
+  output?: string;
+  model?: string;
+  tokens_used?: number;
+  latency_ms?: number;
+}
+
+// Workflow step info
+export interface WorkflowInfo {
+  workflow_id: string;
+  workflow_type: string;
+  nodes: string[];
+  edges: Array<{ from: string; to: string }>;
+  current_node?: string;
+}
+
 export interface WorkflowUpdate {
   agent: string;
-  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error';
+  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created';
   status: 'running' | 'completed' | 'error' | 'finished';
   message?: string;
   content?: string;
@@ -90,6 +118,10 @@ export interface WorkflowUpdate {
     artifacts_count: number;
     review_approved: boolean;
   };
+  // New fields for transparency
+  prompt_info?: PromptInfo;
+  agent_spawn?: AgentSpawnInfo;
+  workflow_info?: WorkflowInfo;
 }
 
 export interface WorkflowRequest {

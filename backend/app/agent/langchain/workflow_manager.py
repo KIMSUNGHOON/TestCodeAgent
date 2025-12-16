@@ -1,6 +1,9 @@
 """Workflow-based coding agent using LangGraph."""
 import logging
 import re
+import time
+import uuid
+from datetime import datetime
 from typing import List, Dict, Any, AsyncGenerator, Optional, TypedDict, Annotated
 from operator import add
 from langchain_openai import ChatOpenAI
@@ -339,9 +342,45 @@ Only list actual issues found. Be concise."""
             Updates with workflow progress
         """
         logger.info(f"Streaming LangGraph workflow for request: {user_request[:100]}...")
+        workflow_id = str(uuid.uuid4())[:8]
 
         try:
-            # Step 1: Planning
+            # Emit workflow creation event
+            yield {
+                "agent": "Orchestrator",
+                "type": "workflow_created",
+                "status": "running",
+                "message": "LangGraph workflow initialized",
+                "workflow_info": {
+                    "workflow_id": workflow_id,
+                    "workflow_type": "LangGraph Multi-Agent",
+                    "nodes": ["PlanningAgent", "CodingAgent", "ReviewAgent"],
+                    "edges": [
+                        {"from": "START", "to": "PlanningAgent"},
+                        {"from": "PlanningAgent", "to": "CodingAgent"},
+                        {"from": "CodingAgent", "to": "ReviewAgent"},
+                        {"from": "ReviewAgent", "to": "END"}
+                    ],
+                    "current_node": "PlanningAgent"
+                }
+            }
+
+            # Step 1: Planning - emit agent spawn
+            planning_agent_id = f"planning-{uuid.uuid4().hex[:6]}"
+            yield {
+                "agent": "PlanningAgent",
+                "type": "agent_spawn",
+                "status": "running",
+                "message": "Spawning PlanningAgent for task analysis",
+                "agent_spawn": {
+                    "agent_id": planning_agent_id,
+                    "agent_type": "PlanningAgent",
+                    "parent_agent": "Orchestrator",
+                    "spawn_reason": "Analyze user request and create implementation checklist",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
             yield {
                 "agent": "PlanningAgent",
                 "type": "thinking",
@@ -354,10 +393,12 @@ Only list actual issues found. Be concise."""
                 HumanMessage(content=user_request)
             ]
 
+            start_time = time.time()
             plan_text = ""
             async for chunk in self.reasoning_llm.astream(messages):
                 if chunk.content:
                     plan_text += chunk.content
+            latency_ms = int((time.time() - start_time) * 1000)
 
             checklist = parse_checklist(plan_text)
 
@@ -365,10 +406,32 @@ Only list actual issues found. Be concise."""
                 "agent": "PlanningAgent",
                 "type": "completed",
                 "status": "completed",
-                "items": checklist
+                "items": checklist,
+                "prompt_info": {
+                    "system_prompt": self.planning_prompt,
+                    "user_prompt": user_request,
+                    "output": plan_text,
+                    "model": settings.reasoning_model,
+                    "latency_ms": latency_ms
+                }
             }
 
-            # Step 2: Coding
+            # Step 2: Coding - emit agent spawn
+            coding_agent_id = f"coding-{uuid.uuid4().hex[:6]}"
+            yield {
+                "agent": "CodingAgent",
+                "type": "agent_spawn",
+                "status": "running",
+                "message": "Spawning CodingAgent for implementation",
+                "agent_spawn": {
+                    "agent_id": coding_agent_id,
+                    "agent_type": "CodingAgent",
+                    "parent_agent": "Orchestrator",
+                    "spawn_reason": f"Implement {len(checklist)} tasks from planning phase",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
             all_artifacts = []
             code_text = ""
             existing_code = ""
@@ -395,15 +458,18 @@ Only list actual issues found. Be concise."""
                 context_parts.append(f"\nCurrent task ({task_num}/{len(checklist)}): {task_description}")
                 context_parts.append("\nPlease implement this specific task now.")
 
+                user_prompt_content = "\n".join(context_parts)
                 messages = [
                     SystemMessage(content=self.coding_prompt),
-                    HumanMessage(content="\n".join(context_parts))
+                    HumanMessage(content=user_prompt_content)
                 ]
 
+                start_time = time.time()
                 task_code = ""
                 async for chunk in self.coding_llm.astream(messages):
                     if chunk.content:
                         task_code += chunk.content
+                task_latency_ms = int((time.time() - start_time) * 1000)
 
                 code_text += task_code + "\n"
 
@@ -437,7 +503,14 @@ Only list actual issues found. Be concise."""
                         "task": task_description,
                         "artifacts": task_artifacts
                     },
-                    "checklist": checklist
+                    "checklist": checklist,
+                    "prompt_info": {
+                        "system_prompt": self.coding_prompt,
+                        "user_prompt": user_prompt_content,
+                        "output": task_code,
+                        "model": settings.coding_model,
+                        "latency_ms": task_latency_ms
+                    }
                 }
 
             yield {
@@ -448,7 +521,22 @@ Only list actual issues found. Be concise."""
                 "checklist": checklist
             }
 
-            # Step 3: Review
+            # Step 3: Review - emit agent spawn
+            review_agent_id = f"review-{uuid.uuid4().hex[:6]}"
+            yield {
+                "agent": "ReviewAgent",
+                "type": "agent_spawn",
+                "status": "running",
+                "message": "Spawning ReviewAgent for code review",
+                "agent_spawn": {
+                    "agent_id": review_agent_id,
+                    "agent_type": "ReviewAgent",
+                    "parent_agent": "Orchestrator",
+                    "spawn_reason": f"Review {len(all_artifacts)} artifacts for quality and correctness",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
             yield {
                 "agent": "ReviewAgent",
                 "type": "thinking",
@@ -456,15 +544,18 @@ Only list actual issues found. Be concise."""
                 "message": "Reviewing code..."
             }
 
+            review_user_prompt = f"Please review this code:\n\n{code_text}"
             messages = [
                 SystemMessage(content=self.review_prompt),
-                HumanMessage(content=f"Please review this code:\n\n{code_text}")
+                HumanMessage(content=review_user_prompt)
             ]
 
+            start_time = time.time()
             review_text = ""
             async for chunk in self.coding_llm.astream(messages):
                 if chunk.content:
                     review_text += chunk.content
+            review_latency_ms = int((time.time() - start_time) * 1000)
 
             review_result = parse_review(review_text)
 
@@ -475,7 +566,14 @@ Only list actual issues found. Be concise."""
                 "issues": review_result["issues"],
                 "suggestions": review_result["suggestions"],
                 "approved": review_result["approved"],
-                "corrected_artifacts": review_result["corrected_artifacts"]
+                "corrected_artifacts": review_result["corrected_artifacts"],
+                "prompt_info": {
+                    "system_prompt": self.review_prompt,
+                    "user_prompt": review_user_prompt,
+                    "output": review_text,
+                    "model": settings.coding_model,
+                    "latency_ms": review_latency_ms
+                }
             }
 
             # Final summary
@@ -488,6 +586,18 @@ Only list actual issues found. Be concise."""
                     "total_tasks": len(checklist),
                     "artifacts_count": len(all_artifacts),
                     "review_approved": review_result["approved"]
+                },
+                "workflow_info": {
+                    "workflow_id": workflow_id,
+                    "workflow_type": "LangGraph Multi-Agent",
+                    "nodes": ["PlanningAgent", "CodingAgent", "ReviewAgent"],
+                    "edges": [
+                        {"from": "START", "to": "PlanningAgent"},
+                        {"from": "PlanningAgent", "to": "CodingAgent"},
+                        {"from": "CodingAgent", "to": "ReviewAgent"},
+                        {"from": "ReviewAgent", "to": "END"}
+                    ],
+                    "current_node": "END"
                 }
             }
 

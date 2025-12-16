@@ -5,6 +5,9 @@ import { useState } from 'react';
 import { WorkflowUpdate, Artifact, ChecklistItem, CompletedTask } from '../types/api';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import PromptViewer from './PromptViewer';
+import AgentSpawnViewer from './AgentSpawnViewer';
+import WorkflowViewer from './WorkflowViewer';
 
 interface WorkflowStepProps {
   update: WorkflowUpdate;
@@ -62,6 +65,8 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
 
   const getAgentConfig = () => {
     switch (update.agent) {
+      case 'Orchestrator':
+        return { color: '#7C3AED', bgColor: '#7C3AED10', icon: '', label: 'Orchestrator' };
       case 'PlanningAgent':
         return { color: '#DA7756', bgColor: '#DA775610', icon: '1', label: 'Planning' };
       case 'CodingAgent':
@@ -107,6 +112,12 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
   };
 
   const getSummaryInfo = (): string => {
+    if (update.type === 'workflow_created' && update.workflow_info) {
+      return `${update.workflow_info.workflow_type} (${update.workflow_info.nodes.length} agents)`;
+    }
+    if (update.type === 'agent_spawn' && update.agent_spawn) {
+      return update.agent_spawn.spawn_reason;
+    }
     if (update.type === 'thinking') return update.message || 'Processing...';
     if (update.type === 'task_completed') {
       const taskNum = update.task_result?.task_num || 0;
@@ -125,8 +136,14 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
   };
 
   const hasExpandableContent = (): boolean => {
+    // New types always expandable
+    if (update.type === 'workflow_created' && update.workflow_info) return true;
+    if (update.type === 'agent_spawn' && update.agent_spawn) return true;
+    // Prompt info makes anything expandable
+    if (update.prompt_info) return true;
+    // Existing checks
     if (update.type === 'thinking' && update.completed_tasks?.length) return true;
-    if (update.type === 'task_completed' && update.task_result?.artifacts?.length) return true;
+    if (update.type === 'task_completed') return true; // Always expandable for prompt info
     if (update.type === 'artifact' && update.artifact) return true;
     if (update.type === 'completed') {
       if (update.items?.length) return true;
@@ -257,6 +274,16 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
   );
 
   const renderExpandedContent = () => {
+    // Render workflow info for workflow_created type
+    if (update.type === 'workflow_created' && update.workflow_info) {
+      return <WorkflowViewer workflowInfo={update.workflow_info} />;
+    }
+
+    // Render agent spawn info
+    if (update.type === 'agent_spawn' && update.agent_spawn) {
+      return <AgentSpawnViewer spawnInfo={update.agent_spawn} />;
+    }
+
     if (update.type === 'thinking') {
       return (
         <div>
@@ -276,6 +303,10 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
               ))}
             </div>
           )}
+          {/* Show prompt info toggle for task completion */}
+          {update.prompt_info && (
+            <PromptViewer promptInfo={update.prompt_info} agentName={update.agent} />
+          )}
         </div>
       );
     }
@@ -288,7 +319,17 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
       );
     }
     if (update.type === 'completed') {
-      if (update.agent === 'PlanningAgent' && update.items) return renderChecklist(update.items);
+      if (update.agent === 'PlanningAgent' && update.items) {
+        return (
+          <div>
+            {renderChecklist(update.items)}
+            {/* Show prompt info for planning completion */}
+            {update.prompt_info && (
+              <PromptViewer promptInfo={update.prompt_info} agentName={update.agent} />
+            )}
+          </div>
+        );
+      }
       if (update.agent === 'CodingAgent' && update.artifacts) {
         return (
           <div>
@@ -301,8 +342,30 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
           </div>
         );
       }
-      if (update.agent === 'ReviewAgent') return renderReview();
-      if (update.agent === 'Workflow' && update.summary) return renderSummary();
+      if (update.agent === 'ReviewAgent') {
+        return (
+          <div>
+            {renderReview()}
+            {/* Show prompt info for review completion */}
+            {update.prompt_info && (
+              <PromptViewer promptInfo={update.prompt_info} agentName={update.agent} />
+            )}
+          </div>
+        );
+      }
+      if (update.agent === 'Workflow' && update.summary) {
+        return (
+          <div>
+            {renderSummary()}
+            {/* Show workflow info at the end */}
+            {update.workflow_info && (
+              <div className="mt-4">
+                <WorkflowViewer workflowInfo={update.workflow_info} />
+              </div>
+            )}
+          </div>
+        );
+      }
     }
     if (update.type === 'error') return <p className="text-red-500 text-sm">{update.message}</p>;
     if (update.content) return <pre className="text-sm text-[#1A1A1A] whitespace-pre-wrap">{update.content}</pre>;
