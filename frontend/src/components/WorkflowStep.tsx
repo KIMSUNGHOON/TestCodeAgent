@@ -415,58 +415,145 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
     </div>
   );
 
-  const renderReview = () => (
-    <div className="mt-3 space-y-4">
-      {update.issues && update.issues.length > 0 && (
-        <div className="p-3 rounded-xl bg-red-50 border border-red-100">
-          <h4 className="text-sm font-semibold text-red-600 mb-2">Issues ({update.issues.length})</h4>
-          <ul className="space-y-1">
-            {update.issues.map((issue, i) => (
-              <li key={i} className="text-sm text-red-700 flex items-start gap-2">
-                <span className="text-red-400 mt-0.5">-</span>
-                <span>{issue}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {update.suggestions && update.suggestions.length > 0 && (
-        <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
-          <h4 className="text-sm font-semibold text-amber-600 mb-2">Suggestions ({update.suggestions.length})</h4>
-          <ul className="space-y-1">
-            {update.suggestions.map((suggestion, i) => (
-              <li key={i} className="text-sm text-amber-700 flex items-start gap-2">
-                <span className="text-amber-400 mt-0.5">-</span>
-                <span>{suggestion}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-        update.approved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-      }`}>
-        {update.approved ? (
-          <>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            Approved
-          </>
-        ) : (
-          <>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
-            Needs Revision
-          </>
+  const renderReview = () => {
+    // Helper to render issue (handles both string and structured format)
+    const renderIssue = (issue: string | { file?: string; line?: string; severity?: string; issue: string; fix?: string }, index: number) => {
+      if (typeof issue === 'string') {
+        return (
+          <li key={index} className="text-sm text-red-700 flex items-start gap-2">
+            <span className="text-red-400 mt-0.5">-</span>
+            <span>{issue}</span>
+          </li>
+        );
+      }
+
+      const severityColors = {
+        critical: 'bg-red-600',
+        warning: 'bg-amber-500',
+        info: 'bg-blue-500'
+      };
+
+      return (
+        <li key={index} className="p-3 bg-white rounded-lg border border-red-200 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            {issue.severity && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded text-white font-medium ${severityColors[issue.severity as keyof typeof severityColors] || 'bg-gray-500'}`}>
+                {issue.severity.toUpperCase()}
+              </span>
+            )}
+            {issue.file && (
+              <span className="text-xs font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                {issue.file}
+              </span>
+            )}
+            {issue.line && (
+              <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                Line {issue.line}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-red-700">{issue.issue}</p>
+          {issue.fix && (
+            <p className="text-xs text-green-700 bg-green-50 p-2 rounded mt-1">
+              <span className="font-medium">Fix:</span> {issue.fix}
+            </p>
+          )}
+        </li>
+      );
+    };
+
+    // Helper to render suggestion (handles both string and structured format)
+    const renderSuggestion = (suggestion: string | { file?: string; line?: string; suggestion: string }, index: number) => {
+      if (typeof suggestion === 'string') {
+        return (
+          <li key={index} className="text-sm text-amber-700 flex items-start gap-2">
+            <span className="text-amber-400 mt-0.5">-</span>
+            <span>{suggestion}</span>
+          </li>
+        );
+      }
+
+      return (
+        <li key={index} className="p-3 bg-white rounded-lg border border-amber-200">
+          <div className="flex items-center gap-2 mb-1">
+            {suggestion.file && (
+              <span className="text-xs font-mono text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">
+                {suggestion.file}
+              </span>
+            )}
+            {suggestion.line && (
+              <span className="text-xs font-mono text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                Line {suggestion.line}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-amber-700">{suggestion.suggestion}</p>
+        </li>
+      );
+    };
+
+    return (
+      <div className="mt-3 space-y-4">
+        {/* Analysis Summary */}
+        {update.analysis && (
+          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100">
+            <h4 className="text-sm font-semibold text-blue-600 mb-1">Analysis</h4>
+            <p className="text-sm text-blue-700">{update.analysis}</p>
+          </div>
         )}
+
+        {/* Issues */}
+        {update.issues && update.issues.length > 0 && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-100">
+            <h4 className="text-sm font-semibold text-red-600 mb-2">
+              Issues ({update.issues.length})
+            </h4>
+            <ul className="space-y-2">
+              {update.issues.map((issue, i) => renderIssue(issue, i))}
+            </ul>
+          </div>
+        )}
+
+        {/* Suggestions */}
+        {update.suggestions && update.suggestions.length > 0 && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+            <h4 className="text-sm font-semibold text-amber-600 mb-2">
+              Suggestions ({update.suggestions.length})
+            </h4>
+            <ul className="space-y-2">
+              {update.suggestions.map((suggestion, i) => renderSuggestion(suggestion, i))}
+            </ul>
+          </div>
+        )}
+
+        {/* Approval Status */}
+        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
+          update.approved ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+        }`}>
+          {update.approved ? (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Approved
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+              Needs Revision
+            </>
+          )}
+        </div>
+
+        {/* Corrected Artifacts */}
+        {update.corrected_artifacts?.map((artifact, i) => (
+          <ArtifactDisplay key={i} artifact={artifact} defaultExpanded={false} />
+        ))}
       </div>
-      {update.corrected_artifacts?.map((artifact, i) => (
-        <ArtifactDisplay key={i} artifact={artifact} defaultExpanded={false} />
-      ))}
-    </div>
-  );
+    );
+  };
 
   const renderCompletedTasks = (tasks: CompletedTask[]) => (
     <div className="space-y-2 mt-3">

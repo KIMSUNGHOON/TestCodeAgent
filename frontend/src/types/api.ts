@@ -133,6 +133,22 @@ export interface FinalResult {
   review_iterations: number;
 }
 
+// Structured review issue with line info
+export interface ReviewIssue {
+  file?: string;
+  line?: string;
+  severity?: 'critical' | 'warning' | 'info';
+  issue: string;
+  fix?: string;
+}
+
+// Structured review suggestion with line info
+export interface ReviewSuggestion {
+  file?: string;
+  line?: string;
+  suggestion: string;
+}
+
 export interface WorkflowUpdate {
   agent: string;
   type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision';
@@ -145,8 +161,10 @@ export interface WorkflowUpdate {
   checklist?: ChecklistItem[];
   completed_tasks?: CompletedTask[];
   task_result?: TaskResult;
-  issues?: string[];
-  suggestions?: string[];
+  // Review fields - can be string[] (old format) or structured (new format)
+  analysis?: string;
+  issues?: (string | ReviewIssue)[];
+  suggestions?: (string | ReviewSuggestion)[];
   approved?: boolean;
   corrected_artifacts?: Artifact[];
   summary?: {

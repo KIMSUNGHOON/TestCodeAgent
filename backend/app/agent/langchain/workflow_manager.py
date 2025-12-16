@@ -176,19 +176,31 @@ def parse_code_blocks(text: str) -> List[Dict[str, Any]]:
 
 
 def parse_review(text: str) -> Dict[str, Any]:
-    """Parse review text into structured format.
+    """Parse review text into structured format with line-specific issues.
 
     Expected format:
     ANALYSIS: [summary]
     ISSUES:
+    - File: [filename]
+    - Line: [line number]
+    - Severity: [critical/warning/info]
     - Issue: [problem]
+    - Fix: [suggestion]
     SUGGESTIONS:
-    - Suggest: [improvement]
+    - File: [filename]
+    - Line: [line]
+    - Suggestion: [improvement]
     STATUS: APPROVED or NEEDS_REVISION
     """
     issues = []
     suggestions = []
     approved = False
+    analysis = ""
+
+    # Parse ANALYSIS
+    analysis_match = re.search(r'ANALYSIS:\s*(.+?)(?=\n\n|ISSUES:|$)', text, re.IGNORECASE | re.DOTALL)
+    if analysis_match:
+        analysis = analysis_match.group(1).strip()
 
     # Parse STATUS field explicitly - this takes precedence
     status_match = re.search(r'STATUS:\s*(APPROVED|NEEDS_REVISION)', text, re.IGNORECASE)
@@ -196,40 +208,89 @@ def parse_review(text: str) -> Dict[str, Any]:
         approved = status_match.group(1).upper() == "APPROVED"
     else:
         # Fallback: if no explicit status, check for approval keywords
-        # But ONLY if there are no issues
         if re.search(r'\b(?:lgtm|looks good|no issues found)\b', text, re.IGNORECASE):
             approved = True
 
-    # Parse ISSUES section
+    # Parse ISSUES section with structured format
     issues_section = re.search(r'ISSUES:\s*(.*?)(?=SUGGESTIONS:|STATUS:|```|$)', text, re.IGNORECASE | re.DOTALL)
     if issues_section:
-        issue_lines = issues_section.group(1).strip()
-        # Match "- Issue: description" or "- description" patterns
-        for match in re.finditer(r'[-*]\s*(?:Issue:\s*)?(.+?)(?=\n[-*]|\n\n|$)', issue_lines, re.IGNORECASE):
-            issue_text = match.group(1).strip()
-            if issue_text and len(issue_text) > 2:  # Filter out empty/trivial matches
-                issues.append(issue_text)
+        issues_text = issues_section.group(1).strip()
 
-    # Parse SUGGESTIONS section
+        # Try to parse structured issues (File/Line/Severity/Issue/Fix format)
+        issue_blocks = re.split(r'\n\s*\n|\n(?=-\s*File:)', issues_text)
+        for block in issue_blocks:
+            if not block.strip():
+                continue
+
+            issue_obj = {}
+            # Parse each field
+            file_match = re.search(r'-?\s*File:\s*(.+?)(?:\n|$)', block, re.IGNORECASE)
+            line_match = re.search(r'-?\s*Line:\s*(.+?)(?:\n|$)', block, re.IGNORECASE)
+            severity_match = re.search(r'-?\s*Severity:\s*(.+?)(?:\n|$)', block, re.IGNORECASE)
+            issue_match = re.search(r'-?\s*Issue:\s*(.+?)(?:\n-|$)', block, re.IGNORECASE | re.DOTALL)
+            fix_match = re.search(r'-?\s*Fix:\s*(.+?)(?:\n\n|$)', block, re.IGNORECASE | re.DOTALL)
+
+            if file_match:
+                issue_obj["file"] = file_match.group(1).strip()
+            if line_match:
+                issue_obj["line"] = line_match.group(1).strip()
+            if severity_match:
+                issue_obj["severity"] = severity_match.group(1).strip().lower()
+            if issue_match:
+                issue_obj["issue"] = issue_match.group(1).strip()
+            if fix_match:
+                issue_obj["fix"] = fix_match.group(1).strip()
+
+            # If we got at least an issue description, add it
+            if issue_obj.get("issue"):
+                issues.append(issue_obj)
+            elif block.strip() and not any(k in block.lower() for k in ['file:', 'line:', 'severity:']):
+                # Fallback: simple text issue (old format compatibility)
+                simple_match = re.search(r'[-*]\s*(?:Issue:\s*)?(.+)', block, re.IGNORECASE)
+                if simple_match:
+                    issues.append({"issue": simple_match.group(1).strip(), "severity": "warning"})
+
+    # Parse SUGGESTIONS section with structured format
     suggestions_section = re.search(r'SUGGESTIONS:\s*(.*?)(?=STATUS:|ISSUES:|```|$)', text, re.IGNORECASE | re.DOTALL)
     if suggestions_section:
-        suggestion_lines = suggestions_section.group(1).strip()
-        for match in re.finditer(r'[-*]\s*(?:Suggest(?:ion)?:\s*)?(.+?)(?=\n[-*]|\n\n|$)', suggestion_lines, re.IGNORECASE):
-            suggestion_text = match.group(1).strip()
-            if suggestion_text and len(suggestion_text) > 2:
-                suggestions.append(suggestion_text)
+        suggestions_text = suggestions_section.group(1).strip()
 
-    # If issues exist but STATUS says APPROVED, still consider it not approved
-    # (indicates model inconsistency - be conservative)
+        # Try to parse structured suggestions
+        suggestion_blocks = re.split(r'\n\s*\n|\n(?=-\s*File:)', suggestions_text)
+        for block in suggestion_blocks:
+            if not block.strip():
+                continue
+
+            suggestion_obj = {}
+            file_match = re.search(r'-?\s*File:\s*(.+?)(?:\n|$)', block, re.IGNORECASE)
+            line_match = re.search(r'-?\s*Line:\s*(.+?)(?:\n|$)', block, re.IGNORECASE)
+            suggestion_match = re.search(r'-?\s*Suggestion:\s*(.+?)(?:\n\n|$)', block, re.IGNORECASE | re.DOTALL)
+
+            if file_match:
+                suggestion_obj["file"] = file_match.group(1).strip()
+            if line_match:
+                suggestion_obj["line"] = line_match.group(1).strip()
+            if suggestion_match:
+                suggestion_obj["suggestion"] = suggestion_match.group(1).strip()
+
+            if suggestion_obj.get("suggestion"):
+                suggestions.append(suggestion_obj)
+            elif block.strip() and not any(k in block.lower() for k in ['file:', 'line:']):
+                # Fallback: simple text suggestion
+                simple_match = re.search(r'[-*]\s*(?:Suggest(?:ion)?:\s*)?(.+)', block, re.IGNORECASE)
+                if simple_match:
+                    suggestions.append({"suggestion": simple_match.group(1).strip()})
+
+    # If issues exist but STATUS says APPROVED, check severity
     if issues and approved:
-        # Check if issues are critical
-        critical_keywords = ['error', 'bug', 'crash', 'security', 'vulnerability', 'missing', 'required']
         for issue in issues:
-            if any(kw in issue.lower() for kw in critical_keywords):
+            severity = issue.get("severity", "warning") if isinstance(issue, dict) else "warning"
+            if severity in ["critical", "error"]:
                 approved = False
                 break
 
     return {
+        "analysis": analysis,
         "issues": issues,
         "suggestions": suggestions,
         "approved": approved,
@@ -339,24 +400,46 @@ THOUGHTS: [brief analysis]
 - Write complete, runnable code
 </rules>""",
 
-            "ReviewAgent": """Review code and provide structured feedback.
+            "ReviewAgent": """Review code and provide detailed, line-specific feedback.
 
 <response_format>
-ANALYSIS: [brief review summary]
+ANALYSIS: [brief overall review summary]
 
 ISSUES:
-- Issue: [problem description]
+For each issue, specify:
+- File: [filename]
+- Line: [line number or range, e.g., "15" or "15-20"]
+- Severity: [critical/warning/info]
+- Issue: [detailed description of the problem]
+- Fix: [suggested fix]
+
+Example:
+- File: calculator.py
+- Line: 25
+- Severity: critical
+- Issue: Division by zero not handled
+- Fix: Add check for zero divisor before division
 
 SUGGESTIONS:
-- Suggest: [improvement]
+- File: [filename]
+- Line: [line number]
+- Suggestion: [improvement recommendation]
 
 STATUS: [APPROVED or NEEDS_REVISION]
 
-If changes needed:
+If NEEDS_REVISION, provide corrected code:
 ```language filename.ext
-// corrected code
+// corrected complete code with fixes applied
 ```
-</response_format>""",
+</response_format>
+
+<rules>
+- Be specific about line numbers
+- Critical issues = bugs, errors, security problems (MUST fix)
+- Warnings = code smells, potential issues (SHOULD fix)
+- Info = style, best practices (COULD improve)
+- Only set STATUS: APPROVED if no critical/warning issues exist
+</rules>""",
 
             "FixCodeAgent": """Fix the code based on review feedback.
 
@@ -842,6 +925,7 @@ PRIORITY: [high/medium/low for each]
                     "agent": "ReviewAgent",
                     "type": "completed",
                     "status": "completed",
+                    "analysis": review_result.get("analysis", ""),
                     "issues": review_result["issues"],
                     "suggestions": review_result["suggestions"],
                     "approved": approved,
@@ -893,9 +977,41 @@ PRIORITY: [high/medium/low for each]
                         "message": f"Fixing {len(review_result['issues'])} issues..."
                     }
 
+                    # Format issues for FixCodeAgent (handle both old and new format)
+                    def format_issue(issue):
+                        if isinstance(issue, dict):
+                            parts = []
+                            if issue.get("file"):
+                                parts.append(f"File: {issue['file']}")
+                            if issue.get("line"):
+                                parts.append(f"Line: {issue['line']}")
+                            if issue.get("severity"):
+                                parts.append(f"Severity: {issue['severity']}")
+                            if issue.get("issue"):
+                                parts.append(f"Issue: {issue['issue']}")
+                            if issue.get("fix"):
+                                parts.append(f"Suggested Fix: {issue['fix']}")
+                            return "\n  ".join(parts)
+                        return str(issue)
+
+                    def format_suggestion(suggestion):
+                        if isinstance(suggestion, dict):
+                            parts = []
+                            if suggestion.get("file"):
+                                parts.append(f"File: {suggestion['file']}")
+                            if suggestion.get("line"):
+                                parts.append(f"Line: {suggestion['line']}")
+                            if suggestion.get("suggestion"):
+                                parts.append(f"Suggestion: {suggestion['suggestion']}")
+                            return "\n  ".join(parts)
+                        return str(suggestion)
+
+                    issues_text = "\n".join(f"- {format_issue(i)}" for i in review_result["issues"]) or "None"
+                    suggestions_text = "\n".join(f"- {format_suggestion(s)}" for s in review_result["suggestions"]) or "None"
+
                     fix_prompt = fix_prompt_template.format(
-                        issues="\n".join(f"- {i}" for i in review_result["issues"]) or "None",
-                        suggestions="\n".join(f"- {s}" for s in review_result["suggestions"]) or "None"
+                        issues=issues_text,
+                        suggestions=suggestions_text
                     )
 
                     fix_user_prompt = f"Code to fix:\n\n{code_text}"
