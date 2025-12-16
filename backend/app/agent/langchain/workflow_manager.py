@@ -754,6 +754,18 @@ PRIORITY: [high/medium/low for each]
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Execute the standard coding workflow (Planning -> Coding -> Review -> Fix loop)."""
 
+        # Helper to build workflow_info with current node
+        def build_workflow_info(current_node: str) -> Dict[str, Any]:
+            return {
+                "workflow_id": workflow_id,
+                "workflow_type": template["name"],
+                "task_type": task_type,
+                "nodes": template["nodes"],
+                "current_node": current_node,
+                "max_iterations": max_iterations,
+                "dynamically_created": True
+            }
+
         # Step 1: Planning
         planning_agent = template["nodes"][0]  # Usually PlanningAgent or AnalysisAgent
         yield {
@@ -761,6 +773,7 @@ PRIORITY: [high/medium/low for each]
             "type": "agent_spawn",
             "status": "running",
             "message": f"Spawning {planning_agent}",
+            "workflow_info": build_workflow_info(planning_agent),
             "agent_spawn": {
                 "agent_id": f"{planning_agent.lower()}-{uuid.uuid4().hex[:6]}",
                 "agent_type": planning_agent,
@@ -813,6 +826,7 @@ PRIORITY: [high/medium/low for each]
             "type": "agent_spawn",
             "status": "running",
             "message": f"Spawning {coding_agent}",
+            "workflow_info": build_workflow_info(coding_agent),
             "agent_spawn": {
                 "agent_id": f"{coding_agent.lower()}-{uuid.uuid4().hex[:6]}",
                 "agent_type": coding_agent,
@@ -915,6 +929,7 @@ PRIORITY: [high/medium/low for each]
                     "type": "agent_spawn",
                     "status": "running",
                     "message": f"Spawning ReviewAgent (iteration {review_iteration}/{max_iterations})",
+                    "workflow_info": build_workflow_info("ReviewAgent"),
                     "agent_spawn": {
                         "agent_id": f"review-{uuid.uuid4().hex[:6]}",
                         "agent_type": "ReviewAgent",
@@ -973,6 +988,7 @@ PRIORITY: [high/medium/low for each]
                     "type": "decision",
                     "status": "running",
                     "message": f"Decision: {'APPROVED' if approved else 'NEEDS_REVISION'}",
+                    "workflow_info": build_workflow_info("Decision"),
                     "decision": {
                         "approved": approved,
                         "iteration": review_iteration,
@@ -988,6 +1004,7 @@ PRIORITY: [high/medium/low for each]
                         "type": "agent_spawn",
                         "status": "running",
                         "message": f"Spawning FixCodeAgent",
+                        "workflow_info": build_workflow_info("FixCodeAgent"),
                         "agent_spawn": {
                             "agent_id": f"fix-{uuid.uuid4().hex[:6]}",
                             "agent_type": "FixCodeAgent",
