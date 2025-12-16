@@ -1,26 +1,37 @@
 # FastAPI and ASGI server
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-python-multipart==0.0.12
+fastapi>=0.100.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Pydantic settings (separate from pydantic core)
+pydantic-settings>=2.0.0
 
 # Microsoft Agent Framework (includes openai, pydantic, httpx)
-agent-framework==1.0.0b251204
+# Note: Using flexible version to avoid dependency conflicts
+agent-framework>=1.0.0b1
 
 # Database
-sqlalchemy==2.0.23
+sqlalchemy>=2.0.0
 
-# Vector DB for semantic search
-chromadb==0.4.22
+# Vector DB for semantic search (optional - comment out if causing conflicts)
+# chromadb>=0.4.0
 
 # Caching
-redis==5.0.1
+redis>=5.0.0
 
-# Additional dependencies not included in agent-framework
-python-jose[cryptography]==3.3.0
-structlog==24.4.0
+# Additional dependencies
+python-jose[cryptography]>=3.3.0
+structlog>=24.0.0
 
 # Phase 1 DeepAgent dependencies
-aiofiles==24.1.0  # Async file I/O for tool system
-networkx==3.2.1   # Knowledge graph for memory system
-pytest==7.4.3     # Testing framework
-pytest-asyncio==0.21.1  # Async testing support
+aiofiles>=24.0.0  # Async file I/O for tool system
+networkx>=3.0     # Knowledge graph for memory system
+
+# LangChain ecosystem for dual framework support
+langchain>=0.2.0
+langchain-openai>=0.1.0
+langgraph>=0.2.0
+
+# Testing (dev dependencies)
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
