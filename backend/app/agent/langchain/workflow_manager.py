@@ -1,4 +1,10 @@
-"""Dynamic workflow-based coding agent using LangGraph with SupervisorAgent."""
+"""Dynamic workflow-based coding agent using LangGraph with SupervisorAgent.
+
+Supports optional DeepAgents integration for enhanced capabilities:
+- FilesystemMiddleware: Direct file read/write operations
+- SubAgentMiddleware: Delegate tasks to specialized sub-agents
+- TodoListMiddleware: Automatic task tracking
+"""
 import logging
 import re
 import time
@@ -13,6 +19,27 @@ from app.core.config import settings
 from app.agent.base.interface import BaseWorkflow, BaseWorkflowManager
 
 logger = logging.getLogger(__name__)
+
+# Check for DeepAgents availability
+DEEPAGENTS_AVAILABLE = False
+deepagents_middleware = {}
+
+try:
+    from deepagents import create_deep_agent
+    from deepagents.middleware import (
+        TodoListMiddleware,
+        FilesystemMiddleware,
+        SubAgentMiddleware,
+    )
+    DEEPAGENTS_AVAILABLE = True
+    deepagents_middleware = {
+        "TodoListMiddleware": TodoListMiddleware,
+        "FilesystemMiddleware": FilesystemMiddleware,
+        "SubAgentMiddleware": SubAgentMiddleware,
+    }
+    logger.info("DeepAgents integration enabled for LangChain workflow")
+except ImportError:
+    logger.info("DeepAgents not available - using standard LangChain workflow")
 
 
 # Task types that can be identified
@@ -1341,3 +1368,75 @@ workflow_manager = LangGraphWorkflowManager()
 
 # Backward compatibility alias
 LangGraphWorkflow = DynamicLangGraphWorkflow
+
+
+# DeepAgents integration helpers
+class DeepAgentsHelper:
+    """Helper class to access DeepAgents capabilities from LangChain workflow."""
+
+    @staticmethod
+    def is_available() -> bool:
+        """Check if DeepAgents is available."""
+        return DEEPAGENTS_AVAILABLE
+
+    @staticmethod
+    def get_capabilities() -> Dict[str, bool]:
+        """Get available DeepAgents capabilities."""
+        return {
+            "filesystem": "FilesystemMiddleware" in deepagents_middleware,
+            "subagent": "SubAgentMiddleware" in deepagents_middleware,
+            "todolist": "TodoListMiddleware" in deepagents_middleware,
+        }
+
+    @staticmethod
+    def create_filesystem_agent(allowed_paths: List[str] = None, read_only: bool = False):
+        """Create an agent with filesystem access.
+
+        Args:
+            allowed_paths: List of paths the agent can access
+            read_only: If True, agent can only read files
+
+        Returns:
+            Configured agent with filesystem middleware, or None if not available
+        """
+        if not DEEPAGENTS_AVAILABLE:
+            logger.warning("DeepAgents not available for filesystem operations")
+            return None
+
+        try:
+            from deepagents import create_deep_agent
+            FilesystemMiddleware = deepagents_middleware.get("FilesystemMiddleware")
+
+            if FilesystemMiddleware:
+                return create_deep_agent(
+                    tools=[],
+                    middleware=[
+                        FilesystemMiddleware(
+                            allowed_paths=allowed_paths or ["./workspace", "./output"],
+                            read_only=read_only
+                        )
+                    ]
+                )
+        except Exception as e:
+            logger.error(f"Failed to create filesystem agent: {e}")
+        return None
+
+
+# Export DeepAgents availability
+def get_framework_capabilities() -> Dict[str, Any]:
+    """Get current framework capabilities including DeepAgents status."""
+    return {
+        "framework": "langchain",
+        "workflow_type": "DynamicLangGraphWorkflow",
+        "deepagents_available": DEEPAGENTS_AVAILABLE,
+        "deepagents_capabilities": DeepAgentsHelper.get_capabilities(),
+        "task_types": list(WORKFLOW_TEMPLATES.keys()),
+        "features": {
+            "dynamic_workflow": True,
+            "supervisor_agent": True,
+            "review_loop": True,
+            "line_specific_review": True,
+            "multi_file_support": True,
+        }
+    }
+
