@@ -1260,64 +1260,105 @@ PRIORITY: [high/medium/low for each]
             while not approved and review_iteration < max_iterations:
                 review_iteration += 1
 
-                # Review
-                yield {
-                    "agent": "ReviewAgent",
-                    "type": "agent_spawn",
-                    "status": "running",
-                    "message": f"Spawning ReviewAgent (iteration {review_iteration}/{max_iterations})",
-                    "workflow_info": build_workflow_info("ReviewAgent"),
-                    "agent_spawn": {
-                        "agent_id": f"review-{uuid.uuid4().hex[:6]}",
-                        "agent_type": "ReviewAgent",
-                        "parent_agent": "Orchestrator",
-                        "spawn_reason": f"Review iteration {review_iteration}",
-                        "timestamp": datetime.now().isoformat()
-                    },
-                    "iteration_info": {"current": review_iteration, "max": max_iterations}
-                }
+                # Determine if we should use parallel review
+                # Use parallel review for multiple files (3+ files to make it worthwhile)
+                num_artifacts = len(all_artifacts)
+                use_parallel_review = self.enable_parallel_coding and num_artifacts >= 3
 
-                yield {
-                    "agent": "ReviewAgent",
-                    "type": "thinking",
-                    "status": "running",
-                    "message": f"Reviewing code (iteration {review_iteration}/{max_iterations})..."
-                }
+                if use_parallel_review:
+                    # Parallel review for multiple files
+                    yield {
+                        "agent": "Orchestrator",
+                        "type": "mode_selection",
+                        "status": "running",
+                        "message": f"Using PARALLEL review mode for {num_artifacts} files",
+                        "execution_mode": "parallel",
+                        "parallel_config": {
+                            "max_parallel_agents": self.max_parallel_agents * 2,
+                            "total_files": num_artifacts
+                        }
+                    }
 
-                review_user_prompt = f"Review this code:\n\n{code_text}"
-                messages = [
-                    SystemMessage(content=review_prompt),
-                    HumanMessage(content=review_user_prompt)
-                ]
+                    # Execute parallel review
+                    review_completed = False
+                    async for update in self._execute_parallel_review(
+                        artifacts=all_artifacts,
+                        user_request=user_request,
+                        review_prompt=review_prompt,
+                        review_iteration=review_iteration,
+                        max_iterations=max_iterations
+                    ):
+                        # Check if this is the completion update
+                        if update.get("type") == "completed" and update.get("agent") == "ReviewAgent":
+                            # Extract review result from parallel review
+                            approved = update.get("approved", False)
+                            review_completed = True
 
-                start_time = time.time()
-                review_text = ""
-                async for chunk in self.coding_llm.astream(messages):
-                    if chunk.content:
-                        review_text += chunk.content
-                review_latency_ms = int((time.time() - start_time) * 1000)
+                        yield update
 
-                review_result = parse_review(review_text)
-                approved = review_result["approved"]
+                    if not review_completed:
+                        # Fallback if parallel review didn't complete properly
+                        approved = False
 
-                yield {
-                    "agent": "ReviewAgent",
-                    "type": "completed",
-                    "status": "completed",
-                    "analysis": review_result.get("analysis", ""),
-                    "issues": review_result["issues"],
-                    "suggestions": review_result["suggestions"],
-                    "approved": approved,
-                    "corrected_artifacts": review_result["corrected_artifacts"],
-                    "prompt_info": {
-                        "system_prompt": review_prompt,
-                        "user_prompt": review_user_prompt,
-                        "output": review_text,
-                        "model": settings.coding_model,
-                        "latency_ms": review_latency_ms
-                    },
-                    "iteration_info": {"current": review_iteration, "max": max_iterations}
-                }
+                else:
+                    # Sequential review for single file or few files
+                    yield {
+                        "agent": "ReviewAgent",
+                        "type": "agent_spawn",
+                        "status": "running",
+                        "message": f"Spawning ReviewAgent (iteration {review_iteration}/{max_iterations})",
+                        "workflow_info": build_workflow_info("ReviewAgent"),
+                        "agent_spawn": {
+                            "agent_id": f"review-{uuid.uuid4().hex[:6]}",
+                            "agent_type": "ReviewAgent",
+                            "parent_agent": "Orchestrator",
+                            "spawn_reason": f"Review iteration {review_iteration}",
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        "iteration_info": {"current": review_iteration, "max": max_iterations}
+                    }
+
+                    yield {
+                        "agent": "ReviewAgent",
+                        "type": "thinking",
+                        "status": "running",
+                        "message": f"Reviewing code (iteration {review_iteration}/{max_iterations})..."
+                    }
+
+                    review_user_prompt = f"Review this code:\n\n{code_text}"
+                    messages = [
+                        SystemMessage(content=review_prompt),
+                        HumanMessage(content=review_user_prompt)
+                    ]
+
+                    start_time = time.time()
+                    review_text = ""
+                    async for chunk in self.coding_llm.astream(messages):
+                        if chunk.content:
+                            review_text += chunk.content
+                    review_latency_ms = int((time.time() - start_time) * 1000)
+
+                    review_result = parse_review(review_text)
+                    approved = review_result["approved"]
+
+                    yield {
+                        "agent": "ReviewAgent",
+                        "type": "completed",
+                        "status": "completed",
+                        "analysis": review_result.get("analysis", ""),
+                        "issues": review_result["issues"],
+                        "suggestions": review_result["suggestions"],
+                        "approved": approved,
+                        "corrected_artifacts": review_result["corrected_artifacts"],
+                        "prompt_info": {
+                            "system_prompt": review_prompt,
+                            "user_prompt": review_user_prompt,
+                            "output": review_text,
+                            "model": settings.coding_model,
+                            "latency_ms": review_latency_ms
+                        },
+                        "iteration_info": {"current": review_iteration, "max": max_iterations}
+                    }
 
                 # Decision
                 yield {
@@ -1900,6 +1941,277 @@ PRIORITY: [high/medium/low for each]
             "artifacts": all_artifacts,
             "checklist": grouped_checklist,
             "code_text": code_text
+        }
+
+    async def _execute_single_review_task(
+        self,
+        file_idx: int,
+        artifact: Dict[str, Any],
+        user_request: str,
+        review_prompt: str,
+        agent_id: str
+    ) -> Dict[str, Any]:
+        """Execute a single file review task - used for parallel execution."""
+        filename = artifact["filename"]
+        content = artifact["content"]
+        language = artifact.get("language", "text")
+
+        user_prompt = f"""Review this file:
+
+Filename: {filename}
+Language: {language}
+
+User Request: {user_request}
+
+Code:
+```{language}
+{content}
+```
+
+Provide detailed review focusing on this specific file."""
+
+        messages = [
+            SystemMessage(content=review_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+
+        start_time = time.time()
+        review_text = ""
+
+        async for chunk in self.coding_llm.astream(messages):
+            if chunk.content:
+                review_text += chunk.content
+
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        # Parse review result for this file
+        review_result = parse_review(review_text)
+
+        return {
+            "file_idx": file_idx,
+            "filename": filename,
+            "review_text": review_text,
+            "review_result": review_result,
+            "latency_ms": latency_ms
+        }
+
+    async def _execute_parallel_review(
+        self,
+        artifacts: List[Dict[str, Any]],
+        user_request: str,
+        review_prompt: str,
+        review_iteration: int,
+        max_iterations: int
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Execute code review in parallel for multiple files.
+
+        Similar to parallel coding, but for reviewing multiple artifacts.
+        Leverages H100 GPU optimization for better throughput.
+        """
+        if not artifacts or len(artifacts) == 0:
+            return
+
+        # Determine optimal parallelism for review
+        # Reviews are typically faster than coding, so we can use higher parallelism
+        num_files = len(artifacts)
+        if self.adaptive_parallelism:
+            # For reviews, we can safely use up to 2x the coding parallelism
+            optimal_parallel = min(num_files, self.max_parallel_agents * 2)
+        else:
+            optimal_parallel = min(num_files, self.max_parallel_agents)
+
+        # Notify parallel review start
+        yield {
+            "agent": "Orchestrator",
+            "type": "parallel_review_start",
+            "status": "running",
+            "message": f"Starting parallel review of {num_files} files with up to {optimal_parallel} concurrent review agents",
+            "parallel_info": {
+                "total_files": num_files,
+                "max_parallel": optimal_parallel,
+                "review_iteration": review_iteration
+            }
+        }
+
+        # Spawn unified ReviewAgent for all files (shown once in UI)
+        yield {
+            "agent": "ReviewAgent",
+            "agent_label": f"Reviewing {num_files} Files",
+            "task_description": f"Reviewing {num_files} files in parallel (up to {optimal_parallel} concurrent)",
+            "type": "agent_spawn",
+            "status": "running",
+            "message": f"Starting parallel review with {optimal_parallel} concurrent agents (iteration {review_iteration}/{max_iterations})",
+            "workflow_info": {
+                "current_agent": "ReviewAgent",
+                "total_agents": num_files,
+                "completed_agents": 0
+            },
+            "agent_spawn": {
+                "agent_id": f"review-unified-{uuid.uuid4().hex[:6]}",
+                "agent_type": "ReviewAgent",
+                "parent_agent": "Orchestrator",
+                "spawn_reason": f"Review {num_files} files in parallel",
+                "timestamp": datetime.now().isoformat()
+            },
+            "iteration_info": {"current": review_iteration, "max": max_iterations}
+        }
+
+        all_reviews = []
+
+        # Process files in batches
+        batch_count = (num_files + optimal_parallel - 1) // optimal_parallel
+        for batch_start in range(0, num_files, optimal_parallel):
+            batch_end = min(batch_start + optimal_parallel, num_files)
+
+            # Create review tasks for this batch
+            pending_tasks = {}  # task_object -> (idx, artifact, agent_id)
+
+            for idx in range(batch_start, batch_end):
+                agent_id = f"review-{uuid.uuid4().hex[:6]}"
+                artifact = artifacts[idx]
+
+                # Start review task
+                task_coro = self._execute_single_review_task(
+                    file_idx=idx,
+                    artifact=artifact,
+                    user_request=user_request,
+                    review_prompt=review_prompt,
+                    agent_id=agent_id
+                )
+                task_obj = asyncio.create_task(task_coro)
+                pending_tasks[task_obj] = (idx, artifact, agent_id)
+
+                # Immediately show what file is being reviewed
+                yield {
+                    "agent": "ReviewAgent",
+                    "agent_label": f"Reviewing {num_files} Files",
+                    "type": "thinking",
+                    "status": "running",
+                    "message": f"🔄 Starting review: {artifact['filename']}",
+                    "file_info": {
+                        "file_num": idx + 1,
+                        "total_files": num_files,
+                        "filename": artifact['filename']
+                    }
+                }
+
+            # Show batch info
+            current_batch = batch_start // optimal_parallel + 1
+            yield {
+                "agent": "ReviewAgent",
+                "agent_label": f"Reviewing {num_files} Files",
+                "type": "thinking",
+                "status": "running",
+                "message": f"Batch {current_batch}/{batch_count}: Reviewing {len(pending_tasks)} files in parallel ({batch_start + 1}-{batch_end} of {num_files})",
+                "batch_info": {
+                    "batch_num": current_batch,
+                    "total_batches": batch_count,
+                    "files": list(range(batch_start + 1, batch_end + 1)),
+                    "parallel_count": len(pending_tasks)
+                }
+            }
+
+            # Process reviews as they complete
+            completed_count = 0
+            while pending_tasks:
+                done, pending = await asyncio.wait(
+                    pending_tasks.keys(),
+                    return_when=asyncio.FIRST_COMPLETED
+                )
+
+                # Process completed reviews immediately
+                for task_obj in done:
+                    idx, artifact, agent_id = pending_tasks.pop(task_obj)
+                    completed_count += 1
+
+                    try:
+                        result = await task_obj
+                        all_reviews.append(result)
+
+                        # Show completion status
+                        review_summary = result["review_result"]
+                        issue_count = len(review_summary.get("issues", []))
+                        severity = "✓" if issue_count == 0 else f"⚠ {issue_count} issues"
+
+                        yield {
+                            "agent": "ReviewAgent",
+                            "agent_label": f"Reviewing {num_files} Files",
+                            "type": "thinking",
+                            "status": "running",
+                            "message": f"{severity} Completed ({completed_count}/{len(pending_tasks) + completed_count}): {result['filename']}",
+                            "file_info": {
+                                "file_num": idx + 1,
+                                "completed": True,
+                                "filename": result['filename'],
+                                "issue_count": issue_count
+                            }
+                        }
+
+                    except Exception as e:
+                        logger.error(f"Parallel review task failed: {e}")
+                        yield {
+                            "agent": "ReviewAgent",
+                            "agent_label": f"Reviewing {num_files} Files",
+                            "type": "error",
+                            "status": "error",
+                            "message": f"❌ Failed ({completed_count}/{len(pending_tasks) + completed_count}): {artifact['filename']} - {str(e)}"
+                        }
+
+        # Combine all reviews
+        combined_issues = []
+        combined_suggestions = []
+        all_approved = True
+
+        for review in sorted(all_reviews, key=lambda x: x["file_idx"]):
+            result = review["review_result"]
+            combined_issues.extend(result.get("issues", []))
+            combined_suggestions.extend(result.get("suggestions", []))
+            if not result.get("approved", False):
+                all_approved = False
+
+        # Mark ReviewAgent as completed
+        total_issues = len(combined_issues)
+        yield {
+            "agent": "ReviewAgent",
+            "agent_label": f"Reviewing {num_files} Files",
+            "type": "completed",
+            "status": "completed",
+            "message": f"Review completed: {num_files} files reviewed in parallel, {total_issues} total issues found",
+            "analysis": f"Parallel review of {num_files} files completed. Total issues: {total_issues}",
+            "issues": combined_issues,
+            "suggestions": combined_suggestions,
+            "approved": all_approved,
+            "corrected_artifacts": [],  # Parallel review doesn't auto-correct
+            "prompt_info": {
+                "system_prompt": review_prompt,
+                "user_prompt": f"Parallel review of {num_files} files",
+                "output": f"Combined review from {num_files} parallel reviewers",
+                "model": settings.coding_model,
+                "latency_ms": sum(r["latency_ms"] for r in all_reviews)
+            },
+            "parallel_review_summary": {
+                "total_files": num_files,
+                "completed_files": len(all_reviews),
+                "total_issues": total_issues,
+                "max_concurrent": optimal_parallel,
+                "batch_count": batch_count
+            },
+            "iteration_info": {"current": review_iteration, "max": max_iterations}
+        }
+
+        yield {
+            "agent": "Orchestrator",
+            "type": "parallel_review_complete",
+            "status": "completed",
+            "message": f"Parallel review completed with {optimal_parallel} concurrent agents. Reviewed {num_files} files, found {total_issues} issues.",
+            "parallel_summary": {
+                "total_files": num_files,
+                "completed_files": len(all_reviews),
+                "total_issues": total_issues,
+                "all_approved": all_approved,
+                "max_concurrent": optimal_parallel,
+                "batch_count": batch_count
+            }
         }
 
     async def _execute_test_workflow(
