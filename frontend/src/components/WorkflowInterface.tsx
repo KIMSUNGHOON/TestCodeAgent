@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { WorkflowUpdate, Artifact, WorkflowInfo } from '../types/api';
 import WorkflowStep from './WorkflowStep';
 import SharedContextViewer from './SharedContextViewer';
+import WorkflowGraph from './WorkflowGraph';
 import apiClient from '../api/client';
 
 interface ConversationTurn {
@@ -464,85 +465,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
             </div>
           )}
 
-          {/* Workflow Progress Indicator */}
+          {/* Workflow Graph Visualization */}
           {currentWorkflowInfo && isRunning && (
-            <div className="mb-6 p-4 bg-white rounded-xl border border-[#7C3AED40] shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#7C3AED] animate-pulse" />
-                  <span className="text-sm font-medium text-[#7C3AED]">{currentWorkflowInfo.workflow_type}</span>
-                </div>
-                <span className="text-xs text-[#999999]">
-                  {currentWorkflowInfo.current_node === 'END' ? 'Complete' : `Current: ${currentWorkflowInfo.current_node}`}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 overflow-x-auto py-2">
-                {/* START */}
-                <div className="px-2 py-1 rounded text-xs font-medium bg-[#1A1A1A] text-white flex-shrink-0">
-                  START
-                </div>
-                <svg className="w-4 h-4 text-[#999999] flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-                {/* Agent nodes */}
-                {currentWorkflowInfo.nodes.map((node, idx) => {
-                  const isCurrent = currentWorkflowInfo.current_node === node;
-                  const nodeColors: Record<string, string> = {
-                    PlanningAgent: '#DA7756',
-                    AnalysisAgent: '#EC4899',
-                    CodingAgent: '#16A34A',
-                    RefactorAgent: '#14B8A6',
-                    ReviewAgent: '#2563EB',
-                    FixCodeAgent: '#F59E0B',
-                    Decision: '#7C3AED'
-                  };
-                  const color = nodeColors[node] || '#666666';
-                  const isComplete = currentWorkflowInfo.nodes.indexOf(currentWorkflowInfo.current_node || '') > idx;
-
-                  return (
-                    <div key={node} className="flex items-center gap-1 flex-shrink-0">
-                      <div
-                        className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1"
-                        style={{
-                          backgroundColor: isCurrent || isComplete ? color : `${color}30`,
-                          color: isCurrent || isComplete ? 'white' : color,
-                          boxShadow: isCurrent ? `0 0 0 2px white, 0 0 0 4px ${color}` : undefined
-                        }}
-                      >
-                        {isComplete && (
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
-                        )}
-                        {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
-                        {node.replace('Agent', '')}
-                      </div>
-                      {idx < currentWorkflowInfo.nodes.length - 1 && (
-                        <svg className="w-4 h-4 text-[#999999]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                        </svg>
-                      )}
-                    </div>
-                  );
-                })}
-                <svg className="w-4 h-4 text-[#999999] flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-                {/* END */}
-                <div
-                  className={`px-2 py-1 rounded text-xs font-medium flex-shrink-0 ${
-                    currentWorkflowInfo.current_node === 'END' ? 'bg-[#16A34A] text-white ring-2 ring-[#16A34A] ring-offset-1' : 'bg-[#16A34A30] text-[#16A34A]'
-                  }`}
-                >
-                  {currentWorkflowInfo.current_node === 'END' && (
-                    <svg className="w-3 h-3 inline mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                  )}
-                  END
-                </div>
-              </div>
-            </div>
+            <WorkflowGraph workflowInfo={currentWorkflowInfo} isRunning={isRunning} />
           )}
 
           {/* Execution Mode & SharedContext Button */}
@@ -657,23 +582,56 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
                 const allArtifacts = updates.flatMap(u => u.artifacts || []);
                 if (allArtifacts.length === 0) return null;
 
-                // Build file tree structure with metadata
-                const fileTree: { [key: string]: Array<{ name: string; artifact: Artifact; agent: string }> } = {};
+                // Remove duplicate files (keep latest version)
+                const uniqueArtifacts = new Map<string, { artifact: Artifact; agent: string }>();
                 updates.forEach(update => {
                   if (update.artifacts) {
                     update.artifacts.forEach(artifact => {
-                      const parts = artifact.filename.split('/');
-                      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
-                      const filename = parts[parts.length - 1];
-
-                      if (!fileTree[dir]) fileTree[dir] = [];
-                      fileTree[dir].push({
-                        name: filename,
+                      // Use filename as key to deduplicate
+                      uniqueArtifacts.set(artifact.filename, {
                         artifact,
                         agent: update.agent
                       });
                     });
                   }
+                });
+
+                // Build hierarchical file tree structure
+                interface TreeNode {
+                  type: 'file' | 'directory';
+                  name: string;
+                  path: string;
+                  artifact?: Artifact;
+                  agent?: string;
+                  children?: Map<string, TreeNode>;
+                }
+
+                const rootTree = new Map<string, TreeNode>();
+
+                // Build tree from unique artifacts
+                uniqueArtifacts.forEach(({ artifact, agent }, filepath) => {
+                  const parts = filepath.split('/');
+                  let currentLevel = rootTree;
+
+                  parts.forEach((part, index) => {
+                    const isLastPart = index === parts.length - 1;
+                    const currentPath = parts.slice(0, index + 1).join('/');
+
+                    if (!currentLevel.has(part)) {
+                      currentLevel.set(part, {
+                        type: isLastPart ? 'file' : 'directory',
+                        name: part,
+                        path: currentPath,
+                        ...(isLastPart ? { artifact, agent } : { children: new Map() })
+                      });
+                    }
+
+                    if (!isLastPart) {
+                      const node = currentLevel.get(part)!;
+                      if (!node.children) node.children = new Map();
+                      currentLevel = node.children;
+                    }
+                  });
                 });
 
                 // Get file icon based on extension
@@ -690,6 +648,108 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
                   }
                 };
 
+                // Count total directories and files
+                const countNodes = (tree: Map<string, TreeNode>): { dirs: number; files: number } => {
+                  let dirs = 0;
+                  let files = 0;
+                  tree.forEach(node => {
+                    if (node.type === 'directory') {
+                      dirs++;
+                      if (node.children) {
+                        const childCounts = countNodes(node.children);
+                        dirs += childCounts.dirs;
+                        files += childCounts.files;
+                      }
+                    } else {
+                      files++;
+                    }
+                  });
+                  return { dirs, files };
+                };
+
+                const nodeCounts = countNodes(rootTree);
+
+                // Recursive tree renderer
+                const renderTree = (tree: Map<string, TreeNode>, depth: number = 0, isLast: boolean[] = []): JSX.Element[] => {
+                  const entries = Array.from(tree.entries()).sort(([, a], [, b]) => {
+                    // Directories first, then files
+                    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+                    return a.name.localeCompare(b.name);
+                  });
+
+                  return entries.map(([, node], index) => {
+                    const isLastNode = index === entries.length - 1;
+                    const newIsLast = [...isLast, isLastNode];
+
+                    return (
+                      <div key={node.path}>
+                        <div className="flex items-start gap-2 hover:bg-[#F5F4F2] px-1 py-0.5 rounded transition-colors group">
+                          {/* Indentation guides */}
+                          <div className="flex items-center flex-shrink-0">
+                            {isLast.map((last, i) => (
+                              <span key={i} className="w-4 text-[#999999]">
+                                {!last && i < isLast.length ? '│ ' : '  '}
+                              </span>
+                            ))}
+                            <span className="text-[#999999]">{isLastNode ? '└─' : '├─'}</span>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            {node.type === 'directory' ? (
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-4 h-4 text-[#DA7756]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                                  </svg>
+                                  <span className="text-sm font-semibold text-[#DA7756]">{node.name}/</span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span>{getFileIcon(node.name)}</span>
+                                  <span className="text-sm font-medium text-[#1A1A1A]">{node.name}</span>
+                                  {node.artifact && (
+                                    <>
+                                      <span className="text-[10px] text-[#999999] bg-[#F5F4F2] px-1.5 py-0.5 rounded">
+                                        {node.artifact.language}
+                                      </span>
+                                      {node.artifact.saved && (
+                                        <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded border border-green-200">
+                                          ✓ Saved
+                                        </span>
+                                      )}
+                                      {node.agent && (
+                                        <span className="text-[10px] text-[#16A34A] bg-[#F0FDF4] px-1.5 py-0.5 rounded border border-[#BBF7D0]">
+                                          by {node.agent}
+                                        </span>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                                {node.artifact?.description && (
+                                  <div className="mt-1 text-[11px] text-[#666666] italic ml-5">
+                                    💬 {node.artifact.description}
+                                  </div>
+                                )}
+                                {node.artifact?.saved_path && (
+                                  <div className="mt-1 text-[10px] text-green-600 font-mono ml-5">
+                                    📁 {node.artifact.saved_path}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Render children recursively */}
+                        {node.children && node.children.size > 0 && (
+                          <div>{renderTree(node.children, depth + 1, newIsLast)}</div>
+                        )}
+                      </div>
+                    );
+                  });
+                };
+
                 return (
                   <div className="px-4 py-3 bg-[#F5F4F2] border-t border-[#E5E5E5]">
                     <button
@@ -704,8 +764,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
                       </svg>
-                      <span>📁 Project Structure & File Operations</span>
-                      <span className="text-xs text-[#999999]">({allArtifacts.length} files)</span>
+                      <span>📁 Filesystem Structure</span>
+                      <span className="text-xs text-[#999999]">({uniqueArtifacts.size} unique files)</span>
                       <svg id="tree-chevron" className="w-4 h-4 ml-auto transition-transform" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                       </svg>
@@ -714,66 +774,31 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
                       <div className="bg-white rounded-lg p-4 border border-[#E5E5E5]">
                         {/* File Operations Summary */}
                         <div className="mb-4 pb-3 border-b border-[#E5E5E5]">
-                          <h4 className="text-xs font-semibold text-[#666666] mb-2">📋 File Operations Summary</h4>
+                          <h4 className="text-xs font-semibold text-[#666666] mb-2">📋 Summary</h4>
                           <div className="grid grid-cols-3 gap-2 text-xs">
                             <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#16A34A]">{allArtifacts.length}</div>
-                              <div className="text-[#166534]">Files Created</div>
+                              <div className="text-lg font-bold text-[#16A34A]">{nodeCounts.files}</div>
+                              <div className="text-[#166534]">Files</div>
                             </div>
                             <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#D97706]">{Object.keys(fileTree).length}</div>
+                              <div className="text-lg font-bold text-[#D97706]">{nodeCounts.dirs}</div>
                               <div className="text-[#92400E]">Directories</div>
                             </div>
                             <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#2563EB]">{updates.filter(u => u.artifacts?.length).length}</div>
-                              <div className="text-[#1E3A8A]">Agents Used</div>
+                              <div className="text-lg font-bold text-[#2563EB]">{Array.from(uniqueArtifacts.values()).filter(({ artifact }) => artifact.saved).length}</div>
+                              <div className="text-[#1E3A8A]">Saved</div>
                             </div>
                           </div>
                         </div>
 
-                        {/* File Tree */}
-                        <div className="space-y-3">
-                          <h4 className="text-xs font-semibold text-[#666666]">🌳 File Tree</h4>
-                          <div className="font-mono text-xs">
-                            {Object.entries(fileTree).sort(([a], [b]) => a.localeCompare(b)).map(([dir, files]) => (
-                              <div key={dir} className="mb-3">
-                                <div className="flex items-center gap-2 text-[#DA7756] font-semibold mb-2 bg-[#DA775608] px-2 py-1 rounded">
-                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                                  </svg>
-                                  <span>{dir === '.' ? 'Root Directory' : dir}</span>
-                                </div>
-                                <div className="ml-4 space-y-1">
-                                  {files.map((fileInfo, i) => {
-                                    const isLast = i === files.length - 1;
-                                    return (
-                                      <div key={i} className="group">
-                                        <div className="flex items-start gap-2 hover:bg-[#F5F4F2] p-1 rounded transition-colors">
-                                          <span className="text-[#999999] flex-shrink-0">{isLast ? '└─' : '├─'}</span>
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                              <span>{getFileIcon(fileInfo.name)}</span>
-                                              <span className="text-[#1A1A1A] font-medium">{fileInfo.name}</span>
-                                              <span className="text-[10px] text-[#999999] bg-[#F5F4F2] px-1.5 py-0.5 rounded">
-                                                {fileInfo.artifact.language}
-                                              </span>
-                                              <span className="text-[10px] text-[#16A34A] bg-[#F0FDF4] px-1.5 py-0.5 rounded border border-[#BBF7D0]">
-                                                by {fileInfo.agent}
-                                              </span>
-                                            </div>
-                                            {fileInfo.artifact.description && (
-                                              <div className="mt-1 ml-6 text-[11px] text-[#666666] italic">
-                                                💬 {fileInfo.artifact.description}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            ))}
+                        {/* Hierarchical File Tree */}
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold text-[#666666] flex items-center gap-2">
+                            <span>🌳 Project Structure</span>
+                            <span className="text-[10px] font-normal text-[#999999]">(hierarchical view, no duplicates)</span>
+                          </h4>
+                          <div className="font-mono text-xs bg-gray-50 rounded-lg p-3 border border-gray-200">
+                            {renderTree(rootTree)}
                           </div>
                         </div>
 
