@@ -42,9 +42,11 @@ interface WorkflowInterfaceProps {
   sessionId: string;
   initialUpdates?: WorkflowUpdate[];
   workspace?: string;
+  selectedPrompt?: string;
+  onPromptUsed?: () => void;
 }
 
-const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp }: WorkflowInterfaceProps) => {
+const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp, selectedPrompt, onPromptUsed }: WorkflowInterfaceProps) => {
   const [input, setInput] = useState('');
   const [updates, setUpdates] = useState<WorkflowUpdate[]>([]);
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
@@ -97,6 +99,17 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Populate input field when a prompt is selected from the library
+  useEffect(() => {
+    if (selectedPrompt && selectedPrompt.trim()) {
+      setInput(selectedPrompt);
+      // Focus on the input field after populating
+      inputRef.current?.focus();
+      // Call the callback to clear the selectedPrompt in parent
+      onPromptUsed?.();
+    }
+  }, [selectedPrompt, onPromptUsed]);
 
   // Extract artifacts from updates
   const extractArtifacts = useCallback((workflowUpdates: WorkflowUpdate[]): Artifact[] => {

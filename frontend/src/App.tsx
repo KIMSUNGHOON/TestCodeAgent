@@ -6,6 +6,7 @@ import WorkflowInterface from './components/WorkflowInterface';
 import WorkspaceSettings from './components/WorkspaceSettings';
 import Terminal from './components/Terminal';
 import ProjectSelector from './components/ProjectSelector';
+import PromptLibrary from './components/PromptLibrary';
 import { WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
 
@@ -23,6 +24,8 @@ function App() {
   const [showTerminal, setShowTerminal] = useState(false);
   const [workflowFramework, setWorkflowFramework] = useState<'standard' | 'deepagents'>('standard');
   const [showFrameworkSelector, setShowFrameworkSelector] = useState(false);
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [selectedPrompt, setSelectedPrompt] = useState<string>('');
 
   // Loaded conversation state
   const [loadedWorkflowState, setLoadedWorkflowState] = useState<WorkflowUpdate[]>([]);
@@ -90,6 +93,11 @@ function App() {
       console.error('Failed to set framework:', err);
       alert(`Failed to set framework: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
+  };
+
+  const handlePromptSelect = (prompt: string) => {
+    setSelectedPrompt(prompt);
+    setShowPromptLibrary(false);
   };
 
   return (
@@ -216,6 +224,18 @@ function App() {
               <span className="text-xs font-medium">Terminal</span>
             </button>
 
+            {/* Prompt Library Button */}
+            <button
+              onClick={() => setShowPromptLibrary(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#8B5CF6] text-white hover:bg-[#7C3AED] transition-colors"
+              title="Open Prompt Library"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+              </svg>
+              <span className="text-xs font-medium">Prompts</span>
+            </button>
+
             {/* Framework Badge */}
             {frameworkInfo && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5]">
@@ -250,9 +270,18 @@ function App() {
             sessionId={sessionId}
             initialUpdates={loadedWorkflowState}
             workspace={workspace}
+            selectedPrompt={selectedPrompt}
+            onPromptUsed={() => setSelectedPrompt('')}
           />
         </div>
       </div>
+
+      {/* Prompt Library */}
+      <PromptLibrary
+        isOpen={showPromptLibrary}
+        onClose={() => setShowPromptLibrary(false)}
+        onPromptSelect={handlePromptSelect}
+      />
 
       {/* Workspace Settings Modal */}
       {showWorkspaceSettings && (
