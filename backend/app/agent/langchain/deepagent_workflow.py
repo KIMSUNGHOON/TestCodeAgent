@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional, AsyncGenerator
 from datetime import datetime
 
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 try:
     from deepagents import create_deep_agent

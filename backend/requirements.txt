@@ -30,6 +30,7 @@ networkx>=3.0     # Knowledge graph for memory system
 # LangChain ecosystem for dual framework support
 langchain>=0.2.0
 langchain-openai>=0.1.0
+langchain-core>=0.2.0
 langgraph>=0.2.0
 
 # DeepAgents framework for advanced middleware
