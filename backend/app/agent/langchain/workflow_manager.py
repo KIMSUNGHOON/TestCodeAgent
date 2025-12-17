@@ -506,8 +506,11 @@ class DynamicLangGraphWorkflow(BaseWorkflow):
         self.shared_context: Optional[SharedContext] = None
 
         # Parallel execution settings
-        self.max_parallel_agents = 3  # Max concurrent coding agents
+        # Increase max parallel agents for better performance
+        # Dynamically adjusts based on task count
+        self.max_parallel_agents = 10  # Max concurrent coding agents (increased from 3)
         self.enable_parallel_coding = True  # Feature flag
+        self.adaptive_parallelism = True  # Adjust based on task count
 
         # Supervisor prompt for task analysis
         self.supervisor_prompt = """You are a Supervisor Agent that analyzes user requests and determines the best workflow.
@@ -1407,6 +1410,48 @@ PRIORITY: [high/medium/low for each]
             }
         }
 
+    def _group_similar_tasks(self, checklist: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Group similar tasks together for better parallel execution.
+
+        Groups tasks by:
+        1. Same file type/extension
+        2. Same directory/module
+        3. Similar task description keywords
+        """
+        from collections import defaultdict
+        import re
+
+        # Extract file info from task descriptions
+        def get_task_info(task: Dict[str, Any]) -> tuple:
+            task_desc = task.get("task", "")
+
+            # Try to extract filename from task description
+            # Look for patterns like: "filename.py", "path/to/file.ext"
+            file_match = re.search(r'[\w/.-]+\.\w+', task_desc)
+            if file_match:
+                filename = file_match.group(0)
+                ext = filename.split('.')[-1] if '.' in filename else ''
+                directory = '/'.join(filename.split('/')[:-1]) if '/' in filename else ''
+                return (ext, directory)
+
+            # Fallback: use keywords from description
+            keywords = set(word.lower() for word in re.findall(r'\b\w+\b', task_desc)
+                          if len(word) > 3)
+            return ('', '', frozenset(keywords))
+
+        # Group tasks by similarity
+        groups = defaultdict(list)
+        for task in checklist:
+            key = get_task_info(task)
+            groups[key].append(task)
+
+        # Flatten groups back to list, keeping similar tasks together
+        grouped_checklist = []
+        for group in groups.values():
+            grouped_checklist.extend(group)
+
+        return grouped_checklist
+
     async def _execute_parallel_coding(
         self,
         checklist: List[Dict[str, Any]],
@@ -1415,20 +1460,33 @@ PRIORITY: [high/medium/low for each]
         coding_prompt: str,
         build_workflow_info: callable
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Execute multiple coding tasks in parallel."""
+        """Execute multiple coding tasks in parallel with optimized grouping."""
 
         # Initialize shared context for this workflow
         self.shared_context = SharedContext()
+
+        # Group similar tasks together for better cache locality
+        grouped_checklist = self._group_similar_tasks(checklist)
+
+        # Dynamically adjust parallelism based on task count
+        if self.adaptive_parallelism:
+            # Scale parallelism with task count, but cap at max_parallel_agents
+            optimal_parallel = min(len(grouped_checklist), self.max_parallel_agents)
+            # For small task counts, use all tasks in parallel
+            if len(grouped_checklist) <= 5:
+                optimal_parallel = len(grouped_checklist)
+        else:
+            optimal_parallel = self.max_parallel_agents
 
         # Notify parallel execution start
         yield {
             "agent": "Orchestrator",
             "type": "parallel_start",
             "status": "running",
-            "message": f"Starting parallel execution with {min(len(checklist), self.max_parallel_agents)} agents",
+            "message": f"Starting parallel execution with up to {optimal_parallel} concurrent agents",
             "parallel_info": {
-                "total_tasks": len(checklist),
-                "max_parallel": self.max_parallel_agents
+                "total_tasks": len(grouped_checklist),
+                "max_parallel": optimal_parallel
             }
         }
 
@@ -1438,24 +1496,25 @@ PRIORITY: [high/medium/low for each]
         # Spawn single unified CodingAgent for all tasks (shown once in UI)
         yield {
             "agent": "CodingAgent",
-            "agent_label": f"Implementing {len(checklist)} Tasks",
-            "task_description": f"Creating {len(checklist)} files in parallel",
+            "agent_label": f"Implementing {len(grouped_checklist)} Tasks",
+            "task_description": f"Creating {len(grouped_checklist)} files in parallel (up to {optimal_parallel} concurrent)",
             "type": "agent_spawn",
             "status": "running",
-            "message": f"Starting implementation of {len(checklist)} tasks",
+            "message": f"Starting parallel implementation with {optimal_parallel} concurrent agents",
             "workflow_info": build_workflow_info("CodingAgent"),
             "agent_spawn": {
                 "agent_id": f"coding-unified-{uuid.uuid4().hex[:6]}",
                 "agent_type": "CodingAgent",
                 "parent_agent": "Orchestrator",
-                "spawn_reason": f"Implement {len(checklist)} tasks in parallel",
+                "spawn_reason": f"Implement {len(grouped_checklist)} tasks in parallel (grouped by similarity)",
                 "timestamp": datetime.now().isoformat()
             }
         }
 
-        # Process tasks in batches
-        for batch_start in range(0, len(checklist), self.max_parallel_agents):
-            batch_end = min(batch_start + self.max_parallel_agents, len(checklist))
+        # Process tasks in batches using optimal parallelism
+        batch_count = (len(grouped_checklist) + optimal_parallel - 1) // optimal_parallel
+        for batch_start in range(0, len(grouped_checklist), optimal_parallel):
+            batch_end = min(batch_start + optimal_parallel, len(grouped_checklist))
             batch_tasks = []
 
             # Create tasks for this batch (without spawning separate agents in UI)
@@ -1465,7 +1524,7 @@ PRIORITY: [high/medium/low for each]
                 batch_tasks.append(
                     self._execute_single_coding_task(
                         task_idx=idx,
-                        task_item=checklist[idx],
+                        task_item=grouped_checklist[idx],
                         user_request=user_request,
                         plan_text=plan_text,
                         coding_prompt=coding_prompt,
@@ -1474,15 +1533,18 @@ PRIORITY: [high/medium/low for each]
                 )
 
             # Execute batch in parallel (update unified CodingAgent with progress)
+            current_batch = batch_start // optimal_parallel + 1
             yield {
                 "agent": "CodingAgent",
-                "agent_label": f"Implementing {len(checklist)} Tasks",
+                "agent_label": f"Implementing {len(grouped_checklist)} Tasks",
                 "type": "thinking",
                 "status": "running",
-                "message": f"Processing tasks {batch_start + 1}-{batch_end} of {len(checklist)}",
+                "message": f"Batch {current_batch}/{batch_count}: Processing {len(batch_tasks)} tasks in parallel ({batch_start + 1}-{batch_end} of {len(grouped_checklist)})",
                 "batch_info": {
-                    "batch_num": batch_start // self.max_parallel_agents + 1,
-                    "tasks": list(range(batch_start + 1, batch_end + 1))
+                    "batch_num": current_batch,
+                    "total_batches": batch_count,
+                    "tasks": list(range(batch_start + 1, batch_end + 1)),
+                    "parallel_count": len(batch_tasks)
                 }
             }
 
@@ -1542,27 +1604,29 @@ PRIORITY: [high/medium/low for each]
         # Mark CodingAgent as completed
         yield {
             "agent": "CodingAgent",
-            "agent_label": f"Implementing {len(checklist)} Tasks",
+            "agent_label": f"Implementing {len(grouped_checklist)} Tasks",
             "type": "completed",
             "status": "completed",
-            "message": f"Successfully created {len(all_artifacts)} files",
+            "message": f"Successfully created {len(all_artifacts)} files using parallel execution (up to {optimal_parallel} concurrent)",
             "artifacts": all_artifacts,
-            "checklist": checklist
+            "checklist": grouped_checklist
         }
 
         yield {
             "agent": "Orchestrator",
             "type": "parallel_complete",
             "status": "completed",
-            "message": f"Parallel execution completed. Generated {len(all_artifacts)} files.",
+            "message": f"Parallel execution completed with {optimal_parallel} concurrent agents. Generated {len(all_artifacts)} files.",
             "parallel_summary": {
-                "total_tasks": len(checklist),
+                "total_tasks": len(grouped_checklist),
                 "completed_tasks": len(all_results),
                 "total_artifacts": len(all_artifacts),
-                "agents_used": 1  # Now using unified agent
+                "agents_used": 1,  # Now using unified agent
+                "max_concurrent": optimal_parallel,
+                "batch_count": batch_count
             },
             "artifacts": all_artifacts,
-            "checklist": checklist,
+            "checklist": grouped_checklist,
             "code_text": code_text
         }
 
