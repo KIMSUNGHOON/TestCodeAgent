@@ -312,37 +312,7 @@ async def execute_workflow(request: ChatRequest):
     import os
 
     try:
-        # Check which framework to use for this session
-        selected_framework = _session_frameworks.get(request.session_id, "standard")
-
-        # Get or create appropriate workflow based on framework selection
-        if selected_framework == "deepagents":
-            # Use DeepAgents workflow manager
-            from app.agent.langchain.deepagent_workflow import DeepAgentWorkflowManager, DEEPAGENTS_AVAILABLE
-
-            if not DEEPAGENTS_AVAILABLE:
-                raise HTTPException(
-                    status_code=503,
-                    detail="DeepAgents framework not available. Install with: pip install deepagents tavily-python"
-                )
-
-            # Create DeepAgent workflow (not cached, created per request for now)
-            workflow = DeepAgentWorkflowManager(
-                agent_id=request.session_id,
-                model_name="gpt-4o",
-                temperature=0.7,
-                enable_todos=True,
-                enable_subagents=True,
-                enable_summarization=True,
-                enable_filesystem=True
-            )
-            logger.info(f"Using DeepAgents framework for session {request.session_id}")
-        else:
-            # Use standard workflow manager
-            workflow = workflow_manager.get_or_create_workflow(request.session_id)
-            logger.info(f"Using standard framework for session {request.session_id}")
-
-        # Get or reuse workspace for this session
+        # Get or reuse workspace for this session FIRST (before creating workflow)
         # This ensures workspace persists across framework switches (Standard <-> DeepAgents)
         if request.session_id in _session_workspaces:
             # Reuse existing workspace for this session
@@ -365,6 +335,37 @@ async def execute_workflow(request: ChatRequest):
         if not os.path.exists(workspace):
             os.makedirs(workspace, exist_ok=True)
             logger.info(f"Created workspace directory: {workspace}")
+
+        # Check which framework to use for this session
+        selected_framework = _session_frameworks.get(request.session_id, "standard")
+
+        # Get or create appropriate workflow based on framework selection
+        if selected_framework == "deepagents":
+            # Use DeepAgents workflow manager
+            from app.agent.langchain.deepagent_workflow import DeepAgentWorkflowManager, DEEPAGENTS_AVAILABLE
+
+            if not DEEPAGENTS_AVAILABLE:
+                raise HTTPException(
+                    status_code=503,
+                    detail="DeepAgents framework not available. Install with: pip install deepagents tavily-python"
+                )
+
+            # Create DeepAgent workflow with correct workspace
+            workflow = DeepAgentWorkflowManager(
+                agent_id=request.session_id,
+                model_name="gpt-4o",
+                temperature=0.7,
+                enable_todos=True,
+                enable_subagents=True,
+                enable_summarization=True,
+                enable_filesystem=True,
+                workspace=workspace  # Pass the correct workspace!
+            )
+            logger.info(f"Using DeepAgents framework for session {request.session_id} with workspace {workspace}")
+        else:
+            # Use standard workflow manager
+            workflow = workflow_manager.get_or_create_workflow(request.session_id)
+            logger.info(f"Using standard framework for session {request.session_id}")
 
         # Build context-aware request
         context_str = ""
