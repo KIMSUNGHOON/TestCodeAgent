@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -55,6 +55,18 @@ class Message(Base):
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
 
+    # Indexes for performance
+    __table_args__ = (
+        # Composite index for listing messages in chronological order
+        Index('idx_message_conversation_created', 'conversation_id', 'created_at'),
+
+        # Index for filtering by agent
+        Index('idx_message_agent_name', 'agent_name'),
+
+        # Composite index for role-based queries within conversation
+        Index('idx_message_conversation_role', 'conversation_id', 'role'),
+    )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
@@ -83,6 +95,18 @@ class Artifact(Base):
 
     # Relationships
     conversation = relationship("Conversation", back_populates="artifacts")
+
+    # Indexes for performance
+    __table_args__ = (
+        # Index for searching by filename
+        Index('idx_artifact_filename', 'filename'),
+
+        # Composite index for finding specific files within a conversation
+        Index('idx_artifact_conversation_filename', 'conversation_id', 'filename'),
+
+        # Index for ordering artifacts by creation time
+        Index('idx_artifact_conversation_created', 'conversation_id', 'created_at'),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
