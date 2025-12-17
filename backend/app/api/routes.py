@@ -375,25 +375,44 @@ Examples:
             # Create new workspace for first request in this session
             base_workspace = request.workspace or "/home/user/workspace"
 
-            # Check if it's already a specific project directory
-            # Pattern: ends with a project name (not timestamp-based)
-            if base_workspace != "/home/user/workspace" and os.path.basename(base_workspace) not in ["workspace", "."]:
-                # User specified a specific project directory, use it directly
+            # Check if base_workspace is already a project directory
+            # A project directory is: /some/path/workspace/project_name
+            # where project_name is NOT "workspace"
+            def is_project_directory(path: str) -> bool:
+                """Check if path is already a project directory (direct child of workspace)"""
+                if not os.path.exists(path):
+                    return False
+                basename = os.path.basename(path)
+                parent = os.path.dirname(path)
+                parent_basename = os.path.basename(parent)
+                # It's a project if parent is named "workspace" and basename is not "workspace"
+                return parent_basename == "workspace" and basename != "workspace"
+
+            if is_project_directory(base_workspace):
+                # Already a project directory, use it directly
                 workspace = base_workspace
-                logger.info(f"Using user-specified project workspace: {workspace}")
+                logger.info(f"Using existing project directory: {workspace}")
             else:
+                # Need to create a new project directory
+                # If base_workspace is not a workspace root, treat it as one
+                if not base_workspace.endswith("/workspace"):
+                    # Ensure we're creating projects in a workspace folder
+                    workspace_root = base_workspace if os.path.basename(base_workspace) == "workspace" else base_workspace
+                else:
+                    workspace_root = base_workspace
+
                 # Let LLM suggest a project name based on the user's request
                 project_name = await suggest_project_name(request.message)
 
                 # Check if project already exists, add suffix if needed
-                candidate_workspace = os.path.join(base_workspace, project_name)
+                candidate_workspace = os.path.join(workspace_root, project_name)
                 counter = 1
                 while os.path.exists(candidate_workspace):
-                    candidate_workspace = os.path.join(base_workspace, f"{project_name}_{counter}")
+                    candidate_workspace = os.path.join(workspace_root, f"{project_name}_{counter}")
                     counter += 1
 
                 workspace = candidate_workspace
-                logger.info(f"Created new project workspace '{os.path.basename(workspace)}' for session {request.session_id}")
+                logger.info(f"Created new project workspace '{os.path.basename(workspace)}' in {workspace_root}")
 
             # Store workspace for this session
             _session_workspaces[request.session_id] = workspace
@@ -1400,7 +1419,8 @@ async def list_projects(base_workspace: str = "/home/user/workspace"):
         projects = []
         for item in os.listdir(base_workspace):
             item_path = os.path.join(base_workspace, item)
-            if os.path.isdir(item_path) and item.startswith("project_"):
+            # Include all directories except workspace itself and common ignored directories
+            if os.path.isdir(item_path) and item not in ['workspace', '.git', 'node_modules', '__pycache__', 'venv']:
                 try:
                     # Get directory stats
                     stats = os.stat(item_path)

@@ -3,9 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import WorkflowInterface from './components/WorkflowInterface';
-import WorkspaceSettings from './components/WorkspaceSettings';
 import Terminal from './components/Terminal';
-import ProjectSelector from './components/ProjectSelector';
 import PromptLibrary from './components/PromptLibrary';
 import { WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
@@ -20,7 +18,6 @@ function App() {
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
   const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
-  const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [workflowFramework, setWorkflowFramework] = useState<'standard' | 'deepagents'>('standard');
   const [showFrameworkSelector, setShowFrameworkSelector] = useState(false);
@@ -61,20 +58,10 @@ function App() {
     // Notify backend of workspace change
     try {
       await apiClient.setWorkspace(sessionId, newWorkspace);
-    } catch (err) {
-      console.error('Failed to set workspace:', err);
-    }
-  };
-
-  const handleProjectSelect = async (projectPath: string) => {
-    setWorkspace(projectPath);
-    // Notify backend of workspace change
-    try {
-      await apiClient.setWorkspace(sessionId, projectPath);
-      // Optionally reload the interface to show project files
+      // Reload the interface to show new workspace/project
       setLoadedWorkflowState([]);
     } catch (err) {
-      console.error('Failed to select project:', err);
+      console.error('Failed to set workspace:', err);
     }
   };
 
@@ -185,27 +172,6 @@ function App() {
               )}
             </div>
 
-            {/* Workspace Button */}
-            <button
-              onClick={() => setShowWorkspaceSettings(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5] hover:bg-[#E5E5E5] transition-colors"
-              title={`Workspace: ${workspace}`}
-            >
-              <svg className="w-4 h-4 text-[#DA7756]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-              </svg>
-              <span className="text-xs font-medium text-[#666666] max-w-[120px] truncate">
-                {workspace.split('/').pop() || workspace}
-              </span>
-            </button>
-
-            {/* Project Selector */}
-            <ProjectSelector
-              currentWorkspace={workspace}
-              onProjectSelect={handleProjectSelect}
-              baseWorkspace="/home/user/workspace"
-            />
-
             {/* Terminal Button */}
             <button
               onClick={() => setShowTerminal(true)}
@@ -266,6 +232,7 @@ function App() {
             workspace={workspace}
             selectedPrompt={selectedPrompt}
             onPromptUsed={() => setSelectedPrompt('')}
+            onWorkspaceChange={handleWorkspaceChange}
           />
         </div>
       </div>
@@ -276,15 +243,6 @@ function App() {
         onClose={() => setShowPromptLibrary(false)}
         onPromptSelect={handlePromptSelect}
       />
-
-      {/* Workspace Settings Modal */}
-      {showWorkspaceSettings && (
-        <WorkspaceSettings
-          workspace={workspace}
-          onWorkspaceChange={handleWorkspaceChange}
-          onClose={() => setShowWorkspaceSettings(false)}
-        />
-      )}
 
       {/* Terminal Modal */}
       <Terminal
