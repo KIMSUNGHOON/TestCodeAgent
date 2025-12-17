@@ -149,9 +149,34 @@ export interface ReviewSuggestion {
   suggestion: string;
 }
 
+// Shared context types for parallel execution
+export interface SharedContextEntry {
+  agent_id: string;
+  agent_type: string;
+  key: string;
+  value_preview: string;
+  description: string;
+  timestamp: string;
+}
+
+export interface SharedContextAccessLog {
+  action: 'set' | 'get';
+  agent_id?: string;
+  requesting_agent?: string;
+  source_agent?: string;
+  agent_type?: string;
+  key: string;
+  timestamp: string;
+}
+
+export interface SharedContextData {
+  entries: SharedContextEntry[];
+  access_log: SharedContextAccessLog[];
+}
+
 export interface WorkflowUpdate {
   agent: string;
-  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision';
+  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision' | 'mode_selection' | 'parallel_start' | 'parallel_batch' | 'parallel_complete' | 'shared_context';
   status: 'running' | 'completed' | 'error' | 'finished';
   message?: string;
   content?: string;
@@ -185,6 +210,30 @@ export interface WorkflowUpdate {
   iteration_info?: IterationInfo;
   // Final result
   final_result?: FinalResult;
+  // Parallel execution fields
+  execution_mode?: 'sequential' | 'parallel';
+  parallel_config?: {
+    max_parallel_agents: number;
+    total_tasks: number;
+  };
+  parallel_info?: {
+    total_tasks: number;
+    max_parallel: number;
+  };
+  batch_info?: {
+    batch_num: number;
+    tasks: number[];
+  };
+  parallel_summary?: {
+    total_tasks: number;
+    completed_tasks: number;
+    total_artifacts: number;
+    agents_used: number;
+  };
+  parallel_agent_id?: string;
+  code_text?: string;
+  // Shared context
+  shared_context?: SharedContextData;
 }
 
 export interface WorkflowRequest {
