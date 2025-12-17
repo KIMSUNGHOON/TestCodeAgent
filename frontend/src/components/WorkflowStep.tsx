@@ -249,9 +249,12 @@ const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) =>
 const WorkflowStep = ({ update }: WorkflowStepProps) => {
   const [isExpanded, setIsExpanded] = useState(update.status === 'running');
 
-  // Auto-collapse when status changes from running to completed/error
+  // Auto-expand when running, auto-collapse when completed (unless important content)
   useEffect(() => {
-    if (update.status !== 'running' && isExpanded) {
+    if (update.status === 'running') {
+      // Always expand when running to show what's happening
+      setIsExpanded(true);
+    } else if (update.status === 'completed' || update.status === 'finished') {
       // Keep expanded if there's important content to show
       const hasImportantContent =
         update.artifacts?.length ||
@@ -264,7 +267,7 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
         setIsExpanded(false);
       }
     }
-  }, [update.status, update.artifacts, update.issues, update.suggestions, update.items, update.content, isExpanded]);
+  }, [update.status, update.artifacts, update.issues, update.suggestions, update.items, update.content]);
 
   const getAgentConfig = () => {
     // Use custom label if provided in update
@@ -966,12 +969,14 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
 
   const canExpand = hasExpandableContent();
 
+  const isRunning = update.status === 'running';
+
   return (
-    <div className="overflow-hidden">
+    <div className={`overflow-hidden ${isRunning ? 'ring-2 ring-blue-400 ring-inset' : ''}`}>
       {/* Header - Section style instead of card */}
       <div
-        className={`flex items-center justify-between p-4 ${canExpand ? 'cursor-pointer hover:bg-[#FAFAFA]' : ''} transition-colors`}
-        style={{ backgroundColor: config.bgColor }}
+        className={`flex items-center justify-between p-4 ${canExpand ? 'cursor-pointer hover:bg-[#FAFAFA]' : ''} ${isRunning ? 'bg-blue-50' : ''} transition-colors`}
+        style={{ backgroundColor: isRunning ? undefined : config.bgColor }}
         onClick={() => canExpand && setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3 flex-1">
@@ -987,7 +992,19 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
           <div className="flex-shrink-0">{getStatusIcon()}</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-[#1A1A1A]">{config.label}</h3>
+              <h3 className={`font-semibold ${isRunning ? 'text-blue-700' : 'text-[#1A1A1A]'}`}>
+                {config.label}
+              </h3>
+              {/* Show running indicator */}
+              {isRunning && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                  </span>
+                  Running
+                </span>
+              )}
               {/* Show SharedContext indicator if this agent used shared context */}
               {update.shared_context_refs && update.shared_context_refs.length > 0 && (
                 <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
@@ -998,8 +1015,11 @@ const WorkflowStep = ({ update }: WorkflowStepProps) => {
                 </div>
               )}
             </div>
-            {!isExpanded && (
-              <p className="text-sm text-[#666666] truncate">{getSummaryInfo()}</p>
+            {/* Always show current message when running or when collapsed */}
+            {(isRunning || !isExpanded) && (
+              <p className={`text-sm mt-1 ${isRunning ? 'text-blue-600 font-medium' : 'text-[#666666]'} ${isRunning ? '' : 'truncate'}`}>
+                {update.message || getSummaryInfo()}
+              </p>
             )}
           </div>
         </div>
