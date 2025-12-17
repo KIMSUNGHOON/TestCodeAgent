@@ -313,6 +313,16 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               setSharedContext(update.shared_context as SharedContextData);
             }
 
+            // Check for workflow completion - set isRunning to false immediately
+            if (
+              (update.type === 'completed' && update.agent === 'Workflow') ||
+              (update.type === 'completed' && update.agent === 'Orchestrator' && update.status === 'finished') ||
+              (update.status === 'finished')
+            ) {
+              // Workflow is complete, stop showing running state
+              setIsRunning(false);
+            }
+
             // Save artifacts when they're created
             if (update.type === 'artifact' && update.artifact) {
               try {
