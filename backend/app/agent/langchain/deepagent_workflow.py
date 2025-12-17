@@ -24,13 +24,17 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 logger = logging.getLogger(__name__)
 
 try:
-    from deepagents import create_deep_agent, SubAgentMiddleware, FilesystemMiddleware
+    from deepagents import create_deep_agent
+    from deepagents.middleware.subagents import SubAgentMiddleware
+    from deepagents.middleware.filesystem import FilesystemMiddleware
+    from deepagents.backends.filesystem import FilesystemBackend
     DEEPAGENTS_AVAILABLE = True
 except ImportError:
     DEEPAGENTS_AVAILABLE = False
     create_deep_agent = None
     SubAgentMiddleware = None
     FilesystemMiddleware = None
+    FilesystemBackend = None
     print("Warning: DeepAgents not available. Install with: pip install deepagents tavily-python")
 
 from app.core.config import settings
@@ -94,7 +98,8 @@ class DeepAgentWorkflowManager(BaseWorkflow):
             streaming=True
         )
 
-        # Build middleware stack (only using available middleware)
+        # Build middleware stack (only using available middleware in deepagents 0.3.0)
+        # Note: TodoListMiddleware and SummarizationMiddleware are not available in 0.3.0
         # Note: FilesystemMiddleware will be initialized lazily in execute_stream
         # when the actual workspace path is provided via context
         self.middleware_stack = []
@@ -107,8 +112,10 @@ class DeepAgentWorkflowManager(BaseWorkflow):
             try:
                 fs_path = os.path.join(workspace, '.deepagents', agent_id)
                 os.makedirs(fs_path, exist_ok=True)
+                # Use FilesystemBackend with root_dir parameter
+                fs_backend = FilesystemBackend(root_dir=fs_path)
                 self.middleware_stack.append(
-                    FilesystemMiddleware(base_path=fs_path)
+                    FilesystemMiddleware(backend=fs_backend)
                 )
                 logger.info(f"Initialized FilesystemMiddleware with path: {fs_path}")
             except Exception as e:
@@ -116,12 +123,18 @@ class DeepAgentWorkflowManager(BaseWorkflow):
                 logger.info("FilesystemMiddleware will be initialized in execute_stream")
 
         if enable_subagents:
-            # Isolated sub-agent execution
-            # Note: SubAgentMiddleware may need specific configuration
-            self.middleware_stack.append(
-                SubAgentMiddleware()
-            )
-            logger.info("Initialized SubAgentMiddleware")
+            # SubAgentMiddleware requires default_model parameter
+            # Use the same model as the main agent
+            try:
+                self.middleware_stack.append(
+                    SubAgentMiddleware(
+                        default_model=self.llm,
+                        default_tools=[]  # Will use tools from parent agent
+                    )
+                )
+                logger.info("Initialized SubAgentMiddleware")
+            except Exception as e:
+                logger.warning(f"Could not initialize SubAgentMiddleware: {e}")
 
         # Create DeepAgent - Note: This may not work as expected
         # DeepAgents framework may have different API than documented
@@ -211,8 +224,9 @@ class DeepAgentWorkflowManager(BaseWorkflow):
                         m for m in self.middleware_stack
                         if not isinstance(m, FilesystemMiddleware)
                     ]
-                    # Add new FilesystemMiddleware at the beginning
-                    self.middleware_stack.insert(0, FilesystemMiddleware(base_path=fs_path))
+                    # Add new FilesystemMiddleware at the beginning with correct API
+                    fs_backend = FilesystemBackend(root_dir=fs_path)
+                    self.middleware_stack.insert(0, FilesystemMiddleware(backend=fs_backend))
                     logger.info(f"Updated FilesystemMiddleware with path: {fs_path}")
                 except Exception as e:
                     logger.error(f"Failed to initialize FilesystemMiddleware: {e}")

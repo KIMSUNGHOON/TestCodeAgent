@@ -20,27 +20,31 @@ DEEPAGENTS_AVAILABLE = False
 
 try:
     from deepagents import create_deep_agent
-    from deepagents.middleware import (
-        TodoListMiddleware,
-        FilesystemMiddleware,
-        SubAgentMiddleware,
-    )
+    from deepagents.middleware.subagents import SubAgentMiddleware
+    from deepagents.middleware.filesystem import FilesystemMiddleware
+    from deepagents.backends.filesystem import FilesystemBackend
+    from langchain_openai import ChatOpenAI
     DEEPAGENTS_AVAILABLE = True
-    logger.info("DeepAgents package is available")
+    logger.info("DeepAgents package is available (v0.3.0)")
 except ImportError:
     logger.warning(
         "DeepAgents package not installed. "
         "Install with: pip install deepagents"
     )
+    SubAgentMiddleware = None
+    FilesystemMiddleware = None
+    FilesystemBackend = None
+    ChatOpenAI = None
 
 
 class DeepCodingAgent(BaseAgent):
     """Advanced coding agent using DeepAgents framework.
 
-    DeepAgents provides enhanced capabilities over basic LangChain:
-    - Automatic task planning via TodoListMiddleware
+    DeepAgents (v0.3.0) provides enhanced capabilities over basic LangChain:
     - File system operations via FilesystemMiddleware
-    - Sub-agent delegation for complex tasks
+    - Sub-agent delegation for complex tasks via SubAgentMiddleware
+
+    Note: TodoListMiddleware and SummarizationMiddleware are not available in v0.3.0
 
     If DeepAgents is not installed, this falls back to basic LangChain behavior.
     """
@@ -61,16 +65,33 @@ class DeepCodingAgent(BaseAgent):
         logger.info("DeepCodingAgent initialized")
 
     def _init_deep_agent(self):
-        """Initialize the DeepAgents agent with middleware."""
+        """Initialize the DeepAgents agent with middleware.
+
+        Note: DeepAgents 0.3.0 API differences:
+        - TodoListMiddleware is not available
+        - FilesystemMiddleware requires a backend parameter
+        - SubAgentMiddleware requires default_model parameter
+        """
         try:
+            # Create LLM for middleware
+            # Using vLLM endpoint for efficiency
+            llm = ChatOpenAI(
+                base_url="http://localhost:8000/v1",  # vLLM endpoint
+                model="deepseek-coder-v2",
+                temperature=0.7,
+                api_key="EMPTY"
+            )
+
+            # Create filesystem backend for workspace operations
+            fs_backend = FilesystemBackend(root_dir="./workspace")
+
             # Create deep agent with coding-focused configuration
             self.agent = create_deep_agent(
                 tools=[],  # Tools will be added based on requirements
                 system_prompt="""You are an advanced coding assistant with the ability to:
-1. Plan complex tasks before execution
-2. Read and write files
-3. Execute shell commands safely
-4. Delegate sub-tasks to specialized agents
+1. Read and write files
+2. Execute shell commands safely
+3. Delegate sub-tasks to specialized agents
 
 For each coding request:
 1. First, create a detailed plan
@@ -79,19 +100,19 @@ For each coding request:
 4. Report completion status
 
 Always prioritize code quality and safety.""",
-                # Enable built-in middleware
+                # Enable built-in middleware (only those available in v0.3.0)
                 middleware=[
-                    TodoListMiddleware(),  # Automatic task tracking
-                    FilesystemMiddleware(
-                        allowed_paths=["./workspace"],
-                        read_only=False
+                    FilesystemMiddleware(backend=fs_backend),  # File operations
+                    SubAgentMiddleware(
+                        default_model=llm,  # Required in v0.3.0
+                        default_tools=[]    # Use parent's tools
                     ),
-                    SubAgentMiddleware(),  # Enable sub-agent delegation
                 ],
             )
-            logger.info("DeepAgents agent created with middleware")
+            logger.info("DeepAgents agent created with middleware (v0.3.0 compatible)")
         except Exception as e:
             logger.error(f"Failed to initialize DeepAgents: {e}")
+            logger.exception("Full traceback:")
             self.agent = None
 
     async def process_message(

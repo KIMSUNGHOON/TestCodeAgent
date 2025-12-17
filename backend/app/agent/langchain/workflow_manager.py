@@ -124,18 +124,16 @@ deepagents_middleware = {}
 
 try:
     from deepagents import create_deep_agent
-    from deepagents.middleware import (
-        TodoListMiddleware,
-        FilesystemMiddleware,
-        SubAgentMiddleware,
-    )
+    from deepagents.middleware.subagents import SubAgentMiddleware
+    from deepagents.middleware.filesystem import FilesystemMiddleware
+    from deepagents.backends.filesystem import FilesystemBackend
     DEEPAGENTS_AVAILABLE = True
     deepagents_middleware = {
-        "TodoListMiddleware": TodoListMiddleware,
         "FilesystemMiddleware": FilesystemMiddleware,
         "SubAgentMiddleware": SubAgentMiddleware,
+        "FilesystemBackend": FilesystemBackend,
     }
-    logger.info("DeepAgents integration enabled for LangChain workflow")
+    logger.info("DeepAgents v0.3.0 integration enabled for LangChain workflow")
 except ImportError:
     logger.info("DeepAgents not available - using standard LangChain workflow")
 
@@ -2476,19 +2474,25 @@ class DeepAgentsHelper:
         try:
             from deepagents import create_deep_agent
             FilesystemMiddleware = deepagents_middleware.get("FilesystemMiddleware")
+            FilesystemBackend = deepagents_middleware.get("FilesystemBackend")
 
-            if FilesystemMiddleware:
+            if FilesystemMiddleware and FilesystemBackend:
+                # Use the first allowed path as root_dir
+                root_dir = (allowed_paths or ["./workspace"])[0]
+                # Create filesystem backend (v0.3.0 API)
+                fs_backend = FilesystemBackend(
+                    root_dir=root_dir,
+                    virtual_mode=read_only  # Use virtual mode for read-only
+                )
                 return create_deep_agent(
                     tools=[],
                     middleware=[
-                        FilesystemMiddleware(
-                            allowed_paths=allowed_paths or ["./workspace", "./output"],
-                            read_only=read_only
-                        )
+                        FilesystemMiddleware(backend=fs_backend)
                     ]
                 )
         except Exception as e:
             logger.error(f"Failed to create filesystem agent: {e}")
+            logger.exception("Full traceback:")
         return None
 
 
