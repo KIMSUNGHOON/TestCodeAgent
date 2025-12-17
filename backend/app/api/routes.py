@@ -17,6 +17,7 @@ from app.api.models import (
 )
 from app.agent import get_agent_manager, get_workflow_manager, get_framework_info
 from app.core.config import settings
+from app.core.session_store import get_session_store
 from app.db import get_db, ConversationRepository
 from app.utils.security import sanitize_path, SecurityError
 
@@ -27,8 +28,8 @@ router = APIRouter()
 agent_manager = get_agent_manager()
 workflow_manager = get_workflow_manager()
 
-# Framework preferences per session (default: standard)
-_session_frameworks: dict = {}  # session_id -> "standard" | "deepagents"
+# Thread-safe session storage
+session_store = get_session_store()
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -253,8 +254,7 @@ async def select_framework(
         Success status and selected framework
     """
     try:
-        _session_frameworks[session_id] = framework
-        logger.info(f"Set framework for {session_id}: {framework}")
+        await session_store.set_framework(session_id, framework)
 
         return {
             "success": True,
@@ -263,6 +263,9 @@ async def select_framework(
             "message": f"Framework set to {framework}"
         }
 
+    except ValueError as e:
+        logger.error(f"Invalid framework value: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error selecting framework: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -278,7 +281,7 @@ async def get_session_framework(session_id: str):
     Returns:
         Current framework for this session
     """
-    framework = _session_frameworks.get(session_id, "standard")
+    framework = await session_store.get_framework(session_id)
     return {
         "session_id": session_id,
         "framework": framework,
@@ -369,9 +372,10 @@ Examples:
     try:
         # Get or reuse workspace for this session FIRST (before creating workflow)
         # This ensures workspace persists across framework switches (Standard <-> DeepAgents)
-        if request.session_id in _session_workspaces:
+        existing_workspace = await session_store.get_workspace(request.session_id, default=None)
+        if existing_workspace:
             # Reuse existing workspace for this session
-            workspace = _session_workspaces[request.session_id]
+            workspace = existing_workspace
             logger.info(f"Reusing existing workspace for session {request.session_id}: {workspace}")
         else:
             # Create new workspace for first request in this session
@@ -417,7 +421,7 @@ Examples:
                 logger.info(f"Created new project workspace '{os.path.basename(workspace)}' in {workspace_root}")
 
             # Store workspace for this session
-            _session_workspaces[request.session_id] = workspace
+            await session_store.set_workspace(request.session_id, workspace)
 
         # Ensure project workspace exists
         if not os.path.exists(workspace):
@@ -425,7 +429,7 @@ Examples:
             logger.info(f"Created workspace directory: {workspace}")
 
         # Check which framework to use for this session
-        selected_framework = _session_frameworks.get(request.session_id, "standard")
+        selected_framework = await session_store.get_framework(request.session_id)
 
         # Get or create appropriate workflow based on framework selection
         if selected_framework == "deepagents":
@@ -1257,9 +1261,6 @@ async def process_agent_task(agent_id: str, task: str, context: dict = None):
 
 # ==================== Workspace Endpoints ====================
 
-# Store workspace for each session
-_session_workspaces: dict = {}
-
 
 @router.get("/workspace/list")
 async def list_directory(path: str = "/home"):
@@ -1318,8 +1319,7 @@ async def set_workspace(request: dict):
         # Create directory if it doesn't exist
         validated_path.mkdir(parents=True, exist_ok=True)
 
-        _session_workspaces[session_id] = str(validated_path)
-        logger.info(f"Set workspace for {session_id}: {validated_path}")
+        await session_store.set_workspace(session_id, str(validated_path))
 
         return {"success": True, "workspace": str(validated_path)}
 
@@ -1341,7 +1341,7 @@ async def get_workspace(session_id: str = "default"):
     Returns:
         Current workspace path
     """
-    workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+    workspace = await session_store.get_workspace(session_id)
     return {"success": True, "workspace": workspace}
 
 
@@ -1363,7 +1363,7 @@ async def write_workspace_file(request: dict):
         return {"success": False, "error": "Filename is required"}
 
     try:
-        workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+        workspace = await session_store.get_workspace(session_id)
 
         # Sanitize file path to prevent path traversal
         file_path = sanitize_path(filename, workspace, allow_creation=True)
@@ -1400,7 +1400,7 @@ async def read_workspace_file(session_id: str = "default", filename: str = ""):
         return {"success": False, "error": "Filename is required"}
 
     try:
-        workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+        workspace = await session_store.get_workspace(session_id)
 
         # Sanitize file path to prevent path traversal
         file_path = sanitize_path(filename, workspace, allow_creation=False)
@@ -1581,7 +1581,7 @@ async def execute_shell_command(request: dict):
         return {"success": False, "error": "No command provided"}
 
     # Get workspace for this session
-    workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+    workspace = await session_store.get_workspace(session_id)
 
     # Security: Block dangerous commands
     dangerous_patterns = [
