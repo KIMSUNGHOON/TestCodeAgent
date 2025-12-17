@@ -526,9 +526,9 @@ class DynamicLangGraphWorkflow(BaseWorkflow):
         self.shared_context: Optional[SharedContext] = None
 
         # Parallel execution settings
-        # Increase max parallel agents for better performance
-        # Dynamically adjusts based on task count
-        self.max_parallel_agents = 10  # Max concurrent coding agents (increased from 3)
+        # Optimized for H100 96GB NVL GPUs with vLLM continuous batching
+        # H100's high VRAM (96GB) and vLLM's efficient batching allow much higher parallelism
+        self.max_parallel_agents = 25  # Max concurrent coding agents (optimized for H100)
         self.enable_parallel_coding = True  # Feature flag
         self.adaptive_parallelism = True  # Adjust based on task count
 
@@ -1548,6 +1548,31 @@ PRIORITY: [high/medium/low for each]
             }
         }
 
+    def calculate_optimal_parallel(self, task_count: int) -> int:
+        """
+        Calculate optimal parallelism based on H100 GPU capabilities.
+
+        H100 96GB NVL with vLLM can handle 20-30 concurrent requests efficiently
+        due to continuous batching and large VRAM capacity.
+
+        Args:
+            task_count: Number of tasks to process
+
+        Returns:
+            Optimal number of parallel workers
+        """
+        H100_MAX_PARALLEL = 25  # Optimized for H100 + vLLM
+
+        if task_count <= 10:
+            # Small projects: Run all tasks in parallel
+            return task_count
+        elif task_count <= H100_MAX_PARALLEL:
+            # Medium projects: Use all available parallelism
+            return task_count
+        else:
+            # Large projects: Cap at H100 optimal parallelism
+            return H100_MAX_PARALLEL
+
     def _group_similar_tasks(self, checklist: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Group similar tasks together for better parallel execution.
 
@@ -1606,13 +1631,10 @@ PRIORITY: [high/medium/low for each]
         # Group similar tasks together for better cache locality
         grouped_checklist = self._group_similar_tasks(checklist)
 
-        # Dynamically adjust parallelism based on task count
+        # Dynamically adjust parallelism based on task count and H100 capabilities
         if self.adaptive_parallelism:
-            # Scale parallelism with task count, but cap at max_parallel_agents
-            optimal_parallel = min(len(grouped_checklist), self.max_parallel_agents)
-            # For small task counts, use all tasks in parallel
-            if len(grouped_checklist) <= 5:
-                optimal_parallel = len(grouped_checklist)
+            # Use H100-optimized calculation for optimal parallelism
+            optimal_parallel = self.calculate_optimal_parallel(len(grouped_checklist))
         else:
             optimal_parallel = self.max_parallel_agents
 
