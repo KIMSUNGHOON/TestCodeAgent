@@ -35,7 +35,8 @@ langgraph>=0.2.0
 
 # DeepAgents framework for advanced middleware
 deepagents>=0.1.0
-tavily-python>=0.3.0  # Web search for DeepAgents
+# tavily-python>=0.3.0  # OPTIONAL: Web search (requires external API access)
+                        # Disable in secure internal networks
 
 # Testing (dev dependencies)
 pytest>=7.0.0

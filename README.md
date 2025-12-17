@@ -432,8 +432,18 @@ DeepAgentWorkflowManager(
 1. **Backend Setup:**
    ```bash
    # Install DeepAgents framework
-   pip install deepagents tavily-python
+   pip install deepagents
+
+   # IMPORTANT: tavily-python is OPTIONAL
+   # Only install if you have external API access
+   # Skip in secure internal networks
+   # pip install tavily-python
    ```
+
+   **Note for Internal Networks:**
+   - tavily-python provides web search capabilities
+   - Requires external API access (not available in secure networks)
+   - DeepAgents works without tavily (SubAgent & Filesystem middleware only)
 
 2. **Frontend - Select Framework:**
    - Click the framework selector in the header (gear icon)

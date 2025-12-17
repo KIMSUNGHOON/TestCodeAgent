@@ -239,6 +239,31 @@ async def get_vllm_metrics():
 
 ---
 
+## 내부 보안망 환경 고려사항
+
+### Tavily 웹 검색 비활성화
+
+**문제:**
+- 내부 보안망에서 외부 API (tavily) 접근 불가
+- tavily-python은 웹 검색을 위한 외부 서비스
+
+**해결방안:**
+```bash
+# requirements.txt에서 tavily 주석 처리 (이미 적용됨)
+# tavily-python>=0.3.0  # OPTIONAL: Disable in secure networks
+
+# DeepAgents는 tavily 없이도 작동
+# - SubAgentMiddleware: tavily 불필요
+# - FilesystemMiddleware: tavily 불필요
+```
+
+**대안:**
+- 내부 문서 검색 시스템 사용
+- Vector DB (ChromaDB) 활용
+- 로컬 지식 베이스 구축
+
+---
+
 ## 구현 코드 예시
 
 ### 1. max_parallel_agents 증가
