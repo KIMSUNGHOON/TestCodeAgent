@@ -1,10 +1,12 @@
 /**
  * WorkflowInterface component - Claude.ai inspired multi-agent workflow UI
  * Supports conversation context for iterative refinement
+ * Now with parallel execution and shared context visualization
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WorkflowUpdate, Artifact, WorkflowInfo } from '../types/api';
 import WorkflowStep from './WorkflowStep';
+import SharedContextViewer from './SharedContextViewer';
 import apiClient from '../api/client';
 
 interface ConversationTurn {
@@ -13,6 +15,26 @@ interface ConversationTurn {
   updates?: WorkflowUpdate[];
   artifacts?: Artifact[];
   timestamp: number;
+}
+
+interface SharedContextData {
+  entries: Array<{
+    agent_id: string;
+    agent_type: string;
+    key: string;
+    value_preview: string;
+    description: string;
+    timestamp: string;
+  }>;
+  access_log: Array<{
+    action: 'set' | 'get';
+    agent_id?: string;
+    requesting_agent?: string;
+    source_agent?: string;
+    agent_type?: string;
+    key: string;
+    timestamp: string;
+  }>;
 }
 
 interface WorkflowInterfaceProps {
@@ -27,6 +49,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
   const [conversationHistory, setConversationHistory] = useState<ConversationTurn[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [currentWorkflowInfo, setCurrentWorkflowInfo] = useState<WorkflowInfo | null>(null);
+  const [sharedContext, setSharedContext] = useState<SharedContextData | null>(null);
+  const [showSharedContext, setShowSharedContext] = useState(false);
+  const [executionMode, setExecutionMode] = useState<'sequential' | 'parallel' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +250,16 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
             // Update workflow_info when present (for progress tracking)
             if (update.workflow_info) {
               setCurrentWorkflowInfo(update.workflow_info);
+            }
+
+            // Capture execution mode
+            if (update.execution_mode) {
+              setExecutionMode(update.execution_mode as 'sequential' | 'parallel');
+            }
+
+            // Capture shared context from parallel execution
+            if (update.type === 'shared_context' && update.shared_context) {
+              setSharedContext(update.shared_context as SharedContextData);
             }
 
             // Save artifacts when they're created
@@ -434,6 +469,49 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
             </div>
           )}
 
+          {/* Execution Mode & SharedContext Button */}
+          {(executionMode || sharedContext) && (
+            <div className="flex items-center justify-between mb-4 p-3 bg-white rounded-xl border border-[#E5E5E5] shadow-sm">
+              <div className="flex items-center gap-3">
+                {executionMode && (
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                    executionMode === 'parallel'
+                      ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                      : 'bg-gray-100 text-gray-700 border border-gray-200'
+                  }`}>
+                    {executionMode === 'parallel' ? (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                        </svg>
+                        Parallel Execution
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+                        </svg>
+                        Sequential Execution
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {sharedContext && sharedContext.entries.length > 0 && (
+                <button
+                  onClick={() => setShowSharedContext(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                  </svg>
+                  View Shared Context ({sharedContext.entries.length})
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Current Workflow Updates */}
           {updates.length > 0 && (
             <div className="space-y-4">
@@ -446,6 +524,13 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace }: WorkflowInt
           <div ref={messagesEndRef} />
         </div>
       </div>
+
+      {/* SharedContext Viewer Modal */}
+      <SharedContextViewer
+        data={sharedContext}
+        isVisible={showSharedContext}
+        onClose={() => setShowSharedContext(false)}
+      />
 
       {/* Input Area */}
       <div className="border-t border-[#E5E5E5] bg-white">

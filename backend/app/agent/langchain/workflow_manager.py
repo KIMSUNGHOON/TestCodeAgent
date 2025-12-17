@@ -5,6 +5,7 @@ Supports optional DeepAgents integration for enhanced capabilities:
 - SubAgentMiddleware: Delegate tasks to specialized sub-agents
 - TodoListMiddleware: Automatic task tracking
 """
+import asyncio
 import logging
 import re
 import time
@@ -12,6 +13,7 @@ import uuid
 from datetime import datetime
 from typing import List, Dict, Any, AsyncGenerator, Optional, TypedDict, Annotated, Literal
 from operator import add
+from dataclasses import dataclass, field
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, START, END
@@ -19,6 +21,102 @@ from app.core.config import settings
 from app.agent.base.interface import BaseWorkflow, BaseWorkflowManager
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== Shared Context for Parallel Agents ====================
+
+@dataclass
+class ContextEntry:
+    """A single entry in the shared context."""
+    agent_id: str
+    agent_type: str
+    key: str
+    value: Any
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    description: str = ""
+
+
+@dataclass
+class SharedContext:
+    """Thread-safe shared context for parallel agent execution.
+
+    Allows agents to share information and reference each other's outputs.
+    """
+    entries: Dict[str, ContextEntry] = field(default_factory=dict)
+    access_log: List[Dict[str, Any]] = field(default_factory=list)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+
+    async def set(self, agent_id: str, agent_type: str, key: str, value: Any, description: str = "") -> None:
+        """Set a value in the shared context."""
+        async with self._lock:
+            full_key = f"{agent_id}:{key}"
+            self.entries[full_key] = ContextEntry(
+                agent_id=agent_id,
+                agent_type=agent_type,
+                key=key,
+                value=value,
+                description=description
+            )
+            self.access_log.append({
+                "action": "set",
+                "agent_id": agent_id,
+                "agent_type": agent_type,
+                "key": key,
+                "timestamp": datetime.now().isoformat()
+            })
+
+    async def get(self, requesting_agent: str, key: str, from_agent: str = None) -> Optional[Any]:
+        """Get a value from the shared context."""
+        async with self._lock:
+            if from_agent:
+                full_key = f"{from_agent}:{key}"
+            else:
+                # Search for key across all agents
+                for fk, entry in self.entries.items():
+                    if entry.key == key:
+                        full_key = fk
+                        break
+                else:
+                    return None
+
+            entry = self.entries.get(full_key)
+            if entry:
+                self.access_log.append({
+                    "action": "get",
+                    "requesting_agent": requesting_agent,
+                    "source_agent": entry.agent_id,
+                    "key": key,
+                    "timestamp": datetime.now().isoformat()
+                })
+                return entry.value
+            return None
+
+    async def get_all_from_agent(self, agent_id: str) -> Dict[str, Any]:
+        """Get all entries from a specific agent."""
+        async with self._lock:
+            return {
+                entry.key: entry.value
+                for fk, entry in self.entries.items()
+                if entry.agent_id == agent_id
+            }
+
+    def get_access_log(self) -> List[Dict[str, Any]]:
+        """Get the access log for visualization."""
+        return self.access_log.copy()
+
+    def get_entries_summary(self) -> List[Dict[str, Any]]:
+        """Get a summary of all entries for UI display."""
+        return [
+            {
+                "agent_id": entry.agent_id,
+                "agent_type": entry.agent_type,
+                "key": entry.key,
+                "value_preview": str(entry.value)[:200] + "..." if len(str(entry.value)) > 200 else str(entry.value),
+                "description": entry.description,
+                "timestamp": entry.timestamp
+            }
+            for entry in self.entries.values()
+        ]
 
 # Check for DeepAgents availability
 DEEPAGENTS_AVAILABLE = False
@@ -403,6 +501,13 @@ class DynamicLangGraphWorkflow(BaseWorkflow):
             max_tokens=2048,
             api_key="not-needed",
         )
+
+        # Shared context for parallel agent execution
+        self.shared_context: Optional[SharedContext] = None
+
+        # Parallel execution settings
+        self.max_parallel_agents = 3  # Max concurrent coding agents
+        self.enable_parallel_coding = True  # Feature flag
 
         # Supervisor prompt for task analysis
         self.supervisor_prompt = """You are a Supervisor Agent that analyzes user requests and determines the best workflow.
@@ -856,99 +961,141 @@ PRIORITY: [high/medium/low for each]
             }
         }
 
-        # Step 2: Coding
+        # Step 2: Coding (with parallel execution option)
         coding_agent = "CodingAgent" if "CodingAgent" in template["nodes"] else "RefactorAgent"
-        yield {
-            "agent": coding_agent,
-            "type": "agent_spawn",
-            "status": "running",
-            "message": f"Spawning {coding_agent}",
-            "workflow_info": build_workflow_info(coding_agent),
-            "agent_spawn": {
-                "agent_id": f"{coding_agent.lower()}-{uuid.uuid4().hex[:6]}",
-                "agent_type": coding_agent,
-                "parent_agent": "Orchestrator",
-                "spawn_reason": f"Implement {len(checklist)} tasks",
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-
-        all_artifacts = []
-        code_text = ""
-        existing_code = ""
         coding_prompt = self.prompts.get(coding_agent, self.prompts["CodingAgent"])
 
-        for idx, task_item in enumerate(checklist):
-            task_num = idx + 1
-            task_description = task_item["task"]
+        # Decide whether to use parallel execution
+        use_parallel = (
+            self.enable_parallel_coding and
+            len(checklist) >= 2  # Only parallelize if multiple tasks
+        )
 
+        if use_parallel:
+            # Parallel execution mode
             yield {
-                "agent": coding_agent,
-                "type": "thinking",
+                "agent": "Orchestrator",
+                "type": "mode_selection",
                 "status": "running",
-                "message": f"Task {task_num}/{len(checklist)}: {task_description}",
-                "checklist": checklist
+                "message": f"Using PARALLEL coding mode for {len(checklist)} tasks",
+                "execution_mode": "parallel",
+                "parallel_config": {
+                    "max_parallel_agents": self.max_parallel_agents,
+                    "total_tasks": len(checklist)
+                }
             }
 
-            context_parts = [f"Original request: {user_request}"]
-            context_parts.append(f"\nFull plan:\n{plan_text}")
-            if existing_code:
-                context_parts.append(f"\nCode so far:\n{existing_code}")
-            context_parts.append(f"\nCurrent task ({task_num}/{len(checklist)}): {task_description}")
+            # Execute tasks in parallel
+            all_artifacts = []
+            code_text = ""
 
-            user_prompt = "\n".join(context_parts)
-            messages = [
-                SystemMessage(content=coding_prompt),
-                HumanMessage(content=user_prompt)
-            ]
+            async for update in self._execute_parallel_coding(
+                checklist=checklist,
+                user_request=user_request,
+                plan_text=plan_text,
+                coding_prompt=coding_prompt,
+                build_workflow_info=build_workflow_info
+            ):
+                yield update
 
-            start_time = time.time()
-            task_code = ""
-            async for chunk in self.coding_llm.astream(messages):
-                if chunk.content:
-                    task_code += chunk.content
-            task_latency_ms = int((time.time() - start_time) * 1000)
+                # Capture final artifacts and code_text from parallel execution
+                if update.get("type") == "parallel_complete":
+                    all_artifacts = update.get("artifacts", [])
+                    code_text = update.get("code_text", "")
 
-            code_text += task_code + "\n"
-            task_artifacts = parse_code_blocks(task_code)
-            all_artifacts.extend(task_artifacts)
+        else:
+            # Sequential execution mode (original behavior)
+            yield {
+                "agent": coding_agent,
+                "type": "agent_spawn",
+                "status": "running",
+                "message": f"Spawning {coding_agent}",
+                "workflow_info": build_workflow_info(coding_agent),
+                "agent_spawn": {
+                    "agent_id": f"{coding_agent.lower()}-{uuid.uuid4().hex[:6]}",
+                    "agent_type": coding_agent,
+                    "parent_agent": "Orchestrator",
+                    "spawn_reason": f"Implement {len(checklist)} tasks",
+                    "timestamp": datetime.now().isoformat()
+                },
+                "execution_mode": "sequential"
+            }
 
-            for artifact in task_artifacts:
-                existing_code += f"\n\n```{artifact['language']} {artifact['filename']}\n{artifact['content']}\n```"
+            all_artifacts = []
+            code_text = ""
+            existing_code = ""
+
+            for idx, task_item in enumerate(checklist):
+                task_num = idx + 1
+                task_description = task_item["task"]
+
                 yield {
                     "agent": coding_agent,
-                    "type": "artifact",
+                    "type": "thinking",
                     "status": "running",
-                    "message": f"Created {artifact['filename']}",
-                    "artifact": artifact
+                    "message": f"Task {task_num}/{len(checklist)}: {task_description}",
+                    "checklist": checklist
                 }
 
-            checklist[idx]["completed"] = True
-            checklist[idx]["artifacts"] = [a["filename"] for a in task_artifacts]
+                context_parts = [f"Original request: {user_request}"]
+                context_parts.append(f"\nFull plan:\n{plan_text}")
+                if existing_code:
+                    context_parts.append(f"\nCode so far:\n{existing_code}")
+                context_parts.append(f"\nCurrent task ({task_num}/{len(checklist)}): {task_description}")
+
+                user_prompt = "\n".join(context_parts)
+                messages = [
+                    SystemMessage(content=coding_prompt),
+                    HumanMessage(content=user_prompt)
+                ]
+
+                start_time = time.time()
+                task_code = ""
+                async for chunk in self.coding_llm.astream(messages):
+                    if chunk.content:
+                        task_code += chunk.content
+                task_latency_ms = int((time.time() - start_time) * 1000)
+
+                code_text += task_code + "\n"
+                task_artifacts = parse_code_blocks(task_code)
+                all_artifacts.extend(task_artifacts)
+
+                for artifact in task_artifacts:
+                    existing_code += f"\n\n```{artifact['language']} {artifact['filename']}\n{artifact['content']}\n```"
+                    yield {
+                        "agent": coding_agent,
+                        "type": "artifact",
+                        "status": "running",
+                        "message": f"Created {artifact['filename']}",
+                        "artifact": artifact
+                    }
+
+                checklist[idx]["completed"] = True
+                checklist[idx]["artifacts"] = [a["filename"] for a in task_artifacts]
+
+                yield {
+                    "agent": coding_agent,
+                    "type": "task_completed",
+                    "status": "running",
+                    "message": f"Task {task_num}/{len(checklist)} completed",
+                    "task_result": {"task_num": task_num, "task": task_description, "artifacts": task_artifacts},
+                    "checklist": checklist,
+                    "prompt_info": {
+                        "system_prompt": coding_prompt,
+                        "user_prompt": user_prompt,
+                        "output": task_code,
+                        "model": settings.coding_model,
+                        "latency_ms": task_latency_ms
+                    }
+                }
 
             yield {
                 "agent": coding_agent,
-                "type": "task_completed",
-                "status": "running",
-                "message": f"Task {task_num}/{len(checklist)} completed",
-                "task_result": {"task_num": task_num, "task": task_description, "artifacts": task_artifacts},
-                "checklist": checklist,
-                "prompt_info": {
-                    "system_prompt": coding_prompt,
-                    "user_prompt": user_prompt,
-                    "output": task_code,
-                    "model": settings.coding_model,
-                    "latency_ms": task_latency_ms
-                }
+                "type": "completed",
+                "status": "completed",
+                "artifacts": all_artifacts,
+                "checklist": checklist
             }
-
-        yield {
-            "agent": coding_agent,
-            "type": "completed",
-            "status": "completed",
-            "artifacts": all_artifacts,
-            "checklist": checklist
-        }
 
         # Step 3: Review Loop (if has_review_loop)
         if template["has_review_loop"]:
@@ -1197,6 +1344,226 @@ PRIORITY: [high/medium/low for each]
                     "dynamically_created": True
                 }
             }
+
+    async def _execute_single_coding_task(
+        self,
+        task_idx: int,
+        task_item: Dict[str, Any],
+        user_request: str,
+        plan_text: str,
+        coding_prompt: str,
+        agent_id: str
+    ) -> Dict[str, Any]:
+        """Execute a single coding task - used for parallel execution."""
+        task_description = task_item["task"]
+
+        context_parts = [f"Original request: {user_request}"]
+        context_parts.append(f"\nFull plan:\n{plan_text}")
+        context_parts.append(f"\nCurrent task: {task_description}")
+        context_parts.append("\nGenerate ONLY the code for this specific task. Include filename in the code block.")
+
+        user_prompt = "\n".join(context_parts)
+        messages = [
+            SystemMessage(content=coding_prompt),
+            HumanMessage(content=user_prompt)
+        ]
+
+        start_time = time.time()
+        task_code = ""
+        async for chunk in self.coding_llm.astream(messages):
+            if chunk.content:
+                task_code += chunk.content
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        artifacts = parse_code_blocks(task_code)
+
+        # Store in shared context
+        if self.shared_context:
+            await self.shared_context.set(
+                agent_id=agent_id,
+                agent_type="CodingAgent",
+                key=f"task_{task_idx}_result",
+                value={
+                    "code": task_code,
+                    "artifacts": artifacts,
+                    "task": task_description
+                },
+                description=f"Code generated for task: {task_description[:50]}..."
+            )
+
+        return {
+            "task_idx": task_idx,
+            "task_description": task_description,
+            "code": task_code,
+            "artifacts": artifacts,
+            "agent_id": agent_id,
+            "latency_ms": latency_ms,
+            "prompt_info": {
+                "system_prompt": coding_prompt,
+                "user_prompt": user_prompt,
+                "output": task_code,
+                "model": settings.coding_model,
+                "latency_ms": latency_ms
+            }
+        }
+
+    async def _execute_parallel_coding(
+        self,
+        checklist: List[Dict[str, Any]],
+        user_request: str,
+        plan_text: str,
+        coding_prompt: str,
+        build_workflow_info: callable
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Execute multiple coding tasks in parallel."""
+
+        # Initialize shared context for this workflow
+        self.shared_context = SharedContext()
+
+        # Notify parallel execution start
+        yield {
+            "agent": "Orchestrator",
+            "type": "parallel_start",
+            "status": "running",
+            "message": f"Starting parallel execution with {min(len(checklist), self.max_parallel_agents)} agents",
+            "parallel_info": {
+                "total_tasks": len(checklist),
+                "max_parallel": self.max_parallel_agents
+            }
+        }
+
+        all_artifacts = []
+        all_results = []
+
+        # Process tasks in batches
+        for batch_start in range(0, len(checklist), self.max_parallel_agents):
+            batch_end = min(batch_start + self.max_parallel_agents, len(checklist))
+            batch_tasks = []
+
+            # Spawn agents for this batch
+            for idx in range(batch_start, batch_end):
+                agent_id = f"coding-{uuid.uuid4().hex[:6]}"
+
+                yield {
+                    "agent": f"CodingAgent-{idx + 1}",
+                    "type": "agent_spawn",
+                    "status": "running",
+                    "message": f"Spawning parallel agent for task {idx + 1}",
+                    "workflow_info": build_workflow_info(f"CodingAgent-{idx + 1}"),
+                    "agent_spawn": {
+                        "agent_id": agent_id,
+                        "agent_type": "CodingAgent",
+                        "parent_agent": "Orchestrator",
+                        "spawn_reason": f"Parallel task: {checklist[idx]['task'][:50]}...",
+                        "timestamp": datetime.now().isoformat(),
+                        "parallel_batch": batch_start // self.max_parallel_agents + 1
+                    }
+                }
+
+                batch_tasks.append(
+                    self._execute_single_coding_task(
+                        task_idx=idx,
+                        task_item=checklist[idx],
+                        user_request=user_request,
+                        plan_text=plan_text,
+                        coding_prompt=coding_prompt,
+                        agent_id=agent_id
+                    )
+                )
+
+            # Execute batch in parallel
+            yield {
+                "agent": "Orchestrator",
+                "type": "parallel_batch",
+                "status": "running",
+                "message": f"Executing batch {batch_start // self.max_parallel_agents + 1}: tasks {batch_start + 1}-{batch_end}",
+                "batch_info": {
+                    "batch_num": batch_start // self.max_parallel_agents + 1,
+                    "tasks": list(range(batch_start + 1, batch_end + 1))
+                }
+            }
+
+            # Run tasks in parallel with asyncio.gather
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
+
+            # Process results
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    logger.error(f"Parallel task failed: {result}")
+                    yield {
+                        "agent": "CodingAgent",
+                        "type": "error",
+                        "status": "error",
+                        "message": f"Task failed: {str(result)}"
+                    }
+                    continue
+
+                task_idx = result["task_idx"]
+                all_results.append(result)
+
+                # Emit artifacts
+                for artifact in result["artifacts"]:
+                    all_artifacts.append(artifact)
+                    yield {
+                        "agent": f"CodingAgent-{task_idx + 1}",
+                        "type": "artifact",
+                        "status": "running",
+                        "message": f"Created {artifact['filename']}",
+                        "artifact": artifact,
+                        "parallel_agent_id": result["agent_id"]
+                    }
+
+                # Mark task completed
+                checklist[task_idx]["completed"] = True
+                checklist[task_idx]["artifacts"] = [a["filename"] for a in result["artifacts"]]
+
+                yield {
+                    "agent": f"CodingAgent-{task_idx + 1}",
+                    "type": "task_completed",
+                    "status": "running",
+                    "message": f"Task {task_idx + 1}/{len(checklist)} completed (parallel)",
+                    "task_result": {
+                        "task_num": task_idx + 1,
+                        "task": result["task_description"],
+                        "artifacts": result["artifacts"]
+                    },
+                    "checklist": checklist,
+                    "prompt_info": result["prompt_info"],
+                    "parallel_agent_id": result["agent_id"]
+                }
+
+        # Emit shared context summary
+        yield {
+            "agent": "Orchestrator",
+            "type": "shared_context",
+            "status": "running",
+            "message": "Shared context summary",
+            "shared_context": {
+                "entries": self.shared_context.get_entries_summary(),
+                "access_log": self.shared_context.get_access_log()
+            }
+        }
+
+        # Combine all code for review
+        code_text = ""
+        for result in sorted(all_results, key=lambda x: x["task_idx"]):
+            code_text += result["code"] + "\n"
+
+        yield {
+            "agent": "Orchestrator",
+            "type": "parallel_complete",
+            "status": "completed",
+            "message": f"Parallel execution completed. Generated {len(all_artifacts)} files.",
+            "parallel_summary": {
+                "total_tasks": len(checklist),
+                "completed_tasks": len(all_results),
+                "total_artifacts": len(all_artifacts),
+                "agents_used": len(all_results)
+            },
+            "artifacts": all_artifacts,
+            "checklist": checklist,
+            "code_text": code_text
+        }
 
     async def _execute_test_workflow(
         self,

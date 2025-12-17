@@ -7,6 +7,7 @@ import WorkflowInterface from './components/WorkflowInterface';
 import AgentStatus from './components/AgentStatus';
 import ConversationList from './components/ConversationList';
 import WorkspaceSettings from './components/WorkspaceSettings';
+import Terminal from './components/Terminal';
 import { Conversation, StoredMessage, WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
 
@@ -26,6 +27,7 @@ function App() {
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
   const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   // Loaded conversation state
   const [loadedMessages, setLoadedMessages] = useState<StoredMessage[]>([]);
@@ -194,6 +196,18 @@ function App() {
               </span>
             </button>
 
+            {/* Terminal Button */}
+            <button
+              onClick={() => setShowTerminal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#1E1E1E] text-white hover:bg-[#2D2D2D] transition-colors"
+              title="Open Terminal"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              <span className="text-xs font-medium">Terminal</span>
+            </button>
+
             {/* Framework Badge */}
             {frameworkInfo && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#F5F4F2] border border-[#E5E5E5]">
@@ -260,6 +274,14 @@ function App() {
           onClose={() => setShowWorkspaceSettings(false)}
         />
       )}
+
+      {/* Terminal Modal */}
+      <Terminal
+        sessionId={sessionId}
+        workspace={workspace}
+        isVisible={showTerminal}
+        onClose={() => setShowTerminal(false)}
+      />
     </div>
   );
 }

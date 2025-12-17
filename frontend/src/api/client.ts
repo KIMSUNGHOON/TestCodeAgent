@@ -460,6 +460,38 @@ class ApiClient {
       };
     }
   }
+
+  // ==================== Shell/Terminal ====================
+
+  /**
+   * Execute a shell command in the workspace
+   */
+  async executeShellCommand(
+    sessionId: string,
+    command: string,
+    timeout: number = 30
+  ): Promise<{
+    success: boolean;
+    stdout?: string;
+    stderr?: string;
+    return_code?: number;
+    cwd?: string;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.post('/shell/execute', {
+        session_id: sessionId,
+        command,
+        timeout
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to execute command'
+      };
+    }
+  }
 }
 
 // Export singleton instance

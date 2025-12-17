@@ -1172,3 +1172,88 @@ async def read_workspace_file(session_id: str = "default", filename: str = ""):
     except Exception as e:
         logger.error(f"Error reading file: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ==================== Shell/Terminal Endpoints ====================
+
+
+@router.post("/shell/execute")
+async def execute_shell_command(request: dict):
+    """Execute a shell command in the workspace directory.
+
+    Args:
+        request: Contains session_id, command, and optional timeout
+
+    Returns:
+        Command output (stdout, stderr, return code)
+    """
+    import asyncio
+    import subprocess
+
+    session_id = request.get("session_id", "default")
+    command = request.get("command", "")
+    timeout = request.get("timeout", 30)  # Default 30 seconds
+
+    if not command:
+        return {"success": False, "error": "No command provided"}
+
+    # Get workspace for this session
+    workspace = _session_workspaces.get(session_id, "/home/user/workspace")
+
+    # Security: Block dangerous commands
+    dangerous_patterns = [
+        "rm -rf /", "rm -rf /*", "mkfs", "dd if=", ":(){ :|:& };:",
+        "> /dev/sd", "chmod -R 777 /", "wget", "curl", "nc -e",
+        "python -c", "perl -e", "ruby -e"
+    ]
+
+    command_lower = command.lower().strip()
+    for pattern in dangerous_patterns:
+        if pattern in command_lower:
+            return {
+                "success": False,
+                "error": f"Blocked: potentially dangerous command pattern '{pattern}'"
+            }
+
+    try:
+        # Run command in workspace directory
+        process = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=workspace,
+            env={**os.environ, "HOME": workspace}
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            process.kill()
+            return {
+                "success": False,
+                "error": f"Command timed out after {timeout} seconds",
+                "stdout": "",
+                "stderr": "",
+                "return_code": -1
+            }
+
+        return {
+            "success": process.returncode == 0,
+            "stdout": stdout.decode('utf-8', errors='replace'),
+            "stderr": stderr.decode('utf-8', errors='replace'),
+            "return_code": process.returncode,
+            "cwd": workspace
+        }
+
+    except Exception as e:
+        logger.error(f"Error executing shell command: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/shell/history")
+async def get_shell_history(session_id: str = "default"):
+    """Get command history for a session (placeholder for future implementation)."""
+    return {"success": True, "history": [], "message": "History tracking not yet implemented"}
