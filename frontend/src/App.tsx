@@ -3,10 +3,9 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import WorkflowInterface from './components/WorkflowInterface';
-import ConversationList from './components/ConversationList';
 import WorkspaceSettings from './components/WorkspaceSettings';
 import Terminal from './components/Terminal';
-import { Conversation, WorkflowUpdate } from './types/api';
+import { WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
 
 interface FrameworkInfo {
@@ -17,7 +16,6 @@ interface FrameworkInfo {
 
 function App() {
   const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
-  const [showSidebar, setShowSidebar] = useState(true);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
   const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
@@ -60,38 +58,6 @@ function App() {
     setLoadedWorkflowState([]);
   }, []);
 
-  const handleSelectConversation = useCallback(async (conversation: Conversation) => {
-    try {
-      // Load full conversation with messages
-      const fullConversation = await apiClient.getConversation(conversation.session_id);
-
-      setSessionId(conversation.session_id);
-
-      // Extract workflow updates from stored state (saved as { updates: [...] })
-      if (fullConversation.workflow_state) {
-        try {
-          const workflowState = fullConversation.workflow_state as { updates?: WorkflowUpdate[] };
-          if (workflowState && workflowState.updates && Array.isArray(workflowState.updates)) {
-            setLoadedWorkflowState(workflowState.updates);
-          } else {
-            console.warn('Invalid workflow state format:', fullConversation.workflow_state);
-            setLoadedWorkflowState([]);
-          }
-        } catch (parseErr) {
-          console.error('Failed to parse workflow state:', parseErr);
-          setLoadedWorkflowState([]);
-        }
-      } else {
-        setLoadedWorkflowState([]);
-      }
-    } catch (err) {
-      console.error('Failed to load conversation:', err);
-      alert(`Failed to load conversation: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      // Reset to new conversation on error
-      handleNewConversation();
-    }
-  }, [handleNewConversation]);
-
   const handleWorkspaceChange = async (newWorkspace: string) => {
     setWorkspace(newWorkspace);
     // Notify backend of workspace change
@@ -115,43 +81,12 @@ function App() {
 
   return (
     <div className="flex h-screen bg-[#FAF9F7]">
-      {/* Conversation List Sidebar */}
-      {showSidebar && (
-        <ConversationList
-          currentSessionId={sessionId}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
-        />
-      )}
-
       {/* Main Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#E5E5E5] flex items-center justify-between bg-white">
-          {/* Left Section: Toggle + Logo */}
+          {/* Left Section: Logo */}
           <div className="flex items-center gap-4">
-            {/* Sidebar Toggle */}
-            <button
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="p-2 text-[#666666] hover:text-[#1A1A1A] hover:bg-[#F5F4F2] rounded-lg"
-              title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M4 6h16M4 12h16M4 18h16"
-                />
-              </svg>
-            </button>
-
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center">
