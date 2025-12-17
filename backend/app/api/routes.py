@@ -418,11 +418,13 @@ async def execute_workflow(request: ChatRequest):
             try:
                 # Use appropriate execution method based on framework
                 if selected_framework == "deepagents":
-                    # DeepAgents uses execute_workflow method
-                    execution_stream = workflow.execute_workflow(
+                    # DeepAgents uses execute_stream with context
+                    execution_stream = workflow.execute_stream(
                         user_request=full_request,
-                        session_id=request.session_id,
-                        workspace=workspace
+                        context={
+                            "session_id": request.session_id,
+                            "workspace": workspace
+                        }
                     )
                 else:
                     # Standard workflow uses execute_stream method

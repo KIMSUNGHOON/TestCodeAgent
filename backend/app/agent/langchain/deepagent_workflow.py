@@ -123,23 +123,53 @@ class DeepAgentWorkflowManager(BaseWorkflow):
         # Manual task tracking (since TodoListMiddleware not available)
         self.current_todos = []
 
-    async def execute_workflow(
+    async def execute(
         self,
         user_request: str,
-        session_id: str,
-        workspace: Optional[str] = None
+        context: Optional[Any] = None
+    ) -> str:
+        """Execute the coding workflow (non-streaming).
+
+        Args:
+            user_request: User's coding request
+            context: Optional run context
+
+        Returns:
+            Final result from the workflow
+        """
+        # Collect all streaming results
+        result_parts = []
+        async for update in self.execute_stream(user_request, context):
+            if update.get("type") == "completion":
+                result_parts.append(update.get("message", ""))
+            elif update.get("type") == "error":
+                raise RuntimeError(update.get("error", "Unknown error"))
+
+        return "\n".join(result_parts) if result_parts else "Workflow completed"
+
+    async def execute_stream(
+        self,
+        user_request: str,
+        context: Optional[Any] = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute workflow with DeepAgents middleware.
 
         Args:
             user_request: User's request
-            session_id: Session identifier
-            workspace: Optional workspace override
+            context: Optional context containing session_id and workspace
 
         Yields:
             Workflow updates compatible with frontend
         """
+        # Extract session_id and workspace from context
+        session_id = self.agent_id
+        workspace = self.workspace
+
+        if context and isinstance(context, dict):
+            session_id = context.get("session_id", self.agent_id)
+            workspace = context.get("workspace", self.workspace)
+
         if workspace:
             self.workspace = workspace
 
