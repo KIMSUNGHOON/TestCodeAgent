@@ -512,28 +512,76 @@ class DynamicLangGraphWorkflow(BaseWorkflow):
         self.enable_parallel_coding = True  # Feature flag
         self.adaptive_parallelism = True  # Adjust based on task count
 
-        # Supervisor prompt for task analysis
+        # Supervisor prompt for task analysis with context awareness
         self.supervisor_prompt = """You are a Supervisor Agent that analyzes user requests and determines the best workflow.
 
+**CRITICAL: Check if the task requires NEW work or is a QUESTION about EXISTING work**
+
+<context_awareness>
+BEFORE determining the workflow, check:
+1. Is there EXISTING CODE in the context?
+2. Is the user asking about HOW TO USE/RUN existing code?
+3. Is the user asking for EXPLANATIONS/DOCUMENTATION?
+4. Is the user requesting MODIFICATIONS to existing code?
+
+If the user is asking about existing code (execution, usage, explanation):
+- Set TASK_TYPE to "general" (this will use chat mode, not workflow)
+- Do NOT regenerate code that already exists
+- The question can be answered without creating new files
+</context_awareness>
+
 <task>
-Analyze the user's request and determine:
-1. TASK_TYPE: One of [code_generation, bug_fix, refactoring, test_generation, code_review, documentation, general]
+Analyze the user's request considering ANY existing code/context and determine:
+1. TASK_TYPE: One of:
+   - code_generation: Create NEW code/project from scratch
+   - bug_fix: Fix errors in existing code
+   - refactoring: Improve existing code structure
+   - test_generation: Create tests for existing code
+   - code_review: Review existing code
+   - documentation: Create docs for existing code
+   - general: Questions, explanations, usage instructions (NO new code needed)
+
 2. COMPLEXITY: [simple, medium, complex]
 3. REQUIREMENTS: List key requirements
 4. RECOMMENDED_AGENTS: Which agents should be used
+5. NEEDS_NEW_FILES: true/false (Does this require creating new files?)
 </task>
+
+<examples>
+Example 1 - Question about existing code:
+User: "How do I run this program?"
+Context: [existing Python files]
+→ TASK_TYPE: general
+→ NEEDS_NEW_FILES: false
+→ ANALYSIS: User asking about execution, not requesting new code
+
+Example 2 - New code request:
+User: "Create a web scraper"
+Context: [empty or unrelated]
+→ TASK_TYPE: code_generation
+→ NEEDS_NEW_FILES: true
+→ ANALYSIS: User requesting new functionality
+
+Example 3 - Modification request:
+User: "Add error handling to the auth function"
+Context: [existing auth.py]
+→ TASK_TYPE: bug_fix
+→ NEEDS_NEW_FILES: false
+→ ANALYSIS: Modifying existing code
+</examples>
 
 <response_format>
 TASK_TYPE: [type]
 COMPLEXITY: [level]
+NEEDS_NEW_FILES: [true/false]
 REQUIREMENTS:
 - [requirement 1]
 - [requirement 2]
 RECOMMENDED_AGENTS: [agent1, agent2, ...]
-ANALYSIS: [brief analysis of the task]
+ANALYSIS: [brief analysis considering existing context]
 </response_format>
 
-Be precise and concise. Focus on understanding what the user wants to achieve."""
+Be precise and concise. **Avoid regenerating code that already exists.**"""
 
         # Agent-specific prompts
         self.prompts = {
@@ -850,8 +898,48 @@ PRIORITY: [high/medium/low for each]
             # ========================================
             # Phase 3: Execute the workflow
             # ========================================
-            # For code_generation, bug_fix, refactoring, general - use standard flow
-            if task_type in ["code_generation", "general", "bug_fix", "refactoring"]:
+
+            # IMPORTANT: "general" task type = simple question/explanation, NO workflow needed
+            if task_type == "general":
+                # This is a question about existing code or general inquiry
+                # Use chat mode instead of workflow
+                yield {
+                    "agent": "ChatAssistant",
+                    "type": "thinking",
+                    "status": "running",
+                    "message": "This looks like a question about existing code. Using chat mode instead of workflow..."
+                }
+
+                # Simple chat response using coding LLM
+                messages = [
+                    SystemMessage(content="You are a helpful assistant. Answer the user's question about their code or project. Be concise and practical."),
+                    HumanMessage(content=user_request)
+                ]
+
+                response_text = ""
+                async for chunk in self.coding_llm.astream(messages):
+                    if chunk.content:
+                        response_text += chunk.content
+
+                yield {
+                    "agent": "ChatAssistant",
+                    "type": "completed",
+                    "status": "completed",
+                    "message": response_text,
+                    "content": response_text
+                }
+
+                # Mark workflow as complete
+                yield {
+                    "agent": "Orchestrator",
+                    "type": "completed",
+                    "status": "completed",
+                    "message": "Response completed (no new files generated)"
+                }
+                return
+
+            # For code_generation, bug_fix, refactoring - use standard flow
+            if task_type in ["code_generation", "bug_fix", "refactoring"]:
                 # Execute standard Planning -> Coding -> Review loop
                 async for update in self._execute_coding_workflow(
                     user_request, task_type, template, workflow_id, max_iterations
