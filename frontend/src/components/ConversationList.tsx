@@ -1,5 +1,5 @@
 /**
- * ConversationList component - Claude.ai inspired sidebar
+ * ConversationList component - Unified conversation sidebar
  */
 import { useState, useEffect } from 'react';
 import { Conversation } from '../types/api';
@@ -7,14 +7,12 @@ import apiClient from '../api/client';
 
 interface ConversationListProps {
   currentSessionId: string;
-  mode: 'chat' | 'workflow';
   onSelectConversation: (conversation: Conversation) => void;
   onNewConversation: () => void;
 }
 
 const ConversationList = ({
   currentSessionId,
-  mode,
   onSelectConversation,
   onNewConversation,
 }: ConversationListProps) => {
@@ -24,13 +22,17 @@ const ConversationList = ({
 
   useEffect(() => {
     loadConversations();
-  }, [mode]);
+    // Auto-refresh every 5 seconds to catch new conversations
+    const interval = setInterval(loadConversations, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const loadConversations = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.listConversations(50, 0, mode);
+      // Load all conversations (no mode filter)
+      const response = await apiClient.listConversations(50, 0);
       setConversations(response.conversations);
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -80,7 +82,7 @@ const ConversationList = ({
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          <span className="font-medium">New {mode === 'workflow' ? 'Workflow' : 'Chat'}</span>
+          <span className="font-medium">New Conversation</span>
         </button>
       </div>
 

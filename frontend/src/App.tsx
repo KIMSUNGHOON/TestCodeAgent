@@ -1,17 +1,13 @@
 /**
- * Main App component - Claude.ai inspired UI
+ * Main App component - Unified AI Code Assistant
  */
 import { useState, useCallback, useEffect } from 'react';
-import ChatInterface from './components/ChatInterface';
 import WorkflowInterface from './components/WorkflowInterface';
-import AgentStatus from './components/AgentStatus';
 import ConversationList from './components/ConversationList';
 import WorkspaceSettings from './components/WorkspaceSettings';
 import Terminal from './components/Terminal';
-import { Conversation, StoredMessage, WorkflowUpdate } from './types/api';
+import { Conversation, WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
-
-type Mode = 'chat' | 'workflow';
 
 interface FrameworkInfo {
   framework: string;
@@ -21,8 +17,6 @@ interface FrameworkInfo {
 
 function App() {
   const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
-  const [taskType, setTaskType] = useState<'reasoning' | 'coding'>('coding');
-  const [mode, setMode] = useState<Mode>('workflow');
   const [showSidebar, setShowSidebar] = useState(true);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
   const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
@@ -30,7 +24,6 @@ function App() {
   const [showTerminal, setShowTerminal] = useState(false);
 
   // Loaded conversation state
-  const [loadedMessages, setLoadedMessages] = useState<StoredMessage[]>([]);
   const [loadedWorkflowState, setLoadedWorkflowState] = useState<WorkflowUpdate[]>([]);
 
   // Load framework info on mount
@@ -49,7 +42,6 @@ function App() {
   const handleNewConversation = useCallback(() => {
     const newSessionId = `session-${Date.now()}`;
     setSessionId(newSessionId);
-    setLoadedMessages([]);
     setLoadedWorkflowState([]);
   }, []);
 
@@ -60,28 +52,22 @@ function App() {
 
       setSessionId(conversation.session_id);
 
-      if (conversation.mode === 'workflow') {
-        setMode('workflow');
-        // Extract workflow updates from stored state (saved as { updates: [...] })
-        if (fullConversation.workflow_state) {
-          try {
-            const workflowState = fullConversation.workflow_state as { updates?: WorkflowUpdate[] };
-            if (workflowState && workflowState.updates && Array.isArray(workflowState.updates)) {
-              setLoadedWorkflowState(workflowState.updates);
-            } else {
-              console.warn('Invalid workflow state format:', fullConversation.workflow_state);
-              setLoadedWorkflowState([]);
-            }
-          } catch (parseErr) {
-            console.error('Failed to parse workflow state:', parseErr);
+      // Extract workflow updates from stored state (saved as { updates: [...] })
+      if (fullConversation.workflow_state) {
+        try {
+          const workflowState = fullConversation.workflow_state as { updates?: WorkflowUpdate[] };
+          if (workflowState && workflowState.updates && Array.isArray(workflowState.updates)) {
+            setLoadedWorkflowState(workflowState.updates);
+          } else {
+            console.warn('Invalid workflow state format:', fullConversation.workflow_state);
             setLoadedWorkflowState([]);
           }
-        } else {
+        } catch (parseErr) {
+          console.error('Failed to parse workflow state:', parseErr);
           setLoadedWorkflowState([]);
         }
       } else {
-        setMode('chat');
-        setLoadedMessages(fullConversation.messages || []);
+        setLoadedWorkflowState([]);
       }
     } catch (err) {
       console.error('Failed to load conversation:', err);
@@ -90,12 +76,6 @@ function App() {
       handleNewConversation();
     }
   }, [handleNewConversation]);
-
-  const handleModeChange = (newMode: Mode) => {
-    setMode(newMode);
-    // Create new session when switching modes
-    handleNewConversation();
-  };
 
   const handleWorkspaceChange = async (newWorkspace: string) => {
     setWorkspace(newWorkspace);
@@ -113,7 +93,6 @@ function App() {
       {showSidebar && (
         <ConversationList
           currentSessionId={sessionId}
-          mode={mode}
           onSelectConversation={handleSelectConversation}
           onNewConversation={handleNewConversation}
         />
@@ -152,32 +131,11 @@ function App() {
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">C</span>
               </div>
-              <span className="font-semibold text-[#1A1A1A]">Code Agent</span>
+              <div>
+                <div className="font-semibold text-[#1A1A1A]">AI Code Assistant</div>
+                <div className="text-[10px] text-[#999999]">Unified Chat & Workflow</div>
+              </div>
             </div>
-          </div>
-
-          {/* Mode Switcher */}
-          <div className="flex bg-[#F5F4F2] rounded-lg p-1">
-            <button
-              onClick={() => handleModeChange('chat')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'chat'
-                  ? 'bg-white text-[#1A1A1A] shadow-sm'
-                  : 'text-[#666666] hover:text-[#1A1A1A]'
-              }`}
-            >
-              Chat
-            </button>
-            <button
-              onClick={() => handleModeChange('workflow')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                mode === 'workflow'
-                  ? 'bg-white text-[#1A1A1A] shadow-sm'
-                  : 'text-[#666666] hover:text-[#1A1A1A]'
-              }`}
-            >
-              Workflow
-            </button>
           </div>
 
           {/* Framework, Workspace & Session Info */}
@@ -236,33 +194,13 @@ function App() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 overflow-hidden">
-            {mode === 'chat' ? (
-              <ChatInterface
-                key={sessionId}
-                sessionId={sessionId}
-                taskType={taskType}
-                initialMessages={loadedMessages}
-              />
-            ) : (
-              <WorkflowInterface
-                key={sessionId}
-                sessionId={sessionId}
-                initialUpdates={loadedWorkflowState}
-                workspace={workspace}
-              />
-            )}
-          </div>
-
-          {/* Right Sidebar - only show in chat mode */}
-          {mode === 'chat' && (
-            <AgentStatus
-              sessionId={sessionId}
-              taskType={taskType}
-              onTaskTypeChange={setTaskType}
-            />
-          )}
+        <div className="flex-1 overflow-hidden">
+          <WorkflowInterface
+            key={sessionId}
+            sessionId={sessionId}
+            initialUpdates={loadedWorkflowState}
+            workspace={workspace}
+          />
         </div>
       </div>
 

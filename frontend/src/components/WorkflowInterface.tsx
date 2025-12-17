@@ -65,6 +65,14 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   });
   const [workspaceInput, setWorkspaceInput] = useState<string>(workspace);
 
+  // Save conversation confirmation
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [pendingSaveData, setPendingSaveData] = useState<WorkflowUpdate[] | null>(null);
+  const [autoSave, setAutoSave] = useState<boolean>(() => {
+    const saved = localStorage.getItem('workflow_auto_save');
+    return saved === null ? true : saved === 'true'; // Default to true
+  });
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -140,7 +148,15 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   }, [conversationHistory, updates, extractArtifacts]);
 
   // Save workflow state after updates complete
-  const saveWorkflowState = async (workflowUpdates: WorkflowUpdate[]) => {
+  const saveWorkflowState = async (workflowUpdates: WorkflowUpdate[], forcePrompt: boolean = false) => {
+    // Check if we should prompt user
+    if (!autoSave || forcePrompt) {
+      setPendingSaveData(workflowUpdates);
+      setShowSaveDialog(true);
+      return;
+    }
+
+    // Auto-save enabled, save immediately
     try {
       await apiClient.updateConversation(sessionId, undefined, {
         updates: workflowUpdates,
@@ -148,6 +164,27 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     } catch (err) {
       console.error('Failed to save workflow state:', err);
     }
+  };
+
+  // Handle save confirmation
+  const handleSaveConfirm = async (save: boolean, rememberChoice: boolean) => {
+    if (rememberChoice) {
+      localStorage.setItem('workflow_auto_save', save.toString());
+      setAutoSave(save);
+    }
+
+    if (save && pendingSaveData) {
+      try {
+        await apiClient.updateConversation(sessionId, undefined, {
+          updates: pendingSaveData,
+        });
+      } catch (err) {
+        console.error('Failed to save workflow state:', err);
+      }
+    }
+
+    setShowSaveDialog(false);
+    setPendingSaveData(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -377,6 +414,50 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                 className="px-4 py-3 rounded-xl bg-[#F5F4F2] hover:bg-[#E5E5E5] text-[#666666] font-medium transition-colors"
               >
                 Use Default
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Conversation Confirmation Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in duration-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#2563EB] flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-[#1A1A1A]">Save Conversation?</h2>
+                <p className="text-sm text-[#666666]">Keep this conversation for later</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-[#666666] mb-6">
+              Do you want to save this conversation to your history? You can access it later from the sidebar.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => handleSaveConfirm(true, false)}
+                className="w-full px-4 py-3 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium transition-colors"
+              >
+                Save This Time
+              </button>
+              <button
+                onClick={() => handleSaveConfirm(true, true)}
+                className="w-full px-4 py-3 rounded-xl bg-[#F5F4F2] hover:bg-[#E5E5E5] text-[#1A1A1A] font-medium transition-colors"
+              >
+                Always Save Automatically
+              </button>
+              <button
+                onClick={() => handleSaveConfirm(false, false)}
+                className="w-full px-4 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
+              >
+                Don't Save
               </button>
             </div>
           </div>
