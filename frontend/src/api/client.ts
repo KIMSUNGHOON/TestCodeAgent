@@ -256,6 +256,36 @@ class ApiClient {
     return response.data;
   }
 
+  /**
+   * Select workflow framework for a session
+   */
+  async selectFramework(
+    sessionId: string,
+    framework: 'standard' | 'deepagents'
+  ): Promise<{
+    success: boolean;
+    session_id: string;
+    framework: string;
+    message: string;
+  }> {
+    const response = await this.client.post('/framework/select', null, {
+      params: { session_id: sessionId, framework }
+    });
+    return response.data;
+  }
+
+  /**
+   * Get workflow framework for a session
+   */
+  async getSessionFramework(sessionId: string): Promise<{
+    session_id: string;
+    framework: string;
+    available_frameworks: string[];
+  }> {
+    const response = await this.client.get(`/framework/session/${sessionId}`);
+    return response.data;
+  }
+
   // ==================== Tool Execution ====================
 
   /**

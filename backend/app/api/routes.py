@@ -25,6 +25,9 @@ router = APIRouter()
 agent_manager = get_agent_manager()
 workflow_manager = get_workflow_manager()
 
+# Framework preferences per session (default: standard)
+_session_frameworks: dict = {}  # session_id -> "standard" | "deepagents"
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -233,6 +236,54 @@ async def get_current_framework():
     }
 
 
+@router.post("/framework/select")
+async def select_framework(
+    session_id: str,
+    framework: str = Query(..., regex="^(standard|deepagents)$")
+):
+    """Select workflow framework for a session.
+
+    Args:
+        session_id: Session identifier
+        framework: "standard" for LangChain or "deepagents" for DeepAgents
+
+    Returns:
+        Success status and selected framework
+    """
+    try:
+        _session_frameworks[session_id] = framework
+        logger.info(f"Set framework for {session_id}: {framework}")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "framework": framework,
+            "message": f"Framework set to {framework}"
+        }
+
+    except Exception as e:
+        logger.error(f"Error selecting framework: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/framework/session/{session_id}")
+async def get_session_framework(session_id: str):
+    """Get the workflow framework for a specific session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Current framework for this session
+    """
+    framework = _session_frameworks.get(session_id, "standard")
+    return {
+        "session_id": session_id,
+        "framework": framework,
+        "available_frameworks": ["standard", "deepagents"]
+    }
+
+
 # ==================== Workflow Endpoints ====================
 
 
@@ -244,6 +295,10 @@ async def execute_workflow(request: ChatRequest):
     1. Analyze requirements and create a plan (DeepSeek-R1)
     2. Generate code based on the plan (Qwen3-Coder)
     3. Review and improve the code (Qwen3-Coder)
+
+    Supports DUAL FRAMEWORK MODE:
+    - "standard": Uses standard LangChain workflow manager
+    - "deepagents": Uses DeepAgents framework with TodoList/SubAgent/Summarization middleware
 
     Supports context from previous conversation turns to enable
     iterative refinement of generated code.
@@ -257,8 +312,35 @@ async def execute_workflow(request: ChatRequest):
     import os
 
     try:
-        # Get or create workflow for session
-        workflow = workflow_manager.get_or_create_workflow(request.session_id)
+        # Check which framework to use for this session
+        selected_framework = _session_frameworks.get(request.session_id, "standard")
+
+        # Get or create appropriate workflow based on framework selection
+        if selected_framework == "deepagents":
+            # Use DeepAgents workflow manager
+            from app.agent.langchain.deepagent_workflow import DeepAgentWorkflowManager, DEEPAGENTS_AVAILABLE
+
+            if not DEEPAGENTS_AVAILABLE:
+                raise HTTPException(
+                    status_code=503,
+                    detail="DeepAgents framework not available. Install with: pip install deepagents tavily-python"
+                )
+
+            # Create DeepAgent workflow (not cached, created per request for now)
+            workflow = DeepAgentWorkflowManager(
+                agent_id=request.session_id,
+                model_name="gpt-4o",
+                temperature=0.7,
+                enable_todos=True,
+                enable_subagents=True,
+                enable_summarization=True,
+                enable_filesystem=True
+            )
+            logger.info(f"Using DeepAgents framework for session {request.session_id}")
+        else:
+            # Use standard workflow manager
+            workflow = workflow_manager.get_or_create_workflow(request.session_id)
+            logger.info(f"Using standard framework for session {request.session_id}")
 
         # Store base workspace for this session if provided
         base_workspace = request.workspace or _session_workspaces.get(request.session_id, "/home/user/workspace")
@@ -334,9 +416,21 @@ async def execute_workflow(request: ChatRequest):
         # Create streaming response
         async def generate():
             try:
-                async for update in workflow.execute_stream(
-                    user_request=full_request
-                ):
+                # Use appropriate execution method based on framework
+                if selected_framework == "deepagents":
+                    # DeepAgents uses execute_workflow method
+                    execution_stream = workflow.execute_workflow(
+                        user_request=full_request,
+                        session_id=request.session_id,
+                        workspace=workspace
+                    )
+                else:
+                    # Standard workflow uses execute_stream method
+                    execution_stream = workflow.execute_stream(
+                        user_request=full_request
+                    )
+
+                async for update in execution_stream:
                     # Auto-save artifacts to workspace
                     if update.get("type") == "artifact" and update.get("artifact"):
                         save_result = write_artifact_to_workspace(update["artifact"])

@@ -372,11 +372,137 @@ Ensure all dependencies are installed and the virtual environment is activated.
 </context_awareness>
 ```
 
+### v2.1 - DeepAgents Integration (December 2025)
+
+**Dual Framework Architecture:**
+- 🔀 **Framework Selection**: Choose between Standard (LangChain) and DeepAgents workflow frameworks
+- 🎛️ **Per-Session Configuration**: Each session can use a different framework independently
+- 🔄 **Runtime Switching**: Change frameworks on-the-fly via UI dropdown selector
+
+**DeepAgents Middleware Stack:**
+```python
+# DeepAgents provides advanced middleware capabilities
+DeepAgentWorkflowManager(
+    enable_todos=True,          # TodoListMiddleware: Built-in task tracking
+    enable_subagents=True,      # SubAgentMiddleware: Isolated sub-agent contexts
+    enable_summarization=True,  # SummarizationMiddleware: Auto-compress at 170k tokens
+    enable_filesystem=True      # FilesystemMiddleware: Persistent conversation state
+)
+```
+
+**Key Benefits:**
+
+1. **TodoListMiddleware** - Structured Task Tracking
+   - Automatic task creation from user requests
+   - Real-time progress updates in frontend
+   - Structured task state (pending, in_progress, completed)
+   - No manual checklist management needed
+
+2. **SubAgentMiddleware** - Isolated Execution Contexts
+   - Each sub-task runs in isolated context
+   - Prevents context pollution across tasks
+   - Cleaner state management
+   - Better error isolation
+
+3. **SummarizationMiddleware** - Automatic Context Management
+   - Auto-compresses conversation at 170k tokens
+   - No manual context truncation needed
+   - Preserves important information
+   - Prevents token limit overflow
+
+4. **FilesystemMiddleware** - Persistent Backend
+   - Conversations saved to `.deepagents/` directory
+   - Automatic state persistence
+   - Easy conversation recovery
+   - Filesystem-backed conversation history
+
+**Framework Comparison:**
+
+| Feature | Standard (LangChain) | DeepAgents |
+|---------|---------------------|------------|
+| **Task Tracking** | Manual checklist | TodoListMiddleware (automatic) |
+| **Context Management** | SharedContext (global) | SubAgentMiddleware (isolated) |
+| **Token Overflow** | Manual handling | Auto-summarization at 170k |
+| **Persistence** | Database (SQLite) | Filesystem + Database |
+| **Middleware** | Custom implementation | Built-in stack |
+| **Human-in-Loop** | Manual checkpoints | Built-in approval gates |
+
+**How to Use:**
+
+1. **Backend Setup:**
+   ```bash
+   # Install DeepAgents framework
+   pip install deepagents tavily-python
+   ```
+
+2. **Frontend - Select Framework:**
+   - Click the framework selector in the header (gear icon)
+   - Choose between "Standard" or "DeepAgents"
+   - Selection persists per session
+   - Switch anytime without losing conversation state
+
+3. **API Usage:**
+   ```python
+   # Select framework for session
+   POST /framework/select?session_id={id}&framework=deepagents
+
+   # Get current framework for session
+   GET /framework/session/{session_id}
+   ```
+
+**Implementation Details:**
+
+- **Backend:** `backend/app/agent/langchain/deepagent_workflow.py`
+- **Routes:** `backend/app/api/routes.py` (lines 239-284, 315-343, 420-431)
+- **Frontend UI:** `frontend/src/App.tsx` (framework selector dropdown)
+- **API Client:** `frontend/src/api/client.ts` (selectFramework, getSessionFramework methods)
+
+**Architecture Diagram:**
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      Workflow Execution                      │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────┐      ┌──────────────────────────┐  │
+│  │   Standard Mode     │      │    DeepAgents Mode       │  │
+│  ├─────────────────────┤      ├──────────────────────────┤  │
+│  │ - Manual Context    │      │ - TodoListMiddleware     │  │
+│  │ - SharedContext     │      │ - SubAgentMiddleware     │  │
+│  │ - Manual Tracking   │      │ - SummarizationMW        │  │
+│  │ - Database Persist  │      │ - FilesystemMW           │  │
+│  └──────────┬──────────┘      └────────────┬─────────────┘  │
+│             │                              │                │
+│             └──────────┬───────────────────┘                │
+│                        ▼                                    │
+│              ┌──────────────────┐                           │
+│              │  Common Workflow  │                           │
+│              │  - Planning       │                           │
+│              │  - Coding         │                           │
+│              │  - Review         │                           │
+│              └──────────────────┘                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Migration Path:**
+
+Existing sessions using standard framework continue to work. New features:
+- Per-session framework selection
+- Gradual migration supported
+- Both frameworks can run concurrently
+- No breaking changes to existing API
+
+**Performance Considerations:**
+
+- **Standard:** Lower overhead, faster startup
+- **DeepAgents:** Higher overhead, better for complex multi-step tasks
+- **Recommendation:** Use Standard for simple tasks, DeepAgents for complex workflows
+
 ## 📚 References
 
 - [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)
 - [LangChain Documentation](https://python.langchain.com)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph)
+- [DeepAgents Framework](https://github.com/langchain-ai/deepagents)
 - [vLLM Documentation](https://docs.vllm.ai)
 - [FastAPI Documentation](https://fastapi.tiangolo.com)
 - [React Documentation](https://react.dev)

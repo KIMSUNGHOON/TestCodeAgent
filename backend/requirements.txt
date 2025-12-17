@@ -32,6 +32,10 @@ langchain>=0.2.0
 langchain-openai>=0.1.0
 langgraph>=0.2.0
 
+# DeepAgents framework for advanced middleware
+deepagents>=0.1.0
+tavily-python>=0.3.0  # Web search for DeepAgents
+
 # Testing (dev dependencies)
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
