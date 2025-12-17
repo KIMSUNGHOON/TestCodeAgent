@@ -441,11 +441,11 @@ Examples:
                 agent_id=request.session_id,
                 model_name="gpt-4o",
                 temperature=0.7,
-                enable_todos=True,
                 enable_subagents=True,
-                enable_summarization=True,
                 enable_filesystem=True,
-                workspace=workspace  # Pass the correct workspace!
+                enable_parallel=True,
+                max_parallel_agents=25,
+                workspace=workspace
             )
             logger.info(f"Using DeepAgents framework for session {request.session_id} with workspace {workspace}")
         else:
