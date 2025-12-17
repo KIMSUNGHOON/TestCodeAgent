@@ -93,13 +93,39 @@ const ArtifactDisplay = ({ artifact, defaultExpanded }: ArtifactDisplayProps) =>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>
             <div className="flex-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-medium text-[#1A1A1A] font-mono">{artifact.filename}</span>
                 <span className="text-xs text-[#999999] uppercase bg-[#F5F4F2] px-2 py-0.5 rounded">{artifact.language}</span>
+                {/* File save status indicator */}
+                {artifact.saved !== undefined && (
+                  artifact.saved ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded border border-green-200">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                      Saved
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-red-700 bg-red-100 px-2 py-0.5 rounded border border-red-200">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Save Failed
+                    </span>
+                  )
+                )}
               </div>
               {/* File description if available */}
               {artifact.description && (
                 <p className="text-xs text-[#666666] mt-1 italic">{artifact.description}</p>
+              )}
+              {/* Saved path if available */}
+              {artifact.saved && artifact.saved_path && (
+                <p className="text-xs text-green-600 mt-1 font-mono">📁 {artifact.saved_path}</p>
+              )}
+              {/* Error message if save failed */}
+              {artifact.saved === false && artifact.error && (
+                <p className="text-xs text-red-600 mt-1">⚠️ {artifact.error}</p>
               )}
             </div>
           </div>

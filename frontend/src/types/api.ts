@@ -55,6 +55,10 @@ export interface Artifact {
   filename: string;
   content: string;
   description?: string;  // Optional description of the file's purpose
+  saved?: boolean;  // Whether the file was saved successfully
+  saved_path?: string | null;  // Path where the file was saved
+  saved_at?: string | null;  // Timestamp when file was saved
+  error?: string | null;  // Error message if save failed
 }
 
 export interface CompletedTask {

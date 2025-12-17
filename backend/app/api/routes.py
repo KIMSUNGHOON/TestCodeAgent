@@ -260,13 +260,21 @@ async def execute_workflow(request: ChatRequest):
         # Get or create workflow for session
         workflow = workflow_manager.get_or_create_workflow(request.session_id)
 
-        # Store workspace for this session if provided
-        workspace = request.workspace or _session_workspaces.get(request.session_id, "/home/user/workspace")
+        # Store base workspace for this session if provided
+        base_workspace = request.workspace or _session_workspaces.get(request.session_id, "/home/user/workspace")
+
+        # Create project-specific directory within workspace
+        # Use timestamp to create unique project folder
+        from datetime import datetime
+        project_name = f"project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        workspace = os.path.join(base_workspace, project_name)
+
         _session_workspaces[request.session_id] = workspace
 
-        # Ensure workspace exists
+        # Ensure project workspace exists
         if not os.path.exists(workspace):
             os.makedirs(workspace, exist_ok=True)
+            logger.info(f"Created project directory: {workspace}")
 
         # Build context-aware request
         context_str = ""
@@ -291,8 +299,9 @@ async def execute_workflow(request: ChatRequest):
             full_request = f"{context_str}\n<current_request>\n{request.message}\n</current_request>"
 
         # Helper to write artifact to workspace
-        def write_artifact_to_workspace(artifact: dict) -> str:
-            """Write artifact to workspace and return file path."""
+        def write_artifact_to_workspace(artifact: dict) -> dict:
+            """Write artifact to workspace and return save status."""
+            from datetime import datetime
             try:
                 filename = artifact.get("filename", "code.py")
                 content = artifact.get("content", "")
@@ -307,10 +316,20 @@ async def execute_workflow(request: ChatRequest):
                     f.write(content)
 
                 logger.info(f"Auto-saved artifact to: {file_path}")
-                return file_path
+                return {
+                    "saved": True,
+                    "saved_path": file_path,
+                    "saved_at": datetime.now().isoformat(),
+                    "error": None
+                }
             except Exception as e:
                 logger.error(f"Failed to auto-save artifact: {e}")
-                return ""
+                return {
+                    "saved": False,
+                    "saved_path": None,
+                    "saved_at": None,
+                    "error": str(e)
+                }
 
         # Create streaming response
         async def generate():
@@ -320,16 +339,14 @@ async def execute_workflow(request: ChatRequest):
                 ):
                     # Auto-save artifacts to workspace
                     if update.get("type") == "artifact" and update.get("artifact"):
-                        saved_path = write_artifact_to_workspace(update["artifact"])
-                        if saved_path:
-                            update["artifact"]["saved_path"] = saved_path
+                        save_result = write_artifact_to_workspace(update["artifact"])
+                        update["artifact"].update(save_result)
 
                     # Also save artifacts from completed updates
                     if update.get("type") == "completed" and update.get("artifacts"):
                         for artifact in update["artifacts"]:
-                            saved_path = write_artifact_to_workspace(artifact)
-                            if saved_path:
-                                artifact["saved_path"] = saved_path
+                            save_result = write_artifact_to_workspace(artifact)
+                            artifact.update(save_result)
 
                     # Send update as JSON
                     yield json.dumps(update) + "\n"
