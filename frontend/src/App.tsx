@@ -1,7 +1,7 @@
 /**
  * Main App component - Unified AI Code Assistant
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import WorkflowInterface from './components/WorkflowInterface';
 import WorkspaceSettings from './components/WorkspaceSettings';
 import Terminal from './components/Terminal';
@@ -17,7 +17,7 @@ interface FrameworkInfo {
 }
 
 function App() {
-  const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
+  const [sessionId] = useState(() => `session-${Date.now()}`);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
   const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
   const [showWorkspaceSettings, setShowWorkspaceSettings] = useState(false);
@@ -55,12 +55,6 @@ function App() {
     };
     loadSessionFramework();
   }, [sessionId]);
-
-  const handleNewConversation = useCallback(() => {
-    const newSessionId = `session-${Date.now()}`;
-    setSessionId(newSessionId);
-    setLoadedWorkflowState([]);
-  }, []);
 
   const handleWorkspaceChange = async (newWorkspace: string) => {
     setWorkspace(newWorkspace);
