@@ -191,9 +191,12 @@ export interface WorkflowUpdate {
   agent: string;
   agent_label?: string;  // Custom display name for the agent (task-based)
   task_description?: string;  // Description of what this agent is doing
-  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision' | 'mode_selection' | 'parallel_start' | 'parallel_batch' | 'parallel_complete' | 'shared_context' | 'code_preview';
+  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision' | 'mode_selection' | 'parallel_start' | 'parallel_batch' | 'parallel_complete' | 'shared_context' | 'code_preview' | 'project_info';
   status: 'running' | 'completed' | 'error' | 'finished';
   message?: string;
+  // Project info fields
+  project_name?: string;
+  full_path?: string;
   content?: string;
   items?: ChecklistItem[];
   artifact?: Artifact;

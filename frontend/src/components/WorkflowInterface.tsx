@@ -290,6 +290,14 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
           try {
             const update: WorkflowUpdate = JSON.parse(line);
 
+            // Handle project info message
+            if (update.type === 'project_info') {
+              setProjectName(update.project_name || '');
+              console.log(`Working on project: ${update.project_name}`);
+              // Optionally show a notification to the user
+              continue; // Don't add to updates list
+            }
+
             // Track all updates for saving
             const existingIndex = allUpdates.findIndex(u => u.agent === update.agent);
             if (existingIndex >= 0) {
@@ -803,6 +811,11 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                     <div>
                       <h3 className="font-semibold text-[#1A1A1A]">
                         {isRunning ? 'Workflow In Progress' : 'Workflow Completed'}
+                        {projectName && (
+                          <span className="ml-2 text-sm font-normal text-[#DA7756]">
+                            📁 {projectName}
+                          </span>
+                        )}
                       </h3>
                       <p className="text-sm text-[#666666]">
                         {updates.length} agent{updates.length > 1 ? 's' : ''} • {

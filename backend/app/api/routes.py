@@ -310,6 +310,59 @@ async def execute_workflow(request: ChatRequest):
         Streaming response with workflow progress
     """
     import os
+    import re
+    from datetime import datetime
+
+    async def suggest_project_name(user_message: str) -> str:
+        """Use LLM to suggest a project name based on user's prompt."""
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage, SystemMessage
+
+            # Use fast model for project name suggestion
+            llm = ChatOpenAI(
+                base_url=settings.vllm_coding_endpoint,
+                model=settings.coding_model,
+                temperature=0.3,
+                api_key="EMPTY",
+                max_tokens=50
+            )
+
+            messages = [
+                SystemMessage(content="""You are a project naming assistant. Given a user's request, suggest a concise, descriptive project name.
+
+Rules:
+- Use lowercase with underscores (e.g., todo_app, blog_system, user_auth)
+- Keep it short (2-4 words max)
+- Make it descriptive of the main feature/purpose
+- Return ONLY the project name, nothing else
+
+Examples:
+"Create a todo list app" -> todo_app
+"Build a blog system with authentication" -> blog_system
+"Make a REST API for users" -> user_api
+"Implement user authentication" -> user_auth
+"Create a chat application" -> chat_app"""),
+                HumanMessage(content=f"Suggest a project name for: {user_message[:200]}")
+            ]
+
+            response = await llm.ainvoke(messages)
+            project_name = response.content.strip().lower()
+
+            # Clean up the project name
+            project_name = re.sub(r'[^a-z0-9_]', '_', project_name)
+            project_name = re.sub(r'_+', '_', project_name)
+            project_name = project_name.strip('_')
+
+            # Fallback if empty or too long
+            if not project_name or len(project_name) > 50:
+                project_name = f"project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+            logger.info(f"Suggested project name: {project_name}")
+            return project_name
+        except Exception as e:
+            logger.warning(f"Failed to suggest project name: {e}, using timestamp")
+            return f"project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     try:
         # Get or reuse workspace for this session FIRST (before creating workflow)
@@ -322,20 +375,25 @@ async def execute_workflow(request: ChatRequest):
             # Create new workspace for first request in this session
             base_workspace = request.workspace or "/home/user/workspace"
 
-            # Check if the provided workspace is already a project directory
-            # to prevent nesting (e.g., /workspace/project_A/project_B)
-            import re
-            from datetime import datetime
-
-            if re.match(r'.*project_\d{8}_\d{6}$', base_workspace):
-                # Already a project directory, use it directly
+            # Check if it's already a specific project directory
+            # Pattern: ends with a project name (not timestamp-based)
+            if base_workspace != "/home/user/workspace" and os.path.basename(base_workspace) not in ["workspace", "."]:
+                # User specified a specific project directory, use it directly
                 workspace = base_workspace
-                logger.info(f"Using existing project workspace for session {request.session_id}: {workspace}")
+                logger.info(f"Using user-specified project workspace: {workspace}")
             else:
-                # Create project-specific directory within base workspace
-                project_name = f"project_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                workspace = os.path.join(base_workspace, project_name)
-                logger.info(f"Created new workspace for session {request.session_id}: {workspace}")
+                # Let LLM suggest a project name based on the user's request
+                project_name = await suggest_project_name(request.message)
+
+                # Check if project already exists, add suffix if needed
+                candidate_workspace = os.path.join(base_workspace, project_name)
+                counter = 1
+                while os.path.exists(candidate_workspace):
+                    candidate_workspace = os.path.join(base_workspace, f"{project_name}_{counter}")
+                    counter += 1
+
+                workspace = candidate_workspace
+                logger.info(f"Created new project workspace '{os.path.basename(workspace)}' for session {request.session_id}")
 
             # Store workspace for this session
             _session_workspaces[request.session_id] = workspace
@@ -434,6 +492,19 @@ async def execute_workflow(request: ChatRequest):
         # Create streaming response
         async def generate():
             try:
+                # Send project information to frontend
+                project_name = os.path.basename(workspace)
+                base_workspace_path = os.path.dirname(workspace)
+
+                yield json.dumps({
+                    "type": "project_info",
+                    "project_name": project_name,
+                    "workspace": base_workspace_path,
+                    "full_path": workspace,
+                    "session_id": request.session_id,
+                    "message": f"Working on project: {project_name}"
+                }) + "\n"
+
                 # Use appropriate execution method based on framework
                 # Pass workspace context to both frameworks
                 workflow_context = {
