@@ -1,6 +1,7 @@
 """API routes for the coding agent."""
 import logging
 import json
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.api.models import (
 from app.agent import get_agent_manager, get_workflow_manager, get_framework_info
 from app.core.config import settings
 from app.db import get_db, ConversationRepository
+from app.utils.security import sanitize_path, SecurityError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -483,21 +485,29 @@ Examples:
                 filename = artifact.get("filename", "code.py")
                 content = artifact.get("content", "")
 
-                file_path = os.path.join(workspace, filename)
-                file_dir = os.path.dirname(file_path)
+                # Sanitize path to prevent traversal attacks
+                file_path = sanitize_path(filename, workspace, allow_creation=True)
 
-                if file_dir and not os.path.exists(file_dir):
-                    os.makedirs(file_dir, exist_ok=True)
+                # Create parent directories if needed
+                file_path.parent.mkdir(parents=True, exist_ok=True)
 
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
+                # Write file using Path object
+                file_path.write_text(content, encoding='utf-8')
 
                 logger.info(f"Auto-saved artifact to: {file_path}")
                 return {
                     "saved": True,
-                    "saved_path": file_path,
+                    "saved_path": str(file_path),
                     "saved_at": datetime.now().isoformat(),
                     "error": None
+                }
+            except SecurityError as e:
+                logger.warning(f"Security violation in artifact save: {e}")
+                return {
+                    "saved": False,
+                    "saved_path": None,
+                    "saved_at": None,
+                    "error": f"Invalid path: {artifact.get('filename', 'unknown')}"
                 }
             except Exception as e:
                 logger.error(f"Failed to auto-save artifact: {e}")
@@ -1297,20 +1307,25 @@ async def set_workspace(request: dict):
     Returns:
         Success status and current workspace
     """
-    import os
+    BASE_WORKSPACE = "/home/user/workspace"
     session_id = request.get("session_id", "default")
-    workspace_path = request.get("workspace_path", "/home/user/workspace")
+    workspace_path = request.get("workspace_path", BASE_WORKSPACE)
 
     try:
+        # Sanitize workspace path to prevent path traversal
+        validated_path = sanitize_path(workspace_path, BASE_WORKSPACE, allow_creation=True)
+
         # Create directory if it doesn't exist
-        if not os.path.exists(workspace_path):
-            os.makedirs(workspace_path, exist_ok=True)
+        validated_path.mkdir(parents=True, exist_ok=True)
 
-        _session_workspaces[session_id] = workspace_path
-        logger.info(f"Set workspace for {session_id}: {workspace_path}")
+        _session_workspaces[session_id] = str(validated_path)
+        logger.info(f"Set workspace for {session_id}: {validated_path}")
 
-        return {"success": True, "workspace": workspace_path}
+        return {"success": True, "workspace": str(validated_path)}
 
+    except SecurityError as e:
+        logger.warning(f"Security violation in set_workspace: {e}")
+        return {"success": False, "workspace": None, "error": "Invalid workspace path"}
     except Exception as e:
         logger.error(f"Error setting workspace: {e}")
         return {"success": False, "workspace": workspace_path, "error": str(e)}
@@ -1340,31 +1355,31 @@ async def write_workspace_file(request: dict):
     Returns:
         Success status and file path
     """
-    import os
     session_id = request.get("session_id", "default")
     filename = request.get("filename", "")
     content = request.get("content", "")
 
+    if not filename:
+        return {"success": False, "error": "Filename is required"}
+
     try:
         workspace = _session_workspaces.get(session_id, "/home/user/workspace")
 
-        # Ensure workspace exists
-        if not os.path.exists(workspace):
-            os.makedirs(workspace, exist_ok=True)
+        # Sanitize file path to prevent path traversal
+        file_path = sanitize_path(filename, workspace, allow_creation=True)
 
-        # Handle nested paths
-        file_path = os.path.join(workspace, filename)
-        file_dir = os.path.dirname(file_path)
-        if file_dir and not os.path.exists(file_dir):
-            os.makedirs(file_dir, exist_ok=True)
+        # Create parent directories if needed
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Write file
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        file_path.write_text(content, encoding='utf-8')
 
         logger.info(f"Wrote file: {file_path}")
-        return {"success": True, "path": file_path}
+        return {"success": True, "path": str(file_path)}
 
+    except SecurityError as e:
+        logger.warning(f"Security violation in write_workspace_file: {e}")
+        return {"success": False, "error": "Invalid file path"}
     except Exception as e:
         logger.error(f"Error writing file: {e}")
         return {"success": False, "error": str(e)}
@@ -1381,19 +1396,25 @@ async def read_workspace_file(session_id: str = "default", filename: str = ""):
     Returns:
         File content
     """
-    import os
+    if not filename:
+        return {"success": False, "error": "Filename is required"}
+
     try:
         workspace = _session_workspaces.get(session_id, "/home/user/workspace")
-        file_path = os.path.join(workspace, filename)
 
-        if not os.path.exists(file_path):
+        # Sanitize file path to prevent path traversal
+        file_path = sanitize_path(filename, workspace, allow_creation=False)
+
+        if not file_path.exists():
             return {"success": False, "error": f"File not found: {filename}"}
 
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        content = file_path.read_text(encoding='utf-8')
 
         return {"success": True, "content": content}
 
+    except SecurityError as e:
+        logger.warning(f"Security violation in read_workspace_file: {e}")
+        return {"success": False, "error": "Invalid file path"}
     except Exception as e:
         logger.error(f"Error reading file: {e}")
         return {"success": False, "error": str(e)}
@@ -1412,38 +1433,50 @@ async def list_projects(base_workspace: str = "/home/user/workspace"):
     import os
     from datetime import datetime
 
+    BASE_ALLOWED = "/home/user/workspace"
+
     try:
-        if not os.path.exists(base_workspace):
+        # Validate base_workspace path
+        validated_base = sanitize_path(base_workspace, BASE_ALLOWED, allow_creation=False)
+
+        if not validated_base.exists():
             return {"success": True, "projects": []}
 
         projects = []
-        for item in os.listdir(base_workspace):
-            item_path = os.path.join(base_workspace, item)
-            # Include all directories except workspace itself and common ignored directories
-            if os.path.isdir(item_path) and item not in ['workspace', '.git', 'node_modules', '__pycache__', 'venv']:
-                try:
-                    # Get directory stats
-                    stats = os.stat(item_path)
-                    modified_time = datetime.fromtimestamp(stats.st_mtime).isoformat()
+        for item in validated_base.iterdir():
+            if not item.is_dir():
+                continue
 
-                    # Count files in project
-                    file_count = sum(len(files) for _, _, files in os.walk(item_path))
+            # Skip common ignored directories
+            if item.name in ['workspace', '.git', 'node_modules', '__pycache__', 'venv']:
+                continue
 
-                    projects.append({
-                        "name": item,
-                        "path": item_path,
-                        "modified": modified_time,
-                        "file_count": file_count
-                    })
-                except Exception as e:
-                    logger.warning(f"Error reading project {item}: {e}")
-                    continue
+            try:
+                # Get directory stats
+                stats = item.stat()
+                modified_time = datetime.fromtimestamp(stats.st_mtime).isoformat()
+
+                # Count files in project
+                file_count = sum(1 for _ in item.rglob('*') if _.is_file())
+
+                projects.append({
+                    "name": item.name,
+                    "path": str(item),
+                    "modified": modified_time,
+                    "file_count": file_count
+                })
+            except Exception as e:
+                logger.warning(f"Error reading project {item.name}: {e}")
+                continue
 
         # Sort by modification time (most recent first)
         projects.sort(key=lambda x: x["modified"], reverse=True)
 
         return {"success": True, "projects": projects}
 
+    except SecurityError as e:
+        logger.warning(f"Security violation in list_projects: {e}")
+        return {"success": False, "error": "Invalid workspace path"}
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
         return {"success": False, "error": str(e)}
