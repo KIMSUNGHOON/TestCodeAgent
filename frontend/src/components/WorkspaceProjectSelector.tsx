@@ -83,7 +83,7 @@ const WorkspaceProjectSelector = ({
         <span className="font-medium text-[#1A1A1A] max-w-[150px] truncate">
           {displayProjectName}
         </span>
-        <svg className={`w-4 h-4 text-[#666666] transition-transform ${showDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <svg className={`w-4 h-4 text-[#666666] transition-transform ${showDropdown ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
         </svg>
       </button>
@@ -95,7 +95,7 @@ const WorkspaceProjectSelector = ({
           <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />
 
           {/* Dropdown Content */}
-          <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-[#E5E5E5] z-50 max-h-96 overflow-hidden flex flex-col">
+          <div className="absolute bottom-full left-0 mb-2 w-80 bg-white rounded-lg shadow-lg border border-[#E5E5E5] z-50 max-h-96 overflow-hidden flex flex-col">
             {/* Workspace Section */}
             <div className="p-3 border-b border-[#E5E5E5] bg-[#F9F9F9]">
               <div className="flex items-center justify-between mb-2">
