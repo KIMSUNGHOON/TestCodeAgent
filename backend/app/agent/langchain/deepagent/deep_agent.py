@@ -86,8 +86,10 @@ class DeepCodingAgent(BaseAgent):
             fs_backend = FilesystemBackend(root_dir="./workspace")
 
             # Create deep agent with coding-focused configuration
+            # Note: First parameter must be 'model', not as keyword argument 'tools'
             self.agent = create_deep_agent(
-                tools=[],  # Tools will be added based on requirements
+                model=llm,  # First parameter: the LLM model to use
+                tools=[],   # Tools will be added based on requirements
                 system_prompt="""You are an advanced coding assistant with the ability to:
 1. Read and write files
 2. Execute shell commands safely

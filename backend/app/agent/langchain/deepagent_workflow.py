@@ -136,14 +136,28 @@ class DeepAgentWorkflowManager(BaseWorkflow):
             except Exception as e:
                 logger.warning(f"Could not initialize SubAgentMiddleware: {e}")
 
-        # Create DeepAgent - Note: This may not work as expected
-        # DeepAgents framework may have different API than documented
+        # Create DeepAgent with correct API (v0.3.0)
+        # First parameter is 'model', not 'llm'
+        # No 'agent_id' parameter exists
         try:
             self.agent = create_deep_agent(
-                llm=self.llm,
-                agent_id=agent_id
+                model=self.llm,  # First parameter is 'model'
+                tools=[],  # Empty tools for now
+                middleware=self.middleware_stack if self.middleware_stack else [],
+                system_prompt="""You are an advanced AI coding assistant with multi-agent workflow capabilities.
+
+Your role is to help users with software development tasks by:
+1. Planning complex coding tasks systematically
+2. Generating high-quality, well-structured code
+3. Reviewing and improving code iteratively
+4. Managing files and project structure
+
+Always prioritize code quality, maintainability, and best practices."""
             )
+            logger.info(f"DeepAgent created successfully for agent_id: {agent_id}")
         except Exception as e:
+            logger.error(f"Failed to create DeepAgent: {e}")
+            logger.exception("Full traceback:")
             print(f"Warning: Failed to create DeepAgent: {e}")
             print("Falling back to standard LLM usage")
             self.agent = self.llm
