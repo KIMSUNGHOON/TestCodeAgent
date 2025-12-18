@@ -301,3 +301,103 @@ export interface ConversationListResponse {
   limit: number;
   offset: number;
 }
+
+// ==================== LangGraph / Supervisor Types ====================
+
+/**
+ * Request to execute LangGraph workflow with Supervisor orchestration
+ */
+export interface LangGraphWorkflowRequest {
+  user_request: string;
+  workspace_root: string;
+  task_type?: 'implementation' | 'review' | 'testing' | 'security_audit' | 'general';
+  enable_debug?: boolean;
+}
+
+/**
+ * Supervisor analysis result
+ */
+export interface SupervisorAnalysis {
+  user_request: string;
+  complexity: 'simple' | 'moderate' | 'complex' | 'critical';
+  task_type: string;
+  required_agents: string[];
+  workflow_strategy: 'linear' | 'parallel_gates' | 'adaptive_loop' | 'staged_approval';
+  max_iterations: number;
+  requires_human_approval: boolean;
+  reasoning: string;  // DeepSeek-R1 <think> block
+}
+
+/**
+ * Real-time workflow event from SSE stream
+ */
+export interface LangGraphWorkflowEvent {
+  node: string;  // Current node executing (e.g., "coder", "reviewer", "rca_analyzer")
+  updates: Record<string, any>;  // State updates from node
+  status: 'running' | 'completed' | 'error' | 'blocked' | 'awaiting_approval';
+
+  // Optional fields based on node
+  supervisor_analysis?: SupervisorAnalysis;
+  workflow_graph?: WorkflowInfo;
+  debug_logs?: DebugLog[];
+  current_thinking?: string;  // DeepSeek-R1 <think> blocks
+  artifacts?: Artifact[];
+  review_feedback?: {
+    approved: boolean;
+    issues: string[];
+    suggestions: string[];
+    quality_score: number;
+  };
+  rca_analysis?: string;  // Root cause analysis
+  code_diffs?: CodeDiff[];
+}
+
+/**
+ * Debug log entry
+ */
+export interface DebugLog {
+  timestamp: string;
+  node: string;
+  agent: string;
+  event_type: 'thinking' | 'tool_call' | 'prompt' | 'result' | 'error';
+  content: string;
+  metadata?: Record<string, any>;
+  token_usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
+
+/**
+ * Code diff for refinement
+ */
+export interface CodeDiff {
+  file_path: string;
+  original_content: string;
+  modified_content: string;
+  diff_hunks: string[];
+  description: string;
+}
+
+/**
+ * Human approval request
+ */
+export interface LangGraphApprovalRequest {
+  session_id: string;
+  approved: boolean;
+  message?: string;
+}
+
+/**
+ * Workflow execution status
+ */
+export interface WorkflowExecutionStatus {
+  session_id: string;
+  status: 'running' | 'completed' | 'failed' | 'self_healing' | 'blocked' | 'awaiting_approval';
+  current_node?: string;
+  iteration?: number;
+  max_iterations?: number;
+  artifacts?: Artifact[];
+  error_log?: string[];
+}

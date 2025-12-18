@@ -573,6 +573,103 @@ class ApiClient {
       };
     }
   }
+
+  // ==================== LangGraph / Supervisor Methods ====================
+
+  /**
+   * Execute LangGraph workflow with Supervisor orchestration (SSE streaming)
+   *
+   * This method streams real-time updates from the Supervisor-led dynamic workflow:
+   * 1. Supervisor analyzes the request (DeepSeek-R1)
+   * 2. Dynamic DAG is constructed based on complexity
+   * 3. Agents execute in sequence/parallel with RCA on failures
+   * 4. Real-time <think> blocks, artifacts, and debug logs streamed to UI
+   *
+   * @param request - Workflow execution request
+   * @returns AsyncGenerator yielding LangGraphWorkflowEvent objects
+   */
+  async *executeLangGraphWorkflow(request: any): AsyncGenerator<any, void, unknown> {
+    try {
+      const baseURL = this.client.defaults.baseURL || '/api';
+      const response = await fetch(`${baseURL}/langgraph/execute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events (format: "data: {...}\n\n")
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';  // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);  // Remove "data: " prefix
+              try {
+                const event = JSON.parse(data);
+                yield event;
+              } catch (parseError) {
+                console.error('Failed to parse SSE event:', data, parseError);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error('LangGraph workflow stream error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Approve or reject changes in LangGraph workflow
+   *
+   * Used for human-in-the-loop approval in staged_approval workflow strategy.
+   *
+   * @param request - Approval request
+   * @returns Approval status
+   */
+  async approveLangGraphChanges(request: any): Promise<{
+    success: boolean;
+    message: string;
+    resumed: boolean;
+  }> {
+    const response = await this.client.post('/langgraph/approve', request);
+    return response.data;
+  }
+
+  /**
+   * Get current LangGraph workflow status
+   *
+   * @param sessionId - Session ID
+   * @returns Workflow execution status
+   */
+  async getLangGraphWorkflowStatus(sessionId: string): Promise<any> {
+    const response = await this.client.get(`/langgraph/status/${sessionId}`);
+    return response.data;
+  }
 }
 
 // Export singleton instance
