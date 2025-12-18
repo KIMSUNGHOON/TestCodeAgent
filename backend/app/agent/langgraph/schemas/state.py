@@ -128,6 +128,9 @@ class QualityGateState(TypedDict, total=False):
     code_diffs: Annotated[List[CodeDiff], add]  # All code diffs generated
     is_fixed: bool  # True if refiner successfully fixed issues
     refinement_iteration: int  # Number of refinement loops
+    review_results: Annotated[List[str], add]  # CRITICAL: All review results (prevents data loss)
+    rca_analysis: Optional[str]  # Root Cause Analysis from DeepSeek-R1
+    last_failure_reason: Optional[str]  # Why last iteration failed
 
     # ==================== Human Approval (NEW) ====================
     approval_status: ApprovalStatus  # Human approval status
@@ -212,6 +215,9 @@ def create_initial_state(
         code_diffs=[],
         is_fixed=False,
         refinement_iteration=0,
+        review_results=[],  # CRITICAL: Initialize to prevent data loss
+        rca_analysis=None,
+        last_failure_reason=None,
 
         # Human approval (NEW)
         approval_status="pending",
