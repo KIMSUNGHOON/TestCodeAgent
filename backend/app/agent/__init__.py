@@ -20,7 +20,7 @@ Usage:
     from app.agent.microsoft import agent_manager as ms_agent_manager
     from app.agent.langchain import agent_manager as lc_agent_manager
 """
-from app.agent.factory import (
+from backend.app.agent.factory import (
     get_agent_manager,
     get_workflow_manager,
     get_framework_info,
@@ -30,7 +30,7 @@ from app.agent.factory import (
 )
 
 # Re-export base interfaces
-from app.agent.base.interface import (
+from backend.app.agent.base.interface import (
     BaseAgent,
     BaseAgentManager,
     BaseWorkflow,
