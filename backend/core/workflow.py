@@ -45,7 +45,7 @@ class DynamicWorkflowBuilder:
             from app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
             from app.agent.langgraph.nodes.security_gate import security_gate_node
             from app.agent.langgraph.nodes.qa_gate import qa_gate_node
-            from app.agent.langgraph.nodes.aggregator import aggregator_node
+            from app.agent.langgraph.nodes.aggregator import quality_aggregator_node
             from app.agent.langgraph.nodes.persistence import persistence_node
 
             self._nodes = {
@@ -55,7 +55,7 @@ class DynamicWorkflowBuilder:
                 "rca_analyzer": rca_analyzer_node,
                 "security_gate": security_gate_node,
                 "qa_gate": qa_gate_node,
-                "aggregator": aggregator_node,
+                "aggregator": quality_aggregator_node,
                 "persistence": persistence_node,
             }
         return self._nodes

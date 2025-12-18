@@ -56,7 +56,7 @@ class AgentRegistry:
         from app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
         from app.agent.langgraph.nodes.security_gate import security_gate_node
         from app.agent.langgraph.nodes.qa_gate import qa_gate_node
-        from app.agent.langgraph.nodes.aggregator import aggregator_node
+        from app.agent.langgraph.nodes.aggregator import quality_aggregator_node
         from app.agent.langgraph.nodes.persistence import persistence_node
 
         # Register all agents
@@ -125,7 +125,7 @@ class AgentRegistry:
                 name="aggregator",
                 capability="aggregation",
                 description="Aggregates quality gate results and makes decisions",
-                node_function=aggregator_node,
+                node_function=quality_aggregator_node,
                 model="qwen-coder",
                 required_for=["review", "testing", "security_audit"],
                 optional_for=["implementation"],

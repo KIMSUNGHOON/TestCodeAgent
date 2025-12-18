@@ -90,43 +90,31 @@ class UnifiedLangGraphWorkflow:
             yield {
                 "node": "supervisor",
                 "updates": {
-                    "supervisor_analysis": {
-                        "user_request": supervisor_analysis.user_request,
-                        "complexity": supervisor_analysis.complexity,
-                        "task_type": supervisor_analysis.task_type,
-                        "required_agents": supervisor_analysis.required_agents,
-                        "workflow_strategy": supervisor_analysis.workflow_strategy,
-                        "max_iterations": supervisor_analysis.max_iterations,
-                        "requires_human_approval": supervisor_analysis.requires_human_approval,
-                        "reasoning": supervisor_analysis.reasoning
-                    },
-                    "current_thinking": supervisor_analysis.reasoning,  # DeepSeek-R1 <think> block
+                    "supervisor_analysis": supervisor_analysis,  # Already a dict
+                    "current_thinking": supervisor_analysis["reasoning"],  # DeepSeek-R1 <think> block
                 },
                 "status": "running",
                 "timestamp": datetime.utcnow().isoformat()
             }
 
             logger.info(f"✅ Supervisor Analysis Complete:")
-            logger.info(f"   Complexity: {supervisor_analysis.complexity}")
-            logger.info(f"   Task Type: {supervisor_analysis.task_type}")
-            logger.info(f"   Strategy: {supervisor_analysis.workflow_strategy}")
-            logger.info(f"   Required Agents: {supervisor_analysis.required_agents}")
+            logger.info(f"   Complexity: {supervisor_analysis['complexity']}")
+            logger.info(f"   Task Type: {supervisor_analysis['task_type']}")
+            logger.info(f"   Strategy: {supervisor_analysis['workflow_strategy']}")
+            logger.info(f"   Required Agents: {supervisor_analysis['required_agents']}")
 
             # STEP 2: Build dynamic workflow graph
             logger.info("🏗️  Step 2/3: Building Dynamic Workflow")
-            workflow_graph = create_workflow_from_supervisor_analysis(
-                supervisor_analysis,
-                self.workflow_builder
-            )
+            workflow_graph = create_workflow_from_supervisor_analysis(supervisor_analysis)
 
             # Yield workflow graph info to frontend
             yield {
                 "node": "workflow_builder",
                 "updates": {
                     "workflow_graph": {
-                        "strategy": supervisor_analysis.workflow_strategy,
-                        "nodes": supervisor_analysis.required_agents,
-                        "max_iterations": supervisor_analysis.max_iterations
+                        "strategy": supervisor_analysis["workflow_strategy"],
+                        "nodes": supervisor_analysis["required_agents"],
+                        "max_iterations": supervisor_analysis["max_iterations"]
                     }
                 },
                 "status": "running",
@@ -134,8 +122,8 @@ class UnifiedLangGraphWorkflow:
             }
 
             logger.info(f"✅ Dynamic Workflow Built")
-            logger.info(f"   Strategy: {supervisor_analysis.workflow_strategy}")
-            logger.info(f"   Nodes: {len(supervisor_analysis.required_agents)}")
+            logger.info(f"   Strategy: {supervisor_analysis['workflow_strategy']}")
+            logger.info(f"   Nodes: {len(supervisor_analysis['required_agents'])}")
 
             # STEP 3: Execute the dynamically built workflow
             logger.info("⚙️  Step 3/3: Executing Workflow")
@@ -144,18 +132,18 @@ class UnifiedLangGraphWorkflow:
             initial_state = create_initial_state(
                 user_request=user_request,
                 workspace_root=workspace_root,
-                task_type=supervisor_analysis.task_type,  # type: ignore
+                task_type=supervisor_analysis["task_type"],  # type: ignore
                 enable_debug=enable_debug
             )
 
             # Add supervisor analysis to state
-            initial_state["supervisor_analysis"] = supervisor_analysis.reasoning
-            initial_state["max_iterations"] = supervisor_analysis.max_iterations
+            initial_state["supervisor_analysis"] = supervisor_analysis["reasoning"]
+            initial_state["max_iterations"] = supervisor_analysis["max_iterations"]
 
             # Execute graph with streaming
             config = {
                 "configurable": {"thread_id": f"unified_{datetime.utcnow().timestamp()}"},
-                "recursion_limit": supervisor_analysis.max_iterations * 10  # Dynamic limit
+                "recursion_limit": supervisor_analysis["max_iterations"] * 10  # Dynamic limit
             }
 
             async for event in workflow_graph.astream(initial_state, config):
