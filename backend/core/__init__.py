@@ -6,9 +6,9 @@ This package contains the Supervisor-led dynamic workflow system:
 - agent_registry: Available agents and their capabilities
 """
 
-from backend.core.supervisor import SupervisorAgent, TaskComplexity, AgentCapability
-from backend.core.workflow import DynamicWorkflowBuilder, create_workflow_from_supervisor_analysis
-from backend.core.agent_registry import AgentRegistry, AgentInfo, get_registry, reset_registry
+from core.supervisor import SupervisorAgent, TaskComplexity, AgentCapability
+from core.workflow import DynamicWorkflowBuilder, create_workflow_from_supervisor_analysis
+from core.agent_registry import AgentRegistry, AgentInfo, get_registry, reset_registry
 
 __version__ = "1.0.0"
 

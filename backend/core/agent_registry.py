@@ -50,14 +50,14 @@ class AgentRegistry:
         """Initialize registry with all available agents"""
 
         # Import all node functions (lazy)
-        from backend.app.agent.langgraph.nodes.coder import coder_node
-        from backend.app.agent.langgraph.nodes.reviewer import reviewer_node
-        from backend.app.agent.langgraph.nodes.refiner import refiner_node
-        from backend.app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
-        from backend.app.agent.langgraph.nodes.security_gate import security_gate_node
-        from backend.app.agent.langgraph.nodes.qa_gate import qa_gate_node
-        from backend.app.agent.langgraph.nodes.aggregator import aggregator_node
-        from backend.app.agent.langgraph.nodes.persistence import persistence_node
+        from app.agent.langgraph.nodes.coder import coder_node
+        from app.agent.langgraph.nodes.reviewer import reviewer_node
+        from app.agent.langgraph.nodes.refiner import refiner_node
+        from app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
+        from app.agent.langgraph.nodes.security_gate import security_gate_node
+        from app.agent.langgraph.nodes.qa_gate import qa_gate_node
+        from app.agent.langgraph.nodes.aggregator import aggregator_node
+        from app.agent.langgraph.nodes.persistence import persistence_node
 
         # Register all agents
         agents = [

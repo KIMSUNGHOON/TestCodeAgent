@@ -17,7 +17,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 # Note: Node imports are lazy-loaded in _get_nodes() to avoid circular dependencies
 if TYPE_CHECKING:
-    from backend.app.agent.langgraph.schemas.state import QualityGateState
+    from app.agent.langgraph.schemas.state import QualityGateState
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,14 @@ class DynamicWorkflowBuilder:
     def _get_nodes(self):
         """Lazy-load node functions to avoid circular imports"""
         if self._nodes is None:
-            from backend.app.agent.langgraph.nodes.coder import coder_node
-            from backend.app.agent.langgraph.nodes.reviewer import reviewer_node
-            from backend.app.agent.langgraph.nodes.refiner import refiner_node
-            from backend.app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
-            from backend.app.agent.langgraph.nodes.security_gate import security_gate_node
-            from backend.app.agent.langgraph.nodes.qa_gate import qa_gate_node
-            from backend.app.agent.langgraph.nodes.aggregator import aggregator_node
-            from backend.app.agent.langgraph.nodes.persistence import persistence_node
+            from app.agent.langgraph.nodes.coder import coder_node
+            from app.agent.langgraph.nodes.reviewer import reviewer_node
+            from app.agent.langgraph.nodes.refiner import refiner_node
+            from app.agent.langgraph.nodes.rca_analyzer import rca_analyzer_node
+            from app.agent.langgraph.nodes.security_gate import security_gate_node
+            from app.agent.langgraph.nodes.qa_gate import qa_gate_node
+            from app.agent.langgraph.nodes.aggregator import aggregator_node
+            from app.agent.langgraph.nodes.persistence import persistence_node
 
             self._nodes = {
                 "coder": coder_node,
@@ -104,7 +104,7 @@ class DynamicWorkflowBuilder:
         logger.info("📏 Building LINEAR workflow")
 
         # Lazy-load QualityGateState
-        from backend.app.agent.langgraph.schemas.state import QualityGateState
+        from app.agent.langgraph.schemas.state import QualityGateState
 
         nodes = self._get_nodes()
         workflow = StateGraph(QualityGateState)
@@ -139,7 +139,7 @@ class DynamicWorkflowBuilder:
         logger.info("🔀 Building PARALLEL GATES workflow")
 
         # Lazy-load QualityGateState
-        from backend.app.agent.langgraph.schemas.state import QualityGateState
+        from app.agent.langgraph.schemas.state import QualityGateState
 
         nodes = self._get_nodes()
         workflow = StateGraph(QualityGateState)
@@ -207,7 +207,7 @@ class DynamicWorkflowBuilder:
         logger.info("🔄 Building ADAPTIVE LOOP workflow")
 
         # Lazy-load QualityGateState
-        from backend.app.agent.langgraph.schemas.state import QualityGateState
+        from app.agent.langgraph.schemas.state import QualityGateState
 
         nodes = self._get_nodes()
         workflow = StateGraph(QualityGateState)
@@ -268,7 +268,7 @@ class DynamicWorkflowBuilder:
         logger.info("👤 Building STAGED APPROVAL workflow")
 
         # Lazy-load QualityGateState
-        from backend.app.agent.langgraph.schemas.state import QualityGateState
+        from app.agent.langgraph.schemas.state import QualityGateState
 
         nodes = self._get_nodes()
         workflow = StateGraph(QualityGateState)
