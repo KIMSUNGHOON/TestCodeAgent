@@ -501,6 +501,19 @@ Always prioritize code quality, collaboration, and efficiency."""
             "timestamp": datetime.now().isoformat()
         }
 
+        # Phase 5: Source Tree Display
+        source_tree_info = self._generate_source_tree(self.workspace)
+        yield {
+            "agent": "FileSystemAgent",
+            "type": "source_tree",
+            "status": "completed",
+            "message": f"📂 Generated {source_tree_info['file_count']} files",
+            "source_tree": source_tree_info['tree'],
+            "files": source_tree_info['files'],
+            "workspace": source_tree_info['workspace'],
+            "timestamp": datetime.now().isoformat()
+        }
+
     async def _execute_parallel_coding(
         self,
         tasks: List[Dict],
@@ -509,9 +522,13 @@ Always prioritize code quality, collaboration, and efficiency."""
         shared_context: SharedContext,
         optimal_parallel: int
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Execute multiple coding tasks in parallel with DeepAgents."""
+        """
+        Execute multiple coding tasks in parallel with real-time progress updates.
 
+        Uses asyncio.Queue to stream progress from parallel agents.
+        """
         all_artifacts = []
+        progress_queue = asyncio.Queue()
 
         # Process tasks in batches
         batch_count = (len(tasks) + optimal_parallel - 1) // optimal_parallel
@@ -534,7 +551,7 @@ Always prioritize code quality, collaboration, and efficiency."""
                 "timestamp": datetime.now().isoformat()
             }
 
-            # Create parallel tasks
+            # Create parallel tasks with progress queue
             pending_tasks = []
             for idx, task in enumerate(batch_tasks):
                 agent_id = f"CodingAgent_{batch_start + idx + 1}"
@@ -542,29 +559,69 @@ Always prioritize code quality, collaboration, and efficiency."""
                     asyncio.create_task(
                         self._execute_single_coding_task(
                             task, user_request, plan_text, shared_context,
-                            agent_id, batch_start + idx + 1, len(tasks)
+                            agent_id, batch_start + idx + 1, len(tasks),
+                            progress_queue=progress_queue
                         )
                     )
                 )
 
-            # Wait for all tasks in batch to complete
-            results = await asyncio.gather(*pending_tasks, return_exceptions=True)
+            # Monitor progress while tasks are running
+            completed_count = 0
+            results = []
 
-            # Emit artifacts
-            for idx, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"Task {batch_start + idx + 1} failed: {result}")
-                    yield {
-                        "agent": f"CodingAgent_{batch_start + idx + 1}",
-                        "type": "error",
-                        "status": "error",
-                        "message": f"❌ Task {batch_start + idx + 1} failed: {str(result)}",
-                        "timestamp": datetime.now().isoformat()
-                    }
-                else:
+            while completed_count < len(batch_tasks):
+                # Check for progress updates or task completion
+                try:
+                    # Wait for progress update with timeout
+                    update = await asyncio.wait_for(progress_queue.get(), timeout=0.1)
+
+                    # Yield progress update to frontend
+                    yield update
+
+                    # Track completions
+                    if update.get("type") == "task_complete":
+                        completed_count += 1
+                        results.append(update.get("result"))
+
+                except asyncio.TimeoutError:
+                    # No update yet, check if any task completed
+                    done, pending = await asyncio.wait(
+                        pending_tasks,
+                        timeout=0,
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    # If no tasks done and no queue updates, continue waiting
+                    if not done:
+                        continue
+
+                    # Update pending tasks list
+                    pending_tasks = list(pending)
+
+            # Wait for any remaining tasks
+            if pending_tasks:
+                final_results = await asyncio.gather(*pending_tasks, return_exceptions=True)
+
+                # Handle any errors
+                for idx, result in enumerate(final_results):
+                    if isinstance(result, Exception):
+                        logger.error(f"Task failed: {result}")
+                        yield {
+                            "agent": f"CodingAgent_{batch_start + idx + 1}",
+                            "type": "error",
+                            "status": "error",
+                            "message": f"❌ Task failed: {str(result)}",
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    elif result not in results:
+                        results.append(result)
+
+            # Collect artifacts
+            for result in results:
+                if result and not isinstance(result, Exception):
                     all_artifacts.append(result)
                     yield {
-                        "agent": f"CodingAgent_{batch_start + idx + 1}",
+                        "agent": result.get("agent_id", "CodingAgent"),
                         "type": "artifact",
                         "status": "completed",
                         "message": f"✅ Completed {result['filename']}",
@@ -593,23 +650,52 @@ Always prioritize code quality, collaboration, and efficiency."""
         shared_context: SharedContext,
         agent_id: str,
         task_num: int,
-        total_tasks: int
+        total_tasks: int,
+        progress_queue: Optional[asyncio.Queue] = None
     ) -> Dict[str, Any]:
-        """Execute a single coding task with SharedContext access."""
+        """Execute a single coding task with SharedContext access and progress reporting."""
+
+        # Report task start
+        if progress_queue:
+            await progress_queue.put({
+                "agent": agent_id,
+                "type": "task_start",
+                "status": "running",
+                "message": f"🚀 Starting: {task.get('description')}",
+                "task_num": task_num,
+                "timestamp": datetime.now().isoformat()
+            })
 
         # Build prompt with parallel execution context
         coding_prompt = self._build_parallel_coding_prompt(
             task, user_request, plan_text, agent_id, task_num, total_tasks
         )
 
-        # Execute with DeepAgent (SubAgentMiddleware provides isolation)
+        # Execute with streaming progress
         code_output = ""
-        async for chunk in self.llm.astream([
-            SystemMessage(content=coding_prompt),
-            HumanMessage(content=f"Implement: {task.get('description')}")
-        ]):
-            if chunk.content:
-                code_output += chunk.content
+        line_count = 0
+
+        async for chunk_text, full_text in self._stream_llm_response(
+            [
+                SystemMessage(content=coding_prompt),
+                HumanMessage(content=f"Implement: {task.get('description')}")
+            ],
+            chunk_size=6,
+            filter_tags=True
+        ):
+            if chunk_text and progress_queue:  # Intermediate chunk
+                line_count += chunk_text.count('\n')
+                await progress_queue.put({
+                    "agent": agent_id,
+                    "type": "code_chunk",
+                    "status": "streaming",
+                    "message": f"💻 {agent_id} writing... ({line_count} lines)",
+                    "chunk": chunk_text,
+                    "task_num": task_num,
+                    "timestamp": datetime.now().isoformat()
+                })
+            elif not chunk_text:  # Final chunk
+                code_output = full_text
 
         filename = task.get('filename', f'task_{task_num}.py')
 
@@ -622,7 +708,7 @@ Always prioritize code quality, collaboration, and efficiency."""
             description=f"Code for {filename}"
         )
 
-        return {
+        result = {
             "task_num": task_num,
             "agent_id": agent_id,
             "description": task.get('description'),
@@ -630,6 +716,20 @@ Always prioritize code quality, collaboration, and efficiency."""
             "language": task.get('language', 'python'),
             "content": code_output
         }
+
+        # Report completion
+        if progress_queue:
+            await progress_queue.put({
+                "agent": agent_id,
+                "type": "task_complete",
+                "status": "completed",
+                "message": f"✅ Completed: {filename}",
+                "task_num": task_num,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        return result
 
     async def _execute_sequential_coding(
         self,
@@ -652,13 +752,31 @@ Always prioritize code quality, collaboration, and efficiency."""
 
             coding_prompt = self._build_coding_prompt(task, user_request, plan_text)
 
+            # Stream code generation with 6-line chunks
             code_output = ""
-            async for chunk in self.llm.astream([
-                SystemMessage(content=coding_prompt),
-                HumanMessage(content=f"Implement: {task.get('description')}")
-            ]):
-                if chunk.content:
-                    code_output += chunk.content
+            line_count = 0
+
+            async for chunk_text, full_text in self._stream_llm_response(
+                [
+                    SystemMessage(content=coding_prompt),
+                    HumanMessage(content=f"Implement: {task.get('description')}")
+                ],
+                chunk_size=6,
+                filter_tags=True
+            ):
+                if chunk_text:  # Intermediate chunk
+                    line_count += chunk_text.count('\n')
+                    yield {
+                        "agent": "CodingAgent",
+                        "type": "code_chunk",
+                        "status": "streaming",
+                        "message": f"💻 Writing code... ({line_count} lines)",
+                        "chunk": chunk_text,
+                        "task_num": task_num,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                else:  # Final chunk
+                    code_output = full_text
 
             filename = task.get('filename', f'task_{task_num}.py')
 
@@ -694,13 +812,30 @@ Always prioritize code quality, collaboration, and efficiency."""
         # Get all outputs from shared context
         review_prompt = self._build_review_prompt(shared_context, user_request)
 
+        # Stream review with 6-line chunks
         review_text = ""
-        async for chunk in self.llm.astream([
-            SystemMessage(content=review_prompt),
-            HumanMessage(content="Review the implementation")
-        ]):
-            if chunk.content:
-                review_text += chunk.content
+        line_count = 0
+
+        async for chunk_text, full_text in self._stream_llm_response(
+            [
+                SystemMessage(content=review_prompt),
+                HumanMessage(content="Review the implementation")
+            ],
+            chunk_size=6,
+            filter_tags=True
+        ):
+            if chunk_text:  # Intermediate chunk
+                line_count += chunk_text.count('\n')
+                yield {
+                    "agent": "ReviewAgent",
+                    "type": "review_chunk",
+                    "status": "streaming",
+                    "message": f"📝 Writing review... ({line_count} lines)",
+                    "chunk": chunk_text,
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:  # Final chunk
+                review_text = full_text
 
         yield {
             "agent": "ReviewAgent",
@@ -797,6 +932,150 @@ Always prioritize code quality, collaboration, and efficiency."""
         return plan_text, tasks
 
     # ==================== Helper Methods ====================
+
+    def _filter_reasoning_tags(self, text: str) -> str:
+        """
+        Filter out reasoning tags like </think> from LLM output.
+
+        DeepSeek-R1 and similar reasoning models output <think>...</think> tags.
+        We want to remove these from the final output shown to users.
+        """
+        # Remove </think> closing tags
+        text = text.replace('</think>', '')
+
+        # Remove opening <think> tags and everything until closing tag
+        import re
+        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+        return text.strip()
+
+    def _generate_source_tree(self, workspace: str) -> Dict[str, Any]:
+        """
+        Generate source tree structure from workspace.
+
+        Returns:
+            Dictionary with tree structure and file list
+        """
+        import glob
+
+        if not workspace or not os.path.exists(workspace):
+            return {"files": [], "tree": "No workspace"}
+
+        # Collect all source files
+        code_patterns = ["*.py", "*.js", "*.ts", "*.tsx", "*.java", "*.cpp", "*.go", "*.rs", "*.md", "*.txt", "*.json", "*.yaml", "*.yml"]
+        all_files = []
+
+        for pattern in code_patterns:
+            files = glob.glob(os.path.join(workspace, "**", pattern), recursive=True)
+            all_files.extend(files)
+
+        # Sort files
+        all_files.sort()
+
+        # Create relative paths
+        relative_files = [os.path.relpath(f, workspace) for f in all_files]
+
+        # Build tree structure
+        tree_lines = ["📁 " + os.path.basename(workspace) + "/"]
+
+        # Group by directory
+        dir_structure = {}
+        for file_path in relative_files:
+            parts = file_path.split(os.sep)
+            if len(parts) == 1:
+                # Root level file
+                if "." not in dir_structure:
+                    dir_structure["."] = []
+                dir_structure["."].append(parts[0])
+            else:
+                # Nested file
+                dir_name = parts[0]
+                if dir_name not in dir_structure:
+                    dir_structure[dir_name] = []
+                dir_structure[dir_name].append(os.path.join(*parts[1:]))
+
+        # Generate tree representation
+        dirs = sorted([d for d in dir_structure.keys() if d != "."])
+        root_files = sorted(dir_structure.get(".", []))
+
+        # Add directories first
+        for idx, dir_name in enumerate(dirs):
+            is_last_dir = (idx == len(dirs) - 1) and len(root_files) == 0
+            prefix = "└── " if is_last_dir else "├── "
+            tree_lines.append(f"  {prefix}📁 {dir_name}/")
+
+            # Add files in this directory
+            dir_files = sorted(dir_structure[dir_name])
+            for file_idx, file_name in enumerate(dir_files):
+                is_last_file = file_idx == len(dir_files) - 1
+                file_prefix = "    └── " if is_last_file else "    ├── "
+                tree_lines.append(f"  {file_prefix}📄 {file_name}")
+
+        # Add root level files
+        for file_idx, file_name in enumerate(root_files):
+            is_last = file_idx == len(root_files) - 1
+            prefix = "└── " if is_last else "├── "
+            tree_lines.append(f"  {prefix}📄 {file_name}")
+
+        return {
+            "files": relative_files,
+            "tree": "\n".join(tree_lines),
+            "file_count": len(relative_files),
+            "workspace": workspace
+        }
+
+    async def _stream_llm_response(
+        self,
+        messages: list,
+        chunk_size: int = 6,
+        filter_tags: bool = True
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """
+        Stream LLM response with chunk-based updates and tag filtering.
+
+        Args:
+            messages: Messages to send to LLM
+            chunk_size: Number of lines per chunk (default: 6)
+            filter_tags: Whether to filter </think> tags
+
+        Yields:
+            Tuple of (chunk_text, full_text_so_far)
+        """
+        full_response = ""
+        line_buffer = []
+
+        async for chunk in self.llm.astream(messages):
+            if chunk.content:
+                full_response += chunk.content
+
+                # Split by newlines for line counting
+                lines = chunk.content.split('\n')
+                line_buffer.extend(lines)
+
+                # Yield every chunk_size lines
+                while len(line_buffer) >= chunk_size:
+                    chunk_lines = line_buffer[:chunk_size]
+                    line_buffer = line_buffer[chunk_size:]
+
+                    chunk_text = '\n'.join(chunk_lines)
+                    if filter_tags:
+                        chunk_text = self._filter_reasoning_tags(chunk_text)
+
+                    yield (chunk_text, full_response)
+
+        # Yield remaining lines
+        if line_buffer:
+            chunk_text = '\n'.join(line_buffer)
+            if filter_tags:
+                chunk_text = self._filter_reasoning_tags(chunk_text)
+
+            yield (chunk_text, full_response)
+
+        # Final cleanup of full response
+        if filter_tags:
+            full_response = self._filter_reasoning_tags(full_response)
+
+        yield ("", full_response)  # Final yield with complete text
 
     def calculate_optimal_parallel(self, task_count: int) -> int:
         """
