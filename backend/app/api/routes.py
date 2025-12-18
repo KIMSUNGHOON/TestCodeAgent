@@ -454,22 +454,31 @@ Examples:
 
             # Get or create DeepAgent workflow (cached to prevent middleware duplication)
             if request.session_id not in _deepagent_workflows:
-                _deepagent_workflows[request.session_id] = DeepAgentWorkflowManager(
-                    agent_id=request.session_id,
-                    model_name="gpt-4o",
-                    temperature=0.7,
-                    enable_subagents=True,
-                    enable_filesystem=True,
-                    enable_parallel=True,
-                    max_parallel_agents=25,
-                    workspace=workspace
-                )
-                logger.info(f"Created new DeepAgents workflow for session {request.session_id}")
+                try:
+                    logger.info(f"Creating new DeepAgents workflow for session {request.session_id} with workspace {workspace}")
+                    _deepagent_workflows[request.session_id] = DeepAgentWorkflowManager(
+                        agent_id=request.session_id,
+                        model_name="gpt-4o",
+                        temperature=0.7,
+                        enable_subagents=True,
+                        enable_filesystem=True,
+                        enable_parallel=True,
+                        max_parallel_agents=25,
+                        workspace=workspace
+                    )
+                    logger.info(f"✅ Successfully created DeepAgents workflow for session {request.session_id}")
+                except Exception as e:
+                    # If creation fails, ensure it's not in cache so next attempt can retry cleanly
+                    _deepagent_workflows.pop(request.session_id, None)
+                    logger.error(f"❌ Failed to create DeepAgents workflow for session {request.session_id}: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to initialize DeepAgents workflow: {str(e)}"
+                    )
             else:
-                logger.info(f"Reusing cached DeepAgents workflow for session {request.session_id}")
+                logger.info(f"♻️  Reusing cached DeepAgents workflow for session {request.session_id}")
 
             workflow = _deepagent_workflows[request.session_id]
-            logger.info(f"Using DeepAgents framework for session {request.session_id} with workspace {workspace}")
         else:
             # Use standard workflow manager
             workflow = workflow_manager.get_or_create_workflow(request.session_id)

@@ -280,6 +280,15 @@ class DeepAgentWorkflowManager(BaseWorkflow):
 
         # Create DeepAgent
         try:
+            # Log middleware stack for debugging
+            middleware_types = [type(m).__name__ for m in self.middleware_stack]
+            logger.info(f"Creating DeepAgent '{agent_id}' with middleware: {middleware_types}")
+
+            # Check for duplicate middleware types
+            if len(middleware_types) != len(set(middleware_types)):
+                logger.error(f"Duplicate middleware detected in stack: {middleware_types}")
+                raise ValueError(f"Duplicate middleware types in middleware_stack: {middleware_types}")
+
             self.agent = create_deep_agent(
                 model=self.llm,
                 tools=[],
@@ -294,9 +303,9 @@ Your role is to collaborate with other agents to deliver high-quality code:
 
 Always prioritize code quality, collaboration, and efficiency."""
             )
-            logger.info(f"Hybrid DeepAgent created successfully: {agent_id}")
+            logger.info(f"✅ Hybrid DeepAgent created successfully: {agent_id}")
         except Exception as e:
-            logger.error(f"Failed to create DeepAgent: {e}")
+            logger.error(f"❌ Failed to create DeepAgent '{agent_id}': {e}")
             raise
 
     async def execute(
