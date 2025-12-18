@@ -46,7 +46,13 @@ def supervisor_node(state: QualityGateState) -> Dict:
     parallel_execution = (execution_mode == "parallel")
 
     # Determine max iterations based on task complexity
-    max_iterations = 3 if task_type == "implementation" else 1
+    # Increased iterations for better code quality
+    if task_type == "implementation":
+        max_iterations = 7  # Complex tasks need more refinement
+    elif task_type in ["review", "security_audit"]:
+        max_iterations = 5  # Analysis tasks need thorough iteration
+    else:
+        max_iterations = 5  # General tasks default to 5
 
     logger.info(f"✅ Task Analysis Complete:")
     logger.info(f"   Task Type: {task_type}")

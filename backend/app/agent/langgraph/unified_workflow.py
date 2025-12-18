@@ -362,7 +362,10 @@ if __name__ == "__main__":
         )
 
         # Execute graph with streaming
-        config = {"configurable": {"thread_id": f"unified_{datetime.utcnow().timestamp()}"}}
+        config = {
+            "configurable": {"thread_id": f"unified_{datetime.utcnow().timestamp()}"},
+            "recursion_limit": 100  # Allow up to 100 node executions for complex refinement cycles
+        }
 
         try:
             async for event in self.graph.astream(initial_state, config):

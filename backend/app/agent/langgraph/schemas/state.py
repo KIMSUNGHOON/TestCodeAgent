@@ -145,7 +145,7 @@ def create_initial_state(
     user_request: str,
     workspace_root: str,
     task_type: TaskType = "general",
-    max_iterations: int = 3,
+    max_iterations: int = 5,  # Increased default for better quality
     enable_debug: bool = True
 ) -> QualityGateState:
     """Create initial state for quality gate workflow
