@@ -2,6 +2,7 @@
 import logging
 import json
 from pathlib import Path
+from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -30,6 +31,9 @@ workflow_manager = get_workflow_manager()
 
 # Thread-safe session storage
 session_store = get_session_store()
+
+# Cache for DeepAgent workflows (to prevent middleware duplication)
+_deepagent_workflows: Dict[str, Any] = {}  # session_id -> DeepAgentWorkflowManager
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -256,6 +260,12 @@ async def select_framework(
     try:
         await session_store.set_framework(session_id, framework)
 
+        # Clear cached DeepAgent workflow when switching frameworks
+        # This prevents middleware duplication if switching back to deepagents
+        if session_id in _deepagent_workflows:
+            del _deepagent_workflows[session_id]
+            logger.info(f"Cleared cached DeepAgent workflow for session {session_id}")
+
         return {
             "success": True,
             "session_id": session_id,
@@ -442,17 +452,23 @@ Examples:
                     detail="DeepAgents framework not available. Install with: pip install deepagents tavily-python"
                 )
 
-            # Create DeepAgent workflow with correct workspace
-            workflow = DeepAgentWorkflowManager(
-                agent_id=request.session_id,
-                model_name="gpt-4o",
-                temperature=0.7,
-                enable_subagents=True,
-                enable_filesystem=True,
-                enable_parallel=True,
-                max_parallel_agents=25,
-                workspace=workspace
-            )
+            # Get or create DeepAgent workflow (cached to prevent middleware duplication)
+            if request.session_id not in _deepagent_workflows:
+                _deepagent_workflows[request.session_id] = DeepAgentWorkflowManager(
+                    agent_id=request.session_id,
+                    model_name="gpt-4o",
+                    temperature=0.7,
+                    enable_subagents=True,
+                    enable_filesystem=True,
+                    enable_parallel=True,
+                    max_parallel_agents=25,
+                    workspace=workspace
+                )
+                logger.info(f"Created new DeepAgents workflow for session {request.session_id}")
+            else:
+                logger.info(f"Reusing cached DeepAgents workflow for session {request.session_id}")
+
+            workflow = _deepagent_workflows[request.session_id]
             logger.info(f"Using DeepAgents framework for session {request.session_id} with workspace {workspace}")
         else:
             # Use standard workflow manager
