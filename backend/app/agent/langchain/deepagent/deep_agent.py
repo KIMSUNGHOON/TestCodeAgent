@@ -36,12 +36,25 @@ except ImportError:
     FilesystemBackend = None
     ChatOpenAI = None
 
-# Import global middleware cache to prevent duplication errors
+# Import thread-safe middleware accessor to prevent duplication errors
 try:
-    from app.agent.langchain.deepagent_workflow import _global_middleware_cache
+    from app.agent.langchain.deepagent_workflow import get_or_create_middleware
 except ImportError:
     # Fallback if deepagent_workflow not available
+    import threading
     _global_middleware_cache = {}
+    _middleware_lock = threading.Lock()
+
+    def get_or_create_middleware(key: str, factory_fn):
+        """Fallback thread-safe middleware accessor."""
+        with _middleware_lock:
+            if key not in _global_middleware_cache:
+                try:
+                    _global_middleware_cache[key] = factory_fn()
+                except Exception as e:
+                    logger.warning(f"Failed to create {key} middleware: {e}")
+                    return None
+            return _global_middleware_cache.get(key)
 
 
 class DeepCodingAgent(BaseAgent):
@@ -94,25 +107,26 @@ class DeepCodingAgent(BaseAgent):
             # Build middleware list using SINGLETON pattern
             middleware_list = []
 
-            # FilesystemMiddleware - use singleton
-            if "filesystem" not in _global_middleware_cache:
-                fs_backend = FilesystemBackend(root_dir="./workspace/.deepagents/shared")
-                _global_middleware_cache["filesystem"] = FilesystemMiddleware(backend=fs_backend)
-                logger.info("✅ Created SINGLETON FilesystemMiddleware for DeepCodingAgent")
-            else:
-                logger.info("♻️  Reusing FilesystemMiddleware singleton for DeepCodingAgent")
-            middleware_list.append(_global_middleware_cache["filesystem"])
+            # FilesystemMiddleware - use thread-safe singleton
+            filesystem_middleware = get_or_create_middleware(
+                "filesystem",
+                lambda: FilesystemMiddleware(
+                    backend=FilesystemBackend(root_dir="./workspace/.deepagents/shared")
+                )
+            )
+            if filesystem_middleware:
+                middleware_list.append(filesystem_middleware)
 
-            # SubAgentMiddleware - use singleton
-            if "subagent" not in _global_middleware_cache:
-                _global_middleware_cache["subagent"] = SubAgentMiddleware(
+            # SubAgentMiddleware - use thread-safe singleton
+            subagent_middleware = get_or_create_middleware(
+                "subagent",
+                lambda: SubAgentMiddleware(
                     default_model=llm,
                     default_tools=[]
                 )
-                logger.info("✅ Created SINGLETON SubAgentMiddleware for DeepCodingAgent")
-            else:
-                logger.info("♻️  Reusing SubAgentMiddleware singleton for DeepCodingAgent")
-            middleware_list.append(_global_middleware_cache["subagent"])
+            )
+            if subagent_middleware:
+                middleware_list.append(subagent_middleware)
 
             # Create deep agent with coding-focused configuration
             self.agent = create_deep_agent(

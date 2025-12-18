@@ -437,26 +437,23 @@ class DynamicLangGraphWorkflow(BaseWorkflow):
         # Try to wrap with DeepAgents if requested and available
         if enable_deepagents and DEEPAGENTS_AVAILABLE:
             try:
-                # Use singleton middleware from global cache
-                from app.agent.langchain.deepagent_workflow import _global_middleware_cache
-                import os
+                # Use thread-safe singleton middleware accessor
+                from app.agent.langchain.deepagent_workflow import get_or_create_middleware
 
                 middleware_list = []
 
                 # SubAgentMiddleware only (FilesystemMiddleware causes issues)
-                if "subagent" not in _global_middleware_cache:
-                    SubAgentMiddleware = deepagents_middleware.get("SubAgentMiddleware")
-                    if SubAgentMiddleware:
-                        _global_middleware_cache["subagent"] = SubAgentMiddleware(
+                SubAgentMiddleware = deepagents_middleware.get("SubAgentMiddleware")
+                if SubAgentMiddleware:
+                    subagent_middleware = get_or_create_middleware(
+                        "subagent",
+                        lambda: SubAgentMiddleware(
                             default_model=base_reasoning_llm,
                             default_tools=[]
                         )
-                        logger.info("✅ Created SINGLETON SubAgentMiddleware for Standard workflow")
-                else:
-                    logger.info("♻️  Reusing SubAgentMiddleware singleton for Standard workflow")
-
-                if "subagent" in _global_middleware_cache:
-                    middleware_list.append(_global_middleware_cache["subagent"])
+                    )
+                    if subagent_middleware:
+                        middleware_list.append(subagent_middleware)
 
                 # Wrap LLMs with DeepAgents
                 if middleware_list:
