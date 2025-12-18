@@ -152,39 +152,6 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     });
   }, []);
 
-  // Build context for API request
-  const buildContext = useCallback(() => {
-    const messages = conversationHistory.map(turn => ({
-      role: turn.role,
-      content: turn.content
-    }));
-
-    // Get all artifacts from history
-    const allArtifacts: Artifact[] = [];
-    for (const turn of conversationHistory) {
-      if (turn.artifacts) {
-        allArtifacts.push(...turn.artifacts);
-      }
-    }
-    // Also add artifacts from current updates
-    allArtifacts.push(...extractArtifacts(updates));
-
-    // Deduplicate and take latest version of each file
-    const artifactMap = new Map<string, Artifact>();
-    for (const artifact of allArtifacts) {
-      artifactMap.set(artifact.filename, artifact);
-    }
-
-    return {
-      messages,
-      artifacts: Array.from(artifactMap.values()).map(a => ({
-        filename: a.filename,
-        language: a.language,
-        content: a.content
-      }))
-    };
-  }, [conversationHistory, updates, extractArtifacts]);
-
   // Save workflow state after updates complete
   const saveWorkflowState = async (workflowUpdates: WorkflowUpdate[], forcePrompt: boolean = false) => {
     // Check if we should prompt user
@@ -274,9 +241,6 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
     // Clear debug logs for new execution
     setDebugLogs([]);
-
-    // Build context from conversation history
-    const context = buildContext();
 
     try {
       // Use unified LangGraph workflow endpoint
