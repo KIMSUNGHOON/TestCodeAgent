@@ -9,7 +9,22 @@ import WorkflowStep from './WorkflowStep';
 import SharedContextViewer from './SharedContextViewer';
 import WorkflowGraph from './WorkflowGraph';
 import WorkspaceProjectSelector from './WorkspaceProjectSelector';
+import DebugPanel from './DebugPanel';
 import apiClient from '../api/client';
+
+interface DebugLog {
+  timestamp: string;
+  node: string;
+  agent: string;
+  event_type: 'thinking' | 'tool_call' | 'prompt' | 'result' | 'error';
+  content: string;
+  metadata?: Record<string, any>;
+  token_usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
 
 interface ConversationTurn {
   role: 'user' | 'assistant';
@@ -80,6 +95,10 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     const saved = localStorage.getItem('workflow_auto_save');
     return saved === null ? true : saved === 'true'; // Default to true
   });
+
+  // Debug panel state
+  const [debugLogs, setDebugLogs] = useState<DebugLog[]>([]);
+  const [isDebugOpen, setIsDebugOpen] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -253,20 +272,24 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
     const allUpdates: WorkflowUpdate[] = [];
 
+    // Clear debug logs for new execution
+    setDebugLogs([]);
+
     // Build context from conversation history
     const context = buildContext();
 
     try {
-      const response = await fetch('/api/workflow/execute', {
+      // Use unified LangGraph workflow endpoint
+      const response = await fetch('/api/langgraph/execute', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: userMessage,
-          session_id: sessionId,
-          workspace: workspace,
-          context: context.messages.length > 0 || context.artifacts.length > 0 ? context : undefined,
+          user_request: userMessage,
+          workspace_root: workspace,
+          task_type: 'general',
+          enable_debug: true,  // Enable debug logging
         }),
       });
 
@@ -290,7 +313,25 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
         for (const line of lines) {
           try {
-            const update: WorkflowUpdate = JSON.parse(line);
+            // Parse SSE format: "data: {json}"
+            const jsonData = line.startsWith('data:') ? line.substring(5).trim() : line;
+            const event = JSON.parse(jsonData);
+
+            // Extract debug logs if present
+            if (event.updates?.debug_logs) {
+              setDebugLogs(prev => [...prev, ...event.updates.debug_logs]);
+            }
+
+            // Convert unified format to WorkflowUpdate format
+            const update: WorkflowUpdate = {
+              agent: event.node || 'Workflow',
+              type: event.status === 'completed' ? 'completed' :
+                    event.status === 'error' ? 'error' : 'update',
+              status: event.status,
+              message: event.updates?.current_node ? `Processing: ${event.updates.current_node}` :
+                      event.updates?.error || event.node,
+              ...event.updates,
+            };
 
             // Handle project info message
             if (update.type === 'project_info') {
@@ -1099,6 +1140,13 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         data={sharedContext}
         isVisible={showSharedContext}
         onClose={() => setShowSharedContext(false)}
+      />
+
+      {/* Debug Panel - Fixed Position */}
+      <DebugPanel
+        logs={debugLogs}
+        isOpen={isDebugOpen}
+        onToggle={() => setIsDebugOpen(!isDebugOpen)}
       />
 
       {/* Input Area */}

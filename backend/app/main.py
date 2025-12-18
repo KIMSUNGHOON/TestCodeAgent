@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routes import router as api_router
+from app.api.routes.langgraph_routes import router as langgraph_router
 from app.db import init_db
 
 # Configure logging
@@ -51,6 +52,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api")
+app.include_router(langgraph_router)  # LangGraph routes already have /api/langgraph prefix
 
 
 @app.get("/")
