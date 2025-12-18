@@ -513,17 +513,35 @@ Always prioritize code quality, collaboration, and efficiency."""
         # Phase 4: Shared Context Summary
         yield {
             "agent": "ContextManager",
+            "type": "thinking",
+            "status": "running",
+            "message": "📊 Analyzing shared context...",
+            "timestamp": datetime.now().isoformat()
+        }
+
+        context_summary = {
+            "entries": shared_context.get_entries_summary(),
+            "access_log": shared_context.get_access_log()
+        }
+
+        yield {
+            "agent": "ContextManager",
             "type": "shared_context",
             "status": "completed",
-            "message": "📊 Shared context summary",
-            "shared_context": {
-                "entries": shared_context.get_entries_summary(),
-                "access_log": shared_context.get_access_log()
-            },
+            "message": f"✅ Context analysis completed: {len(context_summary['entries'])} entries",
+            "shared_context": context_summary,
             "timestamp": datetime.now().isoformat()
         }
 
         # Phase 5: Source Tree Display
+        yield {
+            "agent": "FileSystemAgent",
+            "type": "thinking",
+            "status": "running",
+            "message": "📂 Generating source tree...",
+            "timestamp": datetime.now().isoformat()
+        }
+
         source_tree_info = self._generate_source_tree(self.workspace)
         yield {
             "agent": "FileSystemAgent",
@@ -702,21 +720,23 @@ Always prioritize code quality, collaboration, and efficiency."""
                 SystemMessage(content=coding_prompt),
                 HumanMessage(content=f"Implement: {task.get('description')}")
             ],
-            chunk_size=6,
+            chunk_size=3,  # Smaller chunks for more frequent updates
             filter_tags=True
         ):
-            if chunk_text and progress_queue:  # Intermediate chunk
+            if chunk_text:  # Intermediate chunk
                 line_count += chunk_text.count('\n')
-                await progress_queue.put({
-                    "agent": agent_id,
-                    "type": "code_chunk",
-                    "status": "streaming",
-                    "message": f"💻 {agent_id} writing... ({line_count} lines)",
-                    "chunk": chunk_text,
-                    "task_num": task_num,
-                    "timestamp": datetime.now().isoformat()
-                })
-            elif not chunk_text:  # Final chunk
+                if progress_queue:
+                    await progress_queue.put({
+                        "agent": agent_id,
+                        "type": "code_chunk",
+                        "status": "streaming",
+                        "message": f"💻 {agent_id} writing... ({line_count} lines)",
+                        "chunk": chunk_text,
+                        "content": chunk_text,  # Add explicit content field
+                        "task_num": task_num,
+                        "timestamp": datetime.now().isoformat()
+                    })
+            else:  # Final chunk (chunk_text is empty, full_text has complete response)
                 code_output = full_text
 
         filename = task.get('filename', f'task_{task_num}.py')
@@ -843,7 +863,7 @@ Always prioritize code quality, collaboration, and efficiency."""
                 SystemMessage(content=review_prompt),
                 HumanMessage(content="Review the implementation")
             ],
-            chunk_size=6,
+            chunk_size=3,  # Smaller chunks for more frequent updates
             filter_tags=True
         ):
             if chunk_text:  # Intermediate chunk
@@ -854,6 +874,7 @@ Always prioritize code quality, collaboration, and efficiency."""
                     "status": "streaming",
                     "message": f"📝 Writing review... ({line_count} lines)",
                     "chunk": chunk_text,
+                    "content": chunk_text,  # Add explicit content field
                     "timestamp": datetime.now().isoformat()
                 }
             else:  # Final chunk
@@ -962,12 +983,25 @@ Always prioritize code quality, collaboration, and efficiency."""
         DeepSeek-R1 and similar reasoning models output <think>...</think> tags.
         We want to remove these from the final output shown to users.
         """
-        # Remove </think> closing tags
-        text = text.replace('</think>', '')
+        if not text:
+            return text
 
-        # Remove opening <think> tags and everything until closing tag
         import re
-        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+        # Remove complete <think>...</think> blocks (multiline)
+        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Remove orphan opening tags
+        text = re.sub(r'<think>', '', text, flags=re.IGNORECASE)
+
+        # Remove orphan closing tags (most common issue in headers)
+        text = re.sub(r'</think>', '', text, flags=re.IGNORECASE)
+
+        # Remove any remaining variations
+        text = re.sub(r'</?think[^>]*>', '', text, flags=re.IGNORECASE)
+
+        # Clean up multiple blank lines
+        text = re.sub(r'\n\n+', '\n\n', text)
 
         return text.strip()
 
