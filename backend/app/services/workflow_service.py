@@ -13,7 +13,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.session_store import SessionStore, FrameworkType
-from app.api.models import ChatRequest, ChatMessage, CodeArtifact
+from app.api.models import ChatRequest, ChatMessage, ArtifactContext
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +271,7 @@ Examples:
     def build_context_string(
         self,
         messages: Optional[List[ChatMessage]] = None,
-        artifacts: Optional[List[CodeArtifact]] = None
+        artifacts: Optional[List[ArtifactContext]] = None
     ) -> str:
         """
         Build context string from previous messages and artifacts.

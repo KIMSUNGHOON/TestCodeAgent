@@ -19,16 +19,19 @@ const WorkflowGraph = ({ workflowInfo, isRunning }: WorkflowGraphProps) => {
     Decision: '#7C3AED'
   };
 
+  // Safe access to nodes array
+  const nodes = workflowInfo?.nodes || [];
+
   const isNodeComplete = (node: string): boolean => {
-    if (!workflowInfo.current_node) return false;
+    if (!workflowInfo?.current_node) return false;
     if (workflowInfo.current_node === 'END') return true;
-    const currentIdx = workflowInfo.nodes.indexOf(workflowInfo.current_node);
-    const nodeIdx = workflowInfo.nodes.indexOf(node);
+    const currentIdx = nodes.indexOf(workflowInfo.current_node);
+    const nodeIdx = nodes.indexOf(node);
     return nodeIdx < currentIdx;
   };
 
   const isNodeCurrent = (node: string): boolean => {
-    return workflowInfo.current_node === node;
+    return workflowInfo?.current_node === node;
   };
 
   return (
@@ -52,7 +55,7 @@ const WorkflowGraph = ({ workflowInfo, isRunning }: WorkflowGraphProps) => {
         </svg>
 
         {/* Agent nodes */}
-        {workflowInfo.nodes.map((node, idx) => {
+        {nodes.map((node, idx) => {
           const isCurrent = isNodeCurrent(node);
           const color = nodeColors[node] || '#666666';
           const isComplete = isNodeComplete(node);
@@ -75,7 +78,7 @@ const WorkflowGraph = ({ workflowInfo, isRunning }: WorkflowGraphProps) => {
                 {isCurrent && <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />}
                 {node.replace('Agent', '')}
               </div>
-              {idx < workflowInfo.nodes.length - 1 && (
+              {idx < nodes.length - 1 && (
                 <svg className="w-4 h-4 text-[#999999]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                 </svg>
