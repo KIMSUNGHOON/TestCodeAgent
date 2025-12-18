@@ -218,6 +218,7 @@ Examples:
             DeepAgentWorkflowManager,
             DEEPAGENTS_AVAILABLE
         )
+        import time
 
         if not DEEPAGENTS_AVAILABLE:
             raise Exception(
@@ -228,16 +229,23 @@ Examples:
         # Get or create DeepAgent workflow (cached to prevent middleware duplication)
         if session_id not in self._deepagent_workflows:
             try:
+                # Use unique agent_id to prevent FilesystemMiddleware path conflicts
+                # This allows:
+                # 1. Multiple sessions to use the same workspace
+                # 2. Backend restart without middleware conflicts
+                # 3. FilesystemMiddleware to work properly
+                unique_agent_id = f"{session_id}_{int(time.time() * 1000)}"
+
                 logger.info(
                     f"Creating new DeepAgents workflow for session {session_id} "
-                    f"with workspace {workspace}"
+                    f"(agent_id: {unique_agent_id}) with workspace {workspace}"
                 )
                 self._deepagent_workflows[session_id] = DeepAgentWorkflowManager(
-                    agent_id=session_id,
+                    agent_id=unique_agent_id,
                     model_name="gpt-4o",
                     temperature=0.7,
                     enable_subagents=True,
-                    enable_filesystem=False,  # Disabled to prevent middleware duplication
+                    enable_filesystem=True,  # Re-enabled with unique agent_id
                     enable_parallel=True,
                     max_parallel_agents=25,
                     workspace=workspace

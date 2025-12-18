@@ -99,7 +99,30 @@ const WorkspaceProjectSelector = ({
             {/* Workspace Section */}
             <div className="p-3 border-b border-[#E5E5E5] bg-[#F9F9F9]">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-[#666666] uppercase">Workspace</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-semibold text-[#666666] uppercase">Workspace</span>
+                  <div className="group relative">
+                    <svg className="w-3.5 h-3.5 text-[#999999] cursor-help" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                    </svg>
+                    <div className="invisible group-hover:visible absolute left-0 top-full mt-1 w-72 bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg z-50">
+                      <div className="font-semibold mb-2">📁 Workspace Setup Guide</div>
+                      <div className="space-y-2 text-gray-300">
+                        <div>
+                          <div className="font-medium text-white mb-1">Create a new workspace:</div>
+                          <code className="block bg-gray-800 px-2 py-1 rounded">mkdir -p /path/to/workspace</code>
+                        </div>
+                        <div>
+                          <div className="font-medium text-white mb-1">Set permissions:</div>
+                          <code className="block bg-gray-800 px-2 py-1 rounded">chmod -R 777 /path/to/workspace</code>
+                        </div>
+                        <div className="text-yellow-300 text-xs">
+                          ⚠️ Multiple sessions can use the same workspace
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
                 {!isEditingWorkspace ? (
                   <button
                     onClick={() => setIsEditingWorkspace(true)}
@@ -117,18 +140,23 @@ const WorkspaceProjectSelector = ({
                 )}
               </div>
               {isEditingWorkspace ? (
-                <input
-                  type="text"
-                  value={workspaceInput}
-                  onChange={(e) => setWorkspaceInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleWorkspaceSave();
-                    if (e.key === 'Escape') setIsEditingWorkspace(false);
-                  }}
-                  className="w-full px-2 py-1 text-sm border border-[#DA7756] rounded focus:outline-none focus:ring-2 focus:ring-[#DA7756]"
-                  placeholder="/home/user/workspace"
-                  autoFocus
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={workspaceInput}
+                    onChange={(e) => setWorkspaceInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleWorkspaceSave();
+                      if (e.key === 'Escape') setIsEditingWorkspace(false);
+                    }}
+                    className="w-full px-2 py-1 text-sm border border-[#DA7756] rounded focus:outline-none focus:ring-2 focus:ring-[#DA7756]"
+                    placeholder="/home/user/workspace"
+                    autoFocus
+                  />
+                  <div className="mt-2 text-xs text-[#999999]">
+                    💡 Tip: You can reuse existing workspaces across sessions
+                  </div>
+                </div>
               ) : (
                 <div className="text-sm text-[#1A1A1A] font-mono bg-white px-2 py-1 rounded border border-[#E5E5E5] truncate">
                   {currentWorkspace}
