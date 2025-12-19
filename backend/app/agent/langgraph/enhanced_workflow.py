@@ -793,19 +793,15 @@ class EnhancedWorkflow:
     ) -> str:
         """Generate a meaningful project name from user request analysis
 
-        Priority:
-        1. Architecture project_name if meaningful
-        2. Extract from user request keywords
+        Priority (CHANGED: keyword matching first for accuracy):
+        1. Extract from user request keywords (most accurate)
+        2. Architecture project_name if meaningful
         3. Use task type from supervisor analysis
+        4. Fallback to meaningful word extraction
         """
         import re
 
-        # 1. Try architecture project_name first
-        arch_name = architecture.get("project_name", "")
-        if arch_name and arch_name.lower() not in ["project", "app", "application", "code"]:
-            return arch_name
-
-        # 2. Extract meaningful keywords from user request
+        # 1. FIRST: Extract meaningful keywords from user request (most accurate)
         request_lower = user_request.lower()
 
         # Common Korean keywords to project names
@@ -840,12 +836,17 @@ class EnhancedWorkflow:
         # Check Korean keywords
         for kor, eng in korean_keywords.items():
             if kor in request_lower:
-                # Add suffix based on tech stack
+                # Add suffix based on context
+                if "콘솔" in request_lower or "cli" in request_lower or "터미널" in request_lower:
+                    return f"{eng}-cli"
+                elif "웹" in request_lower or "web" in request_lower:
+                    return f"{eng}-web"
+                elif "gui" in request_lower or "데스크톱" in request_lower:
+                    return f"{eng}-gui"
+                # Check tech stack
                 tech = architecture.get("tech_stack", {}).get("language", "")
                 if tech.lower() in ["javascript", "typescript", "react"]:
                     return f"{eng}-app"
-                elif "web" in request_lower or "웹" in request_lower:
-                    return f"{eng}-web"
                 return eng
 
         # English keyword patterns
@@ -865,7 +866,21 @@ class EnhancedWorkflow:
 
         for pattern, name in english_patterns:
             if re.search(pattern, request_lower):
+                # Add suffix based on context
+                if "console" in request_lower or "cli" in request_lower or "command" in request_lower:
+                    return f"{name}-cli"
+                elif "web" in request_lower:
+                    return f"{name}-web"
+                elif "gui" in request_lower or "desktop" in request_lower:
+                    return f"{name}-gui"
                 return name
+
+        # 2. Try architecture project_name if meaningful (but filter out generic names)
+        arch_name = architecture.get("project_name", "")
+        generic_names = {"project", "app", "application", "code", "tool", "cli-tool",
+                         "web-app", "my-app", "test", "demo", "sample", "example"}
+        if arch_name and arch_name.lower() not in generic_names:
+            return arch_name
 
         # 3. Use task type from supervisor analysis
         task_type = supervisor_analysis.get("task_type", "")
@@ -876,8 +891,9 @@ class EnhancedWorkflow:
         # Remove common words and get first significant word
         stopwords = {'a', 'an', 'the', 'create', 'make', 'build', 'develop', 'write',
                      'implement', 'generate', 'please', 'want', 'need', 'simple',
-                     'basic', 'new', 'web', 'app', 'application', '만들어', '생성',
-                     '개발', '구현', '작성', '줘', '주세요', '해줘', '해주세요'}
+                     'basic', 'new', 'web', 'app', 'application', 'console', 'based',
+                     'program', 'composed', 'multiple', 'files', 'python', 'design',
+                     '만들어', '생성', '개발', '구현', '작성', '줘', '주세요', '해줘', '해주세요'}
 
         words = re.findall(r'[a-zA-Z가-힣]+', user_request)
         for word in words:
