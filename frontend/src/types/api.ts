@@ -401,3 +401,110 @@ export interface WorkflowExecutionStatus {
   artifacts?: Artifact[];
   error_log?: string[];
 }
+
+// ==================== HITL (Human-in-the-Loop) Types ====================
+
+/**
+ * HITL checkpoint types
+ */
+export type HITLCheckpointType = 'approval' | 'review' | 'edit' | 'choice' | 'confirm';
+
+/**
+ * HITL request status
+ */
+export type HITLStatus = 'pending' | 'approved' | 'rejected' | 'modified' | 'selected' | 'cancelled' | 'timeout';
+
+/**
+ * HITL action types
+ */
+export type HITLAction = 'approve' | 'reject' | 'edit' | 'retry' | 'select' | 'confirm' | 'cancel';
+
+/**
+ * Choice option for HITL choice checkpoint
+ */
+export interface HITLChoiceOption {
+  option_id: string;
+  title: string;
+  description: string;
+  preview?: string;
+  pros: string[];
+  cons: string[];
+  recommended: boolean;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * HITL content
+ */
+export interface HITLContent {
+  code?: string;
+  language?: string;
+  filename?: string;
+  workflow_plan?: Record<string, any>;
+  options?: HITLChoiceOption[];
+  original?: string;
+  modified?: string;
+  diff?: string;
+  action_description?: string;
+  risks?: string[];
+  summary?: string;
+  details?: Record<string, any>;
+}
+
+/**
+ * HITL request from backend
+ */
+export interface HITLRequest {
+  request_id: string;
+  workflow_id: string;
+  stage_id: string;
+  agent_id?: string;
+  checkpoint_type: HITLCheckpointType;
+  title: string;
+  description: string;
+  content: HITLContent;
+  allow_skip?: boolean;
+  timeout_seconds?: number;
+  priority: string;
+  created_at: string;
+  expires_at?: string;
+  status: HITLStatus;
+}
+
+/**
+ * HITL response to backend
+ */
+export interface HITLResponse {
+  request_id: string;
+  action: HITLAction;
+  feedback?: string;
+  modified_content?: string;
+  selected_option?: string;
+  retry_instructions?: string;
+  responded_at?: string;
+}
+
+/**
+ * HITL WebSocket event
+ */
+export interface HITLEvent {
+  event_type: 'hitl.request' | 'hitl.response' | 'hitl.timeout' | 'hitl.cancelled' | 'hitl.pending';
+  workflow_id: string;
+  request_id?: string;
+  data: HITLRequest | HITLResponse | Record<string, any>;
+  timestamp: string;
+}
+
+/**
+ * HITL request summary for listing
+ */
+export interface HITLRequestSummary {
+  request_id: string;
+  workflow_id: string;
+  stage_id: string;
+  checkpoint_type: HITLCheckpointType;
+  title: string;
+  status: HITLStatus;
+  priority: string;
+  created_at: string;
+}

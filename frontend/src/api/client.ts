@@ -670,6 +670,99 @@ class ApiClient {
     const response = await this.client.get(`/langgraph/status/${sessionId}`);
     return response.data;
   }
+
+  // ==================== HITL (Human-in-the-Loop) Methods ====================
+
+  /**
+   * List pending HITL requests
+   *
+   * @param workflowId - Optional filter by workflow ID
+   * @returns List of pending HITL requests
+   */
+  async getHITLPendingRequests(workflowId?: string): Promise<any[]> {
+    const params = workflowId ? { workflow_id: workflowId } : {};
+    const response = await this.client.get('/hitl/pending', { params });
+    return response.data;
+  }
+
+  /**
+   * Get details of a specific HITL request
+   *
+   * @param requestId - The request ID
+   * @returns HITL request details
+   */
+  async getHITLRequest(requestId: string): Promise<any> {
+    const response = await this.client.get(`/hitl/request/${requestId}`);
+    return response.data;
+  }
+
+  /**
+   * Submit response to a HITL request
+   *
+   * @param requestId - The request ID
+   * @param response - User's response
+   * @returns Confirmation
+   */
+  async submitHITLResponse(
+    requestId: string,
+    response: {
+      action: 'approve' | 'reject' | 'edit' | 'retry' | 'select' | 'confirm' | 'cancel';
+      feedback?: string;
+      modified_content?: string;
+      selected_option?: string;
+      retry_instructions?: string;
+    }
+  ): Promise<{ success: boolean; request_id: string; message: string }> {
+    const resp = await this.client.post(`/hitl/respond/${requestId}`, response);
+    return resp.data;
+  }
+
+  /**
+   * Cancel a pending HITL request
+   *
+   * @param requestId - The request ID
+   * @param reason - Cancellation reason
+   * @returns Confirmation
+   */
+  async cancelHITLRequest(
+    requestId: string,
+    reason?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const resp = await this.client.post(`/hitl/cancel/${requestId}`, null, {
+      params: { reason },
+    });
+    return resp.data;
+  }
+
+  /**
+   * Cancel all pending requests for a workflow
+   *
+   * @param workflowId - The workflow ID
+   * @param reason - Cancellation reason
+   * @returns Confirmation
+   */
+  async cancelWorkflowHITLRequests(
+    workflowId: string,
+    reason?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const resp = await this.client.post(`/hitl/cancel/workflow/${workflowId}`, null, {
+      params: { reason },
+    });
+    return resp.data;
+  }
+
+  /**
+   * Create WebSocket connection for HITL events
+   *
+   * @param workflowId - Optional workflow ID to filter events
+   * @returns WebSocket connection
+   */
+  createHITLWebSocket(workflowId?: string): WebSocket {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const path = workflowId ? `/api/hitl/ws/${workflowId}` : '/api/hitl/ws';
+    return new WebSocket(`${protocol}//${host}${path}`);
+  }
 }
 
 // Export singleton instance

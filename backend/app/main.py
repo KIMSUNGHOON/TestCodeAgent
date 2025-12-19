@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.api.routes.langgraph_routes import router as langgraph_router
+from app.api.routes.hitl_routes import router as hitl_router
 
 # Lazy import of optional dependencies
 try:
@@ -80,6 +81,10 @@ else:
 # Always include LangGraph routes (no external dependencies)
 app.include_router(langgraph_router)
 logger.info("✅ LangGraph routes registered")
+
+# Include HITL routes
+app.include_router(hitl_router, prefix="/api")
+logger.info("✅ HITL routes registered")
 
 
 @app.get("/")
