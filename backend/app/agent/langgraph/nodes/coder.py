@@ -190,38 +190,61 @@ Respond in JSON format with this structure:
 
 Generate the code now:"""
 
-        # Call vLLM endpoint
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{settings.vllm_coding_endpoint}/completions",
-                json={
-                    "model": settings.coding_model,
-                    "prompt": prompt,
-                    "max_tokens": 4096,
-                    "temperature": 0.2,
-                    "stop": ["</s>", "Human:", "User:"]
-                }
-            )
+        # Call vLLM endpoint with longer timeout and retry logic
+        max_retries = 3
+        timeout_seconds = 120  # 2 minutes for code generation
 
-            if response.status_code == 200:
-                result = response.json()
-                generated_text = result["choices"][0]["text"]
+        for attempt in range(max_retries):
+            try:
+                with httpx.Client(timeout=timeout_seconds) as client:
+                    response = client.post(
+                        f"{settings.vllm_coding_endpoint}/completions",
+                        json={
+                            "model": settings.coding_model,
+                            "prompt": prompt,
+                            "max_tokens": 4096,
+                            "temperature": 0.2,
+                            "stop": ["</s>", "Human:", "User:"]
+                        }
+                    )
 
-                # Parse JSON response
-                try:
-                    # Extract JSON from response
-                    json_start = generated_text.find("{")
-                    json_end = generated_text.rfind("}") + 1
-                    if json_start != -1 and json_end > json_start:
-                        json_str = generated_text[json_start:json_end]
-                        parsed = json.loads(json_str)
-                        return parsed.get("files", [])
-                except json.JSONDecodeError:
-                    logger.warning("Failed to parse vLLM JSON response, using fallback")
+                    if response.status_code == 200:
+                        result = response.json()
+                        generated_text = result["choices"][0]["text"]
+
+                        # Parse JSON response
+                        try:
+                            # Extract JSON from response
+                            json_start = generated_text.find("{")
+                            json_end = generated_text.rfind("}") + 1
+                            if json_start != -1 and json_end > json_start:
+                                json_str = generated_text[json_start:json_end]
+                                parsed = json.loads(json_str)
+                                return parsed.get("files", [])
+                        except json.JSONDecodeError:
+                            logger.warning("Failed to parse vLLM JSON response, using fallback")
+                            return _fallback_code_generator(user_request, task_type)
+                    else:
+                        logger.error(f"vLLM request failed: {response.status_code}")
+                        if attempt < max_retries - 1:
+                            import time
+                            wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                            logger.info(f"Retrying in {wait_time}s... (attempt {attempt + 2}/{max_retries})")
+                            time.sleep(wait_time)
+                            continue
+                        return _fallback_code_generator(user_request, task_type)
+                    break  # Success, exit retry loop
+
+            except httpx.TimeoutException as e:
+                logger.warning(f"vLLM timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.info(f"Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("vLLM timeout after all retries, using fallback")
                     return _fallback_code_generator(user_request, task_type)
-            else:
-                logger.error(f"vLLM request failed: {response.status_code}")
-                return _fallback_code_generator(user_request, task_type)
 
     except Exception as e:
         logger.error(f"vLLM call failed: {e}", exc_info=True)

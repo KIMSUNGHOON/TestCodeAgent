@@ -169,32 +169,50 @@ Provide a detailed review in JSON format:
 
 Review:"""
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{settings.vllm_coding_endpoint}/completions",
-                json={
-                    "model": settings.coding_model,
-                    "prompt": prompt,
-                    "max_tokens": 1024,
-                    "temperature": 0.1,
-                    "stop": ["</s>", "Human:", "User:"]
-                }
-            )
+        # Retry logic with exponential backoff
+        max_retries = 3
+        timeout_seconds = 90  # 90 seconds for review
 
-            if response.status_code == 200:
-                result = response.json()
-                generated_text = result["choices"][0]["text"]
+        for attempt in range(max_retries):
+            try:
+                with httpx.Client(timeout=timeout_seconds) as client:
+                    response = client.post(
+                        f"{settings.vllm_coding_endpoint}/completions",
+                        json={
+                            "model": settings.coding_model,
+                            "prompt": prompt,
+                            "max_tokens": 1024,
+                            "temperature": 0.1,
+                            "stop": ["</s>", "Human:", "User:"]
+                        }
+                    )
 
-                # Parse JSON
-                import json
-                try:
-                    json_start = generated_text.find("{")
-                    json_end = generated_text.rfind("}") + 1
-                    if json_start != -1 and json_end > json_start:
-                        json_str = generated_text[json_start:json_end]
-                        return json.loads(json_str)
-                except json.JSONDecodeError:
-                    pass
+                    if response.status_code == 200:
+                        result = response.json()
+                        generated_text = result["choices"][0]["text"]
+
+                        # Parse JSON
+                        import json
+                        try:
+                            json_start = generated_text.find("{")
+                            json_end = generated_text.rfind("}") + 1
+                            if json_start != -1 and json_end > json_start:
+                                json_str = generated_text[json_start:json_end]
+                                return json.loads(json_str)
+                        except json.JSONDecodeError:
+                            pass
+                    break  # Exit retry loop on non-timeout response
+
+            except httpx.TimeoutException as e:
+                logger.warning(f"vLLM review timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    wait_time = 2 ** attempt  # Exponential backoff
+                    logger.info(f"Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    logger.error("vLLM review timeout after all retries, using fallback")
+                    return _fallback_code_reviewer(artifacts, user_request)
 
         logger.warning("Failed to get vLLM review, using fallback")
         return _fallback_code_reviewer(artifacts, user_request)
