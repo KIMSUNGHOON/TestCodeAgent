@@ -79,8 +79,8 @@ else:
     logger.warning("⚠️  Standard API routes not registered (dependencies missing)")
 
 # Always include LangGraph routes (no external dependencies)
-app.include_router(langgraph_router)
-logger.info("✅ LangGraph routes registered")
+app.include_router(langgraph_router, prefix="/api")
+logger.info("✅ LangGraph routes registered at /api/langgraph")
 
 # Include HITL routes
 app.include_router(hitl_router, prefix="/api")
