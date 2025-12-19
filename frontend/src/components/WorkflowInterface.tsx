@@ -128,6 +128,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
     { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
     { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
+    { name: 'aggregator', title: '📊 Aggregator', description: 'Results Aggregation', status: 'pending' },
+    { name: 'hitl', title: '👤 Human Review', description: 'Awaiting Approval', status: 'pending' },
     { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
   ]);
   const [totalProgress, setTotalProgress] = useState(0);
@@ -167,6 +169,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
       { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
       { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
       { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
+      { name: 'aggregator', title: '📊 Aggregator', description: 'Results Aggregation', status: 'pending' },
+      { name: 'hitl', title: '👤 Human Review', description: 'Awaiting Approval', status: 'pending' },
       { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
     ]);
     setTotalProgress(0);
@@ -189,15 +193,52 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     const agentDescription = event.agent_description;
     const streamingContent = event.updates?.streaming_content;
 
+    // Handle workflow-level status updates (retry_requested, rejected, etc.)
+    if (nodeName === 'workflow') {
+      if (status === 'retry_requested' || status === 'rejected') {
+        // Update HITL agent status to show the result
+        setAgentProgress(prev => prev.map(agent => {
+          if (agent.name === 'hitl') {
+            return {
+              ...agent,
+              status: status === 'retry_requested' ? 'running' : 'error',
+              description: status === 'retry_requested' ? 'Retry Requested' : 'Rejected',
+              streamingContent: streamingContent,
+            };
+          }
+          return agent;
+        }));
+        return;
+      }
+    }
+
+    // Handle HITL-specific statuses
+    if (nodeName === 'hitl') {
+      if (status === 'retry_requested' || status === 'rejected' || status === 'approved') {
+        setAgentProgress(prev => prev.map(agent => {
+          if (agent.name === 'hitl') {
+            return {
+              ...agent,
+              status: status === 'approved' ? 'completed' : status === 'retry_requested' ? 'running' : 'error',
+              description: status === 'approved' ? 'Approved' : status === 'retry_requested' ? 'Retry Requested' : 'Rejected',
+              streamingContent: streamingContent,
+            };
+          }
+          return agent;
+        }));
+        return;
+      }
+    }
+
     setAgentProgress(prev => {
       const updated = prev.map(agent => {
         if (agent.name === nodeName) {
           let newStatus: AgentProgressStatus['status'] = agent.status;
-          if (status === 'starting' || status === 'running' || status === 'thinking' || status === 'streaming') {
+          if (status === 'starting' || status === 'running' || status === 'thinking' || status === 'streaming' || status === 'awaiting_approval' || status === 'waiting') {
             newStatus = 'running';
-          } else if (status === 'completed') {
+          } else if (status === 'completed' || status === 'approved') {
             newStatus = 'completed';
-          } else if (status === 'error') {
+          } else if (status === 'error' || status === 'rejected' || status === 'timeout') {
             newStatus = 'error';
           }
           return {
@@ -229,11 +270,21 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     }
 
     // Update streaming content
-    if (event.updates?.streaming_file) {
+    // Handle parallel streaming (multiple files)
+    if (event.updates?.is_parallel && event.updates?.streaming_files) {
+      const files = event.updates.streaming_files;
+      setCurrentStreamingFile(files.join(', '));
+    } else if (event.updates?.streaming_file) {
       setCurrentStreamingFile(event.updates.streaming_file);
     }
     if (event.updates?.streaming_content) {
       setCurrentStreamingContent(event.updates.streaming_content);
+    }
+
+    // Handle parallel file progress info
+    if (event.updates?.batch_info) {
+      const batchInfo = event.updates.batch_info;
+      console.log(`[Parallel Coder] Batch ${batchInfo.current}/${batchInfo.total}, ${batchInfo.files_in_batch} files`);
     }
 
     // Capture saved files from persistence

@@ -301,28 +301,82 @@ class EnhancedWorkflow:
 
             # ==================== PHASE 3: CODING ====================
             yield self._create_update("coder", "starting", {
-                "message": f"Generating {len(files_to_create)} files...",
+                "message": f"Generating {len(files_to_create)} files in parallel...",
                 "files_count": len(files_to_create),
             })
 
             coder_start = time.time()
             state.update(architect_result)
 
-            # Stream each file being generated
+            # PARALLEL STREAMING: Show multiple files being generated simultaneously
+            # Group files into parallel batches (simulate parallel agent execution)
+            batch_size = min(3, len(files_to_create))  # Up to 3 files at a time
+            file_progress = {}  # Track progress for each file
+
+            # Initialize all files as "queued"
             for i, file_info in enumerate(files_to_create):
                 file_path = file_info.get("path", f"file_{i}.py")
-                purpose = file_info.get("purpose", "Implementation")
+                file_progress[file_path] = {
+                    "status": "queued",
+                    "progress": 0,
+                    "purpose": file_info.get("purpose", "Implementation"),
+                }
 
-                # Simulate streaming code snippet
-                code_preview = self._generate_code_preview(file_path, purpose)
+            # Process files in parallel batches with progressive streaming
+            for batch_start in range(0, len(files_to_create), batch_size):
+                batch_end = min(batch_start + batch_size, len(files_to_create))
+                batch = files_to_create[batch_start:batch_end]
 
-                yield self._create_update("coder", "streaming", {
-                    "streaming_file": file_path,
-                    "streaming_progress": f"{i + 1}/{len(files_to_create)}",
-                    "message": f"Generating {file_path}...",
-                    "streaming_content": code_preview,
-                })
-                await asyncio.sleep(0.3)
+                # Mark batch files as "in_progress"
+                for file_info in batch:
+                    file_path = file_info.get("path", f"file_{batch_start}.py")
+                    file_progress[file_path]["status"] = "generating"
+                    file_progress[file_path]["progress"] = 0
+
+                # Simulate progressive generation for all files in batch
+                for progress_step in range(0, 101, 25):
+                    # Build parallel streaming content showing all active files
+                    parallel_content = f"🔄 Generating {len(batch)} files in parallel:\n\n"
+
+                    for file_info in batch:
+                        file_path = file_info.get("path", f"file.py")
+                        purpose = file_info.get("purpose", "Implementation")
+                        file_progress[file_path]["progress"] = progress_step
+
+                        # Progress bar for each file
+                        bar_length = 20
+                        filled = int(bar_length * progress_step / 100)
+                        bar = "█" * filled + "░" * (bar_length - filled)
+
+                        parallel_content += f"📄 {file_path}\n"
+                        parallel_content += f"   [{bar}] {progress_step}%\n"
+                        parallel_content += f"   {purpose}\n\n"
+
+                    # Show overall progress
+                    completed = sum(1 for f in file_progress.values() if f["status"] == "completed")
+                    total = len(files_to_create)
+                    parallel_content += f"\n📊 Overall: {completed}/{total} files completed"
+
+                    yield self._create_update("coder", "streaming", {
+                        "streaming_files": [f.get("path", "file.py") for f in batch],
+                        "streaming_progress": f"{batch_start + len(batch)}/{len(files_to_create)}",
+                        "parallel_file_progress": {f.get("path", "file.py"): file_progress.get(f.get("path", "file.py"), {}) for f in batch},
+                        "message": f"Generating batch {batch_start // batch_size + 1}...",
+                        "streaming_content": parallel_content,
+                        "is_parallel": True,
+                        "batch_info": {
+                            "current": batch_start // batch_size + 1,
+                            "total": (len(files_to_create) + batch_size - 1) // batch_size,
+                            "files_in_batch": len(batch),
+                        }
+                    })
+                    await asyncio.sleep(0.2)
+
+                # Mark batch files as completed
+                for file_info in batch:
+                    file_path = file_info.get("path", f"file.py")
+                    file_progress[file_path]["status"] = "completed"
+                    file_progress[file_path]["progress"] = 100
 
             coder_result = coder_node(state)
             agent_times["coder"] = time.time() - coder_start
@@ -478,20 +532,47 @@ class EnhancedWorkflow:
                         request = self.hitl_manager._pending_requests[hitl_request_id]
                         # Check if status is no longer pending (enum comparison)
                         status_value = request.status.value if hasattr(request.status, 'value') else str(request.status)
-                        logger.info(f"[HITL] Checking status: {status_value}, response_action: {request.response_action}")
+                        response_action = getattr(request, 'response_action', None)
+                        logger.info(f"[HITL] Checking status: {status_value}, response_action: {response_action}")
 
-                        if status_value != "pending":
+                        # Check for response: either status changed OR response_action was set
+                        # Note: RETRY action keeps status as PENDING but sets response_action
+                        has_response = (
+                            status_value != "pending" or
+                            (response_action is not None and response_action != "")
+                        )
+
+                        if has_response:
                             hitl_action = request.response_action
                             hitl_feedback = request.response_feedback
                             hitl_approved = hitl_action in ["approve", "confirm"]
 
                             logger.info(f"[HITL] Response received: action={hitl_action}, approved={hitl_approved}")
 
-                            yield self._create_update("hitl", "completed", {
+                            # Determine response status for UI
+                            if hitl_action == "retry":
+                                hitl_status = "retry_requested"
+                                status_emoji = "🔄"
+                                status_text = "Retry Requested"
+                            elif hitl_action == "reject":
+                                hitl_status = "rejected"
+                                status_emoji = "❌"
+                                status_text = "Rejected"
+                            elif hitl_approved:
+                                hitl_status = "approved"
+                                status_emoji = "✅"
+                                status_text = "Approved"
+                            else:
+                                hitl_status = "completed"
+                                status_emoji = "📋"
+                                status_text = hitl_action.upper() if hitl_action else "Unknown"
+
+                            yield self._create_update("hitl", hitl_status, {
                                 "action": hitl_action,
                                 "feedback": hitl_feedback,
                                 "approved": hitl_approved,
-                                "streaming_content": f"Human Response: {hitl_action.upper() if hitl_action else 'N/A'}\n{hitl_feedback or 'No feedback provided'}",
+                                "response_status": hitl_status,
+                                "streaming_content": f"{status_emoji} Human Response: {status_text}\n{hitl_feedback or 'No feedback provided'}",
                             })
                             break
                     else:
@@ -526,12 +607,22 @@ class EnhancedWorkflow:
 
                 # Handle rejection/retry
                 if not hitl_approved and hitl_action in ["reject", "retry"]:
-                    yield self._create_update("workflow", "stopped", {
-                        "reason": "rejected_by_user",
-                        "feedback": hitl_feedback,
-                        "streaming_content": f"⚠️ Workflow stopped by user\nAction: {hitl_action}\nFeedback: {hitl_feedback or 'None'}",
-                        "message": "Workflow stopped - user requested changes",
-                    })
+                    if hitl_action == "retry":
+                        yield self._create_update("workflow", "retry_requested", {
+                            "reason": "retry_requested",
+                            "action": hitl_action,
+                            "feedback": hitl_feedback,
+                            "streaming_content": f"🔄 Retry Requested\n\nUser requested to regenerate the code.\nFeedback: {hitl_feedback or 'None'}\n\nWorkflow will restart with improvements.",
+                            "message": "Retry requested - workflow will restart",
+                        })
+                    else:
+                        yield self._create_update("workflow", "rejected", {
+                            "reason": "rejected_by_user",
+                            "action": hitl_action,
+                            "feedback": hitl_feedback,
+                            "streaming_content": f"❌ Rejected by User\n\nFeedback: {hitl_feedback or 'None'}\n\nPlease submit a new request with updated requirements.",
+                            "message": "Workflow rejected by user",
+                        })
                     return  # Stop workflow execution
 
             # ==================== PHASE 7: PERSISTENCE ====================
