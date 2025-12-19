@@ -156,6 +156,26 @@ class QualityGateState(TypedDict, total=False):
     user_modified_content: Optional[str]  # Content modified by user during HITL
     selected_option: Optional[str]  # User's choice in CHOICE checkpoint
 
+    # ==================== Architecture Design (NEW) ====================
+    architecture_design: Optional[Dict[str, Any]]  # Full architecture from Architect Agent
+    files_to_create: List[Dict[str, Any]]  # Planned files with priorities
+    implementation_phases: List[Dict[str, Any]]  # Phased implementation plan
+    parallel_tasks: List[Dict[str, Any]]  # Tasks that can run in parallel
+    requires_architecture_review: bool  # Whether architecture needs HITL review
+
+    # ==================== Agent Execution Tracking (NEW) ====================
+    agent_execution_times: Dict[str, float]  # {agent_name: seconds}
+    current_agent: Optional[str]  # Currently executing agent
+    agent_start_time: Optional[str]  # When current agent started
+    estimated_total_time: Optional[float]  # ETA in seconds
+    completed_agents: List[str]  # List of completed agents
+    pending_agents: List[str]  # List of pending agents
+
+    # ==================== Streaming (NEW) ====================
+    streaming_content: Optional[str]  # Current streaming content (code being generated)
+    streaming_file: Optional[str]  # File being streamed
+    streaming_tokens: int  # Number of tokens streamed
+
 
 def create_initial_state(
     user_request: str,
@@ -255,4 +275,24 @@ def create_initial_state(
         hitl_checkpoint_type=None,
         user_modified_content=None,
         selected_option=None,
+
+        # Architecture design (NEW)
+        architecture_design=None,
+        files_to_create=[],
+        implementation_phases=[],
+        parallel_tasks=[],
+        requires_architecture_review=False,
+
+        # Agent execution tracking (NEW)
+        agent_execution_times={},
+        current_agent=None,
+        agent_start_time=None,
+        estimated_total_time=None,
+        completed_agents=[],
+        pending_agents=[],
+
+        # Streaming (NEW)
+        streaming_content=None,
+        streaming_file=None,
+        streaming_tokens=0,
     )

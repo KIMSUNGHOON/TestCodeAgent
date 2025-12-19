@@ -11,7 +11,18 @@ import WorkflowGraph from './WorkflowGraph';
 import WorkspaceProjectSelector from './WorkspaceProjectSelector';
 import DebugPanel from './DebugPanel';
 import HITLModal from './HITLModal';
+import WorkflowProgress from './WorkflowProgress';
+import AgentCard from './AgentCard';
 import apiClient from '../api/client';
+
+// Agent status for progress tracking
+interface AgentProgressStatus {
+  name: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  executionTime?: number;
+}
 
 interface DebugLog {
   timestamp: string;
@@ -109,8 +120,112 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   const [thinkingStream, setThinkingStream] = useState<string[]>([]);
   const [isThinking, setIsThinking] = useState(false);
 
+  // Enhanced progress tracking
+  const [agentProgress, setAgentProgress] = useState<AgentProgressStatus[]>([
+    { name: 'supervisor', title: '🧠 Supervisor', description: 'Task Analysis', status: 'pending' },
+    { name: 'architect', title: '🏗️ Architect', description: 'Project Design', status: 'pending' },
+    { name: 'coder', title: '💻 Coder', description: 'Implementation', status: 'pending' },
+    { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
+    { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
+    { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
+    { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
+  ]);
+  const [totalProgress, setTotalProgress] = useState(0);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | undefined>();
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [workflowStartTime, setWorkflowStartTime] = useState<number | null>(null);
+  const [currentStreamingFile, setCurrentStreamingFile] = useState<string | null>(null);
+  const [currentStreamingContent, setCurrentStreamingContent] = useState<string>('');
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Track elapsed time during workflow
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isRunning && workflowStartTime) {
+      interval = setInterval(() => {
+        setElapsedTime((Date.now() - workflowStartTime) / 1000);
+      }, 100);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning, workflowStartTime]);
+
+  // Reset progress when workflow starts
+  const resetProgress = () => {
+    setAgentProgress([
+      { name: 'supervisor', title: '🧠 Supervisor', description: 'Task Analysis', status: 'pending' },
+      { name: 'architect', title: '🏗️ Architect', description: 'Project Design', status: 'pending' },
+      { name: 'coder', title: '💻 Coder', description: 'Implementation', status: 'pending' },
+      { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
+      { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
+      { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
+      { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
+    ]);
+    setTotalProgress(0);
+    setEstimatedTimeRemaining(undefined);
+    setElapsedTime(0);
+    setWorkflowStartTime(Date.now());
+    setCurrentStreamingFile(null);
+    setCurrentStreamingContent('');
+  };
+
+  // Update agent progress from event
+  const updateAgentProgress = (event: any) => {
+    const nodeName = event.node;
+    const status = event.status;
+    const executionTime = event.updates?.execution_time;
+    const agentTitle = event.agent_title;
+    const agentDescription = event.agent_description;
+
+    setAgentProgress(prev => {
+      const updated = prev.map(agent => {
+        if (agent.name === nodeName) {
+          let newStatus: AgentProgressStatus['status'] = agent.status;
+          if (status === 'starting' || status === 'running' || status === 'thinking' || status === 'streaming') {
+            newStatus = 'running';
+          } else if (status === 'completed') {
+            newStatus = 'completed';
+          } else if (status === 'error') {
+            newStatus = 'error';
+          }
+          return {
+            ...agent,
+            title: agentTitle || agent.title,
+            description: agentDescription || agent.description,
+            status: newStatus,
+            executionTime: executionTime !== undefined ? executionTime : agent.executionTime,
+          };
+        }
+        return agent;
+      });
+
+      // Calculate total progress
+      const completedCount = updated.filter(a => a.status === 'completed').length;
+      const runningCount = updated.filter(a => a.status === 'running').length;
+      const progress = ((completedCount + runningCount * 0.5) / updated.length) * 100;
+      setTotalProgress(Math.min(progress, 100));
+
+      return updated;
+    });
+
+    // Update ETA if provided
+    if (event.updates?.estimated_total_time) {
+      const elapsed = elapsedTime;
+      const total = event.updates.estimated_total_time;
+      setEstimatedTimeRemaining(Math.max(0, total - elapsed));
+    }
+
+    // Update streaming content
+    if (event.updates?.streaming_file) {
+      setCurrentStreamingFile(event.updates.streaming_file);
+    }
+    if (event.updates?.streaming_content) {
+      setCurrentStreamingContent(event.updates.streaming_content);
+    }
   };
 
   useEffect(() => {
@@ -251,6 +366,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     // Clear debug logs for new execution
     setDebugLogs([]);
 
+    // Reset progress tracking
+    resetProgress();
+
     try {
       // Use unified LangGraph workflow endpoint
       const response = await fetch('/api/langgraph/execute', {
@@ -294,6 +412,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
             if (event.updates?.debug_logs) {
               setDebugLogs(prev => [...prev, ...event.updates.debug_logs]);
             }
+
+            // Update agent progress tracking
+            updateAgentProgress(event);
 
             // Handle HITL (Human-in-the-Loop) requests
             if (event.status === 'awaiting_approval' && event.updates?.hitl_request) {
@@ -669,78 +790,18 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       )}
 
-      {/* Fixed Workflow Progress Indicator */}
-      {isRunning && updates.length > 0 && (
-        <div className="sticky top-0 z-10 bg-white border-b border-[#E5E5E5] shadow-sm">
-          <div className="max-w-4xl mx-auto px-4 py-3">
-            <div className="flex items-center gap-3">
-              {/* Animated spinner */}
-              <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center animate-pulse flex-shrink-0">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              </div>
-
-              {/* Current status */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="text-sm font-semibold text-[#1A1A1A]">
-                    Workflow In Progress
-                  </h4>
-                  {(() => {
-                    const runningAgent = updates.slice().reverse().find(u => u.status === 'running');
-                    if (runningAgent) {
-                      const agentLabel = runningAgent.agent_label || runningAgent.agent;
-                      return (
-                        <span className="text-xs text-[#666666] bg-[#F5F4F2] px-2 py-0.5 rounded truncate">
-                          {agentLabel}
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-[#E5E5E5] rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-blue-500 h-full transition-all duration-300 ease-out"
-                      style={{
-                        width: `${Math.max(10, (updates.filter(u => u.status === 'completed' || u.status === 'finished').length / Math.max(updates.length, 1)) * 100)}%`
-                      }}
-                    />
-                  </div>
-                  <span className="text-xs text-[#666666] font-mono whitespace-nowrap">
-                    {updates.filter(u => u.status === 'completed' || u.status === 'finished').length}/{updates.length}
-                  </span>
-                </div>
-              </div>
-
-              {/* Files count */}
-              {(() => {
-                const allArtifacts = updates.flatMap(u => u.artifacts || []);
-                const uniqueFiles = new Set(allArtifacts.map(a => a.filename));
-                if (uniqueFiles.size > 0) {
-                  return (
-                    <div className="flex items-center gap-1.5 text-xs text-[#16A34A] bg-[#F0FDF4] px-2.5 py-1.5 rounded-lg border border-[#BBF7D0] flex-shrink-0">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                      </svg>
-                      <span className="font-semibold">{uniqueFiles.size}</span>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-
-              {/* Scroll to bottom button */}
-              <button
-                onClick={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                className="p-1.5 rounded-lg bg-[#F5F4F2] hover:bg-[#E5E5E5] transition-colors flex-shrink-0"
-                title="Scroll to current step"
-              >
-                <svg className="w-4 h-4 text-[#666666]" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
-                </svg>
-              </button>
-            </div>
+      {/* Enhanced Workflow Progress Indicator */}
+      {(isRunning || totalProgress > 0) && (
+        <div className="sticky top-0 z-10 shadow-sm">
+          <div className="max-w-5xl mx-auto px-4 py-3">
+            <WorkflowProgress
+              agents={agentProgress}
+              currentAgent={agentProgress.find(a => a.status === 'running')?.name}
+              totalProgress={totalProgress}
+              estimatedTimeRemaining={estimatedTimeRemaining}
+              elapsedTime={elapsedTime}
+              isRunning={isRunning}
+            />
           </div>
         </div>
       )}
