@@ -230,7 +230,22 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
       }
     }
 
-    // Handle workflow stopped status (retry/reject)
+    // Handle workflow restarting status (retry)
+    if (nodeName === 'workflow' && status === 'restarting') {
+      console.log(`[Workflow] Restarting: retry=${event.updates?.retry_count}, feedback=${event.updates?.feedback}`);
+      // Reset agent progress for new attempt
+      setAgentProgress(prev => prev.map(agent => ({
+        ...agent,
+        status: 'pending',
+        executionTime: undefined,
+        streamingContent: undefined,
+      })));
+      setTotalProgress(0);
+      setSavedFiles([]);
+      // Don't stop running - workflow will continue
+    }
+
+    // Handle workflow stopped status (reject only)
     if (nodeName === 'workflow' && (status === 'stopped' || event.updates?.is_final)) {
       console.log(`[Workflow] Stopped: reason=${event.updates?.reason}, action=${event.updates?.action}`);
       setIsRunning(false);

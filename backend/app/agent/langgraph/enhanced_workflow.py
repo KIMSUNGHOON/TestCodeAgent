@@ -170,7 +170,10 @@ class EnhancedWorkflow:
         user_request: str,
         workspace_root: str,
         task_type: str = "general",
-        enable_debug: bool = True
+        enable_debug: bool = True,
+        retry_count: int = 0,
+        retry_feedback: str = None,
+        max_retries: int = 3
     ) -> AsyncGenerator[Dict, None]:
         """Execute enhanced workflow with streaming
 
@@ -179,27 +182,62 @@ class EnhancedWorkflow:
         - Streaming code generation content
         - HITL checkpoints
         - Execution times
+
+        Args:
+            retry_count: Current retry attempt (0 = first run)
+            retry_feedback: Feedback from previous HITL rejection
+            max_retries: Maximum number of retry attempts
         """
         workflow_id = f"workflow_{datetime.utcnow().timestamp()}"
         start_time = time.time()
         agent_times: Dict[str, float] = {}
         completed_agents: List[str] = []
 
-        logger.info(f"🚀 Starting Enhanced Workflow: {workflow_id}")
+        # Check retry limit
+        if retry_count >= max_retries:
+            logger.warning(f"[Workflow] Max retries ({max_retries}) reached")
+            yield self._create_update("workflow", "error", {
+                "error": f"Maximum retry attempts ({max_retries}) reached",
+                "streaming_content": f"❌ Maximum retry attempts reached ({max_retries})\n\nPlease submit a new request.",
+                "is_final": True,
+            })
+            return
+
+        # Incorporate retry feedback into request if provided
+        effective_request = user_request
+        if retry_feedback:
+            effective_request = f"{user_request}\n\n[IMPROVEMENT FEEDBACK from previous attempt]:\n{retry_feedback}"
+            logger.info(f"[Workflow] Retry #{retry_count + 1} with feedback: {retry_feedback[:100]}...")
+
+        # Save original workspace_root for potential retries
+        original_workspace_root = workspace_root
+
+        logger.info(f"🚀 Starting Enhanced Workflow: {workflow_id} (retry={retry_count})")
 
         try:
+            # Show retry notification if this is a retry attempt
+            if retry_count > 0:
+                yield self._create_update("workflow", "retrying", {
+                    "retry_count": retry_count,
+                    "max_retries": max_retries,
+                    "feedback": retry_feedback,
+                    "message": f"Retrying workflow (attempt {retry_count + 1}/{max_retries})",
+                    "streaming_content": f"🔄 Retry Attempt {retry_count + 1}/{max_retries}\n\nIncorporating feedback:\n{retry_feedback or 'None'}",
+                })
+
             # ==================== PHASE 1: SUPERVISOR ====================
             yield self._create_update("supervisor", "starting", {
-                "message": "Analyzing your request...",
+                "message": "Analyzing your request..." if retry_count == 0 else f"Re-analyzing with feedback (retry {retry_count + 1})...",
                 "workflow_id": workflow_id,
+                "retry_count": retry_count,
             })
 
             supervisor_start = time.time()
             supervisor_analysis = None
             thinking_blocks = []
 
-            # Stream supervisor thinking
-            async for update in self.supervisor.analyze_request_async(user_request):
+            # Stream supervisor thinking (use effective_request which includes feedback if retrying)
+            async for update in self.supervisor.analyze_request_async(effective_request):
                 if update["type"] == "thinking":
                     thinking_blocks.append(update["content"])
                     yield self._create_update("supervisor", "thinking", {
@@ -210,7 +248,7 @@ class EnhancedWorkflow:
                     supervisor_analysis = update["content"]
 
             if not supervisor_analysis:
-                supervisor_analysis = self.supervisor.analyze_request(user_request)
+                supervisor_analysis = self.supervisor.analyze_request(effective_request)
 
             agent_times["supervisor"] = time.time() - supervisor_start
             completed_agents.append("supervisor")
@@ -236,12 +274,14 @@ class EnhancedWorkflow:
 
             architect_start = time.time()
             state = create_initial_state(
-                user_request=user_request,
+                user_request=effective_request,  # Use effective_request with feedback
                 workspace_root=workspace_root,
                 task_type=supervisor_analysis.get("task_type", "implementation"),
                 enable_debug=enable_debug
             )
             state["supervisor_analysis"] = supervisor_analysis
+            state["retry_count"] = retry_count
+            state["retry_feedback"] = retry_feedback
 
             architect_result = architect_node(state)
             agent_times["architect"] = time.time() - architect_start
@@ -625,17 +665,34 @@ class EnhancedWorkflow:
                             "streaming_content": f"🔄 Retry Requested\n\nFeedback: {hitl_feedback or 'None'}",
                         })
 
-                        # Send workflow stopped message
-                        yield self._create_update("workflow", "stopped", {
+                        # Notify that workflow is restarting
+                        yield self._create_update("workflow", "restarting", {
                             "reason": "retry_requested",
                             "action": hitl_action,
                             "feedback": hitl_feedback,
-                            "total_execution_time": round(total_time, 2),
-                            "streaming_content": f"🔄 Workflow Stopped - Retry Requested\n\nPlease submit your request again with the feedback incorporated.\n\nFeedback: {hitl_feedback or 'None'}\n\nTime elapsed: {total_time:.1f}s",
-                            "message": "Workflow stopped - retry requested",
-                            "is_final": True,
+                            "retry_count": retry_count + 1,
+                            "max_retries": max_retries,
+                            "streaming_content": f"🔄 Restarting Workflow (Attempt {retry_count + 2}/{max_retries})\n\nIncorporating feedback: {hitl_feedback or 'None'}",
+                            "message": f"Restarting workflow with feedback (attempt {retry_count + 2})",
                         })
-                    else:
+
+                        logger.info(f"[Workflow] Restarting due to retry request: {hitl_feedback}")
+
+                        # Recursively restart workflow with feedback
+                        async for update in self.execute(
+                            user_request=user_request,  # Original request (without feedback)
+                            workspace_root=original_workspace_root,  # Use original workspace, not project dir
+                            task_type=task_type,
+                            enable_debug=enable_debug,
+                            retry_count=retry_count + 1,
+                            retry_feedback=hitl_feedback,
+                            max_retries=max_retries
+                        ):
+                            yield update
+
+                        return  # Exit after recursive execution completes
+
+                    else:  # reject
                         yield self._create_update("hitl", "rejected", {
                             "action": hitl_action,
                             "feedback": hitl_feedback,
@@ -644,7 +701,7 @@ class EnhancedWorkflow:
                             "streaming_content": f"❌ Rejected\n\nFeedback: {hitl_feedback or 'None'}",
                         })
 
-                        # Send workflow stopped message
+                        # Send workflow stopped message (only for reject, not retry)
                         yield self._create_update("workflow", "stopped", {
                             "reason": "rejected_by_user",
                             "action": hitl_action,
@@ -655,8 +712,8 @@ class EnhancedWorkflow:
                             "is_final": True,
                         })
 
-                    logger.info(f"[Workflow] Stopped due to {hitl_action}: {hitl_feedback}")
-                    return  # Stop workflow execution
+                        logger.info(f"[Workflow] Stopped due to rejection: {hitl_feedback}")
+                        return  # Stop workflow execution
 
             # ==================== PHASE 7: PERSISTENCE ====================
             yield self._create_update("persistence", "starting", {
