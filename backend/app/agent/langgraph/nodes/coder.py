@@ -1,6 +1,7 @@
 """Coder Node - Production Implementation
 
-Generates code using Qwen-Coder via vLLM endpoint.
+Generates code using LLM via vLLM/OpenAI-compatible endpoint.
+Supports multiple model types via prompt adaptation.
 """
 
 import logging
@@ -12,7 +13,107 @@ from app.core.config import settings
 from app.agent.langgraph.schemas.state import QualityGateState, DebugLog
 from app.agent.langgraph.tools.filesystem_tools import write_file_tool
 
+# Import prompts for different model types
+try:
+    from shared.prompts.qwen_coder import QWEN_CODER_SYSTEM_PROMPT, QWEN_CODER_CONFIG
+except ImportError:
+    QWEN_CODER_SYSTEM_PROMPT = None
+    QWEN_CODER_CONFIG = {}
+
+try:
+    from shared.prompts.generic import GENERIC_CODE_GENERATION_PROMPT, GENERIC_CONFIG, get_model_config
+except ImportError:
+    GENERIC_CODE_GENERATION_PROMPT = None
+    GENERIC_CONFIG = {}
+    get_model_config = lambda x: {}
+
 logger = logging.getLogger(__name__)
+
+
+def _get_code_generation_prompt(user_request: str, task_type: str) -> tuple:
+    """Get appropriate prompt and config based on model type.
+
+    Returns:
+        Tuple of (prompt, config_dict)
+    """
+    model_type = settings.model_type
+    model_name = settings.get_coding_model
+
+    if model_type == "qwen" and QWEN_CODER_SYSTEM_PROMPT:
+        prompt = f"""{QWEN_CODER_SYSTEM_PROMPT}
+
+Request: {user_request}
+Task Type: {task_type}
+
+Generate complete, working code. Include all necessary files.
+Respond in JSON format with this structure:
+{{
+    "files": [
+        {{
+            "filename": "example.py",
+            "content": "# Code here",
+            "language": "python",
+            "description": "Brief description"
+        }}
+    ]
+}}
+
+Generate the code now:"""
+        config = QWEN_CODER_CONFIG
+    elif model_type == "deepseek":
+        # DeepSeek uses <think> tags for reasoning
+        prompt = f"""<think>
+1. Analyze request: {user_request[:200]}
+2. Determine file structure needed
+3. Plan implementation approach
+4. Generate production-ready code
+</think>
+
+Request: {user_request}
+Task Type: {task_type}
+
+Generate complete, working code. Include all necessary files.
+Respond in JSON format:
+{{
+    "files": [
+        {{
+            "filename": "example.py",
+            "content": "# Code here",
+            "language": "python",
+            "description": "Brief description"
+        }}
+    ]
+}}"""
+        config = {"temperature": 0.3, "max_tokens": 8000}
+    else:
+        # Generic prompt for GPT, Claude, Llama, etc.
+        prompt = f"""You are an expert software engineer. Generate production-ready code for the following request:
+
+Request: {user_request}
+Task Type: {task_type}
+
+Think through the problem step by step:
+1. What files are needed?
+2. What is the structure?
+3. What error handling is required?
+
+Generate complete, working code. Include all necessary files.
+Respond in JSON format:
+{{
+    "files": [
+        {{
+            "filename": "example.py",
+            "content": "# Complete code here",
+            "language": "python",
+            "description": "Brief description"
+        }}
+    ]
+}}
+
+Generate the code now:"""
+        config = get_model_config(model_name) if get_model_config else GENERIC_CONFIG
+
+    return prompt, config
 
 
 def coder_node(state: QualityGateState) -> Dict:
@@ -150,7 +251,7 @@ def _generate_code_with_vllm(
     task_type: str,
     workspace_root: str
 ) -> List[Dict]:
-    """Generate code using Qwen-Coder via vLLM
+    """Generate code using LLM via vLLM/OpenAI-compatible endpoint
 
     Args:
         user_request: User's request
@@ -160,37 +261,27 @@ def _generate_code_with_vllm(
     Returns:
         List of file dictionaries with filename, content, language, description
     """
-    # Check if vLLM endpoint is configured
-    if not settings.vllm_coding_endpoint or settings.vllm_coding_endpoint == "http://localhost:8002/v1":
-        logger.warning("⚠️  vLLM coding endpoint not configured, using fallback generator")
+    # Get endpoint and model from settings (supports both unified and split configs)
+    coding_endpoint = settings.get_coding_endpoint
+    coding_model = settings.get_coding_model
+
+    # Check if endpoint is configured
+    if not coding_endpoint:
+        logger.warning("⚠️  LLM coding endpoint not configured, using fallback generator")
         return _fallback_code_generator(user_request, task_type)
 
     try:
         # Real vLLM implementation
         import httpx
 
-        # Build prompt for Qwen-Coder
-        prompt = f"""You are an expert software engineer. Generate production-ready code for the following request:
+        # Get model-appropriate prompt and config
+        prompt, model_config = _get_code_generation_prompt(user_request, task_type)
 
-Request: {user_request}
-Task Type: {task_type}
+        # Log model info
+        logger.info(f"🤖 Using model: {coding_model} (type: {settings.model_type})")
+        logger.info(f"📡 Endpoint: {coding_endpoint}")
 
-Generate complete, working code. Include all necessary files.
-Respond in JSON format with this structure:
-{{
-    "files": [
-        {{
-            "filename": "example.py",
-            "content": "# Code here",
-            "language": "python",
-            "description": "Brief description"
-        }}
-    ]
-}}
-
-Generate the code now:"""
-
-        # Call vLLM endpoint with longer timeout and retry logic
+        # Call LLM endpoint with longer timeout and retry logic
         max_retries = 3
         timeout_seconds = 120  # 2 minutes for code generation
 
@@ -198,13 +289,13 @@ Generate the code now:"""
             try:
                 with httpx.Client(timeout=timeout_seconds) as client:
                     response = client.post(
-                        f"{settings.vllm_coding_endpoint}/completions",
+                        f"{coding_endpoint}/completions",
                         json={
-                            "model": settings.coding_model,
+                            "model": coding_model,
                             "prompt": prompt,
-                            "max_tokens": 4096,
-                            "temperature": 0.2,
-                            "stop": ["</s>", "Human:", "User:"]
+                            "max_tokens": model_config.get("max_tokens", 4096),
+                            "temperature": model_config.get("temperature", 0.2),
+                            "stop": model_config.get("stop", ["</s>", "Human:", "User:"])
                         }
                     )
 
