@@ -265,8 +265,9 @@ class BaseLLMProvider(ABC):
                     except json.JSONDecodeError:
                         pass
 
-            logger.warning("Failed to parse JSON from response")
-            logger.debug(f"Response text (first 500 chars): {text[:500]}")
+            # JSON parsing failure is expected for code responses - use debug level
+            logger.debug("No JSON found in response (this is normal for code responses)")
+            logger.debug(f"Response text (first 200 chars): {text[:200]}...")
         except Exception as e:
             logger.warning(f"Error extracting JSON: {e}")
 

@@ -220,81 +220,107 @@ Provide review in JSON format:
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 2
     ) -> LLMResponse:
-        """Generate response from DeepSeek-R1"""
+        """Generate response from DeepSeek-R1 with retry for empty responses"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
         full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
 
-        try:
-            async with httpx.AsyncClient(timeout=180.0) as client:  # Longer timeout for reasoning
-                response = await client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:  # Longer timeout for reasoning
+                    response = await client.post(
+                        f"{self.endpoint}/completions",
+                        json={
+                            "model": self.model,
+                            "prompt": full_prompt,
+                            **config.to_dict(),
+                        }
+                    )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result["choices"][0]["text"]
 
-                    llm_response = self.parse_response(content, task_type)
-                    llm_response.usage = result.get("usage")
-                    llm_response.raw_response = result
-                    return llm_response
-                else:
-                    logger.error(f"DeepSeek request failed: {response.status_code}")
-                    raise Exception(f"DeepSeek request failed: {response.status_code}")
+                        # Retry on empty response
+                        if not content or not content.strip():
+                            if attempt < max_retries:
+                                logger.warning(f"Empty response from DeepSeek, retrying ({attempt + 1}/{max_retries})...")
+                                continue
+                            else:
+                                logger.error("Empty response from DeepSeek after all retries")
 
-        except httpx.TimeoutException:
-            logger.error("DeepSeek request timed out")
-            raise
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        logger.error(f"DeepSeek request failed: {response.status_code}")
+                        raise Exception(f"DeepSeek request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                logger.error("DeepSeek request timed out")
+                raise
+
+        # Should not reach here, but return empty response as fallback
+        return LLMResponse(content="", model=self.model)
 
     def generate_sync(
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 2
     ) -> LLMResponse:
-        """Synchronous generation for DeepSeek-R1"""
+        """Synchronous generation for DeepSeek-R1 with retry for empty responses"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
         full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
 
-        try:
-            with httpx.Client(timeout=180.0) as client:
-                response = client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+        for attempt in range(max_retries + 1):
+            try:
+                with httpx.Client(timeout=180.0) as client:
+                    response = client.post(
+                        f"{self.endpoint}/completions",
+                        json={
+                            "model": self.model,
+                            "prompt": full_prompt,
+                            **config.to_dict(),
+                        }
+                    )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result["choices"][0]["text"]
 
-                    llm_response = self.parse_response(content, task_type)
-                    llm_response.usage = result.get("usage")
-                    llm_response.raw_response = result
-                    return llm_response
-                else:
-                    logger.error(f"DeepSeek request failed: {response.status_code}")
-                    raise Exception(f"DeepSeek request failed: {response.status_code}")
+                        # Retry on empty response
+                        if not content or not content.strip():
+                            if attempt < max_retries:
+                                logger.warning(f"Empty response from DeepSeek (sync), retrying ({attempt + 1}/{max_retries})...")
+                                continue
+                            else:
+                                logger.error("Empty response from DeepSeek (sync) after all retries")
 
-        except httpx.TimeoutException:
-            logger.error("DeepSeek request timed out")
-            raise
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        logger.error(f"DeepSeek request failed: {response.status_code}")
+                        raise Exception(f"DeepSeek request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                logger.error("DeepSeek request timed out")
+                raise
+
+        # Should not reach here, but return empty response as fallback
+        return LLMResponse(content="", model=self.model)
 
     async def stream(
         self,
