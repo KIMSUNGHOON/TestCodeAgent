@@ -7,6 +7,137 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🔧 버그 수정 및 UI 개선 (2026-01-05)
+
+#### Fixed - HITL 모달 Quality Gate 상세 결과 표시
+**Commit**: `69bebc9`
+
+**Problem**: HITL(Human-in-the-Loop) 팝업에서 승인/거부 버튼만 표시되고, Quality Gate 결과(보안 이슈, QA 결과, 리뷰 이슈)가 표시되지 않음
+
+**Solution**:
+- `enhanced_workflow.py`: HITL 요청에 상세 정보 포함
+  - `security_findings`: 보안 취약점 목록 (severity, category, description)
+  - `qa_results`: QA 테스트 결과 (test_name, passed, error)
+  - `review_issues`, `review_suggestions`: 리뷰 이슈 및 제안
+  - 한글 요약 메시지 추가
+
+- `HITLModal.tsx`: ApprovalView/ReviewView 컴포넌트 확장
+  - 보안 이슈: 심각도별 배지 (critical/high/medium/low)
+  - QA 테스트: 통과/실패 상태 표시
+  - 리뷰 이슈 및 개선 제안 목록
+  - 품질 점수 표시
+
+**Files Modified**:
+- `backend/app/agent/langgraph/enhanced_workflow.py`
+- `frontend/src/components/HITLModal.tsx`
+
+---
+
+#### Fixed - 입력창 멀티라인 지원
+**Commit**: `1a3700a`
+
+**Problem**: 입력창이 single-line `<input>` 타입으로 긴 요청 입력이 불편함
+
+**Solution**:
+- `<input>` → `<textarea>` 변경
+- 기본 3줄 높이 (72px ~ 120px)
+- Enter: 전송, Shift+Enter: 줄바꿈
+- 스크롤 가능한 입력 영역
+- 레이아웃 width에 맞춤
+
+**File Modified**:
+- `frontend/src/components/WorkflowInterface.tsx`
+
+---
+
+#### Fixed - Refiner 파일 경로 보존 문제
+**Commit**: `1a3700a`
+
+**Problem**: Refiner가 코드 수정 시 파일 경로 구조를 무시하고 프로젝트 루트에 저장
+```
+# 예시: src/main.py → main.py (디렉토리 구조 손실)
+filename = code_diff["file_path"].split("/")[-1]  # BUG: 파일명만 추출
+```
+
+**Solution**:
+- 전체 상대 경로를 유지하여 저장
+- 절대경로/상대경로 모두 지원
+- 언어 자동 감지 함수 `_detect_language()` 추가
+- Artifact 병합 시 경로 기반 매칭 로직 개선
+
+```python
+# CRITICAL FIX: Use full relative path to preserve directory structure
+if original_file_path.startswith(workspace_root):
+    relative_path = original_file_path[len(workspace_root):].lstrip("/")
+else:
+    relative_path = original_file_path.lstrip("/")
+
+result = write_file_tool(
+    file_path=relative_path,  # Full relative path preserved
+    content=code_diff["modified_content"],
+    workspace_root=workspace_root
+)
+```
+
+**File Modified**:
+- `backend/app/agent/langgraph/nodes/refiner.py`
+
+---
+
+#### 이전 세션 작업 내역 (2026-01-05 이전)
+
+##### 반응형 UI 및 다크 테마 통일
+**Commit**: `4d8ddb3`
+
+- 전체 화면 반응형 레이아웃 (`w-screen h-screen`)
+- 다크 테마 통일 (`bg-gray-950`, `text-gray-100`)
+- `html, body` 100% width/height
+
+**Files Modified**:
+- `frontend/src/App.tsx`
+- `frontend/src/index.css`
+
+##### 워크플로우 Artifact 컨텍스트 관리 수정
+**Commit**: `aa3d24c`
+
+- `refiner.py`: Artifact 덮어쓰기 → 병합으로 수정
+- `enhanced_workflow.py`: 모든 소스에서 artifact 수집
+- `WorkflowStatusPanel.tsx`: 파일 트리 디렉토리 구조 표시 수정
+
+##### 실시간 파일 표시, 반응형 UI, 한글 번역
+**Commit**: `ba8b43c`
+
+- 생성된 모든 파일 실시간 표시 (persistence 파일만이 아닌)
+- 반응형 UI 적용 (Tailwind breakpoints)
+- 진행 상황 한글 번역
+
+##### 터미널 스타일 대화 UI
+**Commit**: `b98fd05`
+
+- Claude Code Web 스타일 터미널 UI
+- 일관된 다크 테마 적용
+
+---
+
+### ⚠️ 알려진 이슈 및 향후 작업
+
+#### 현재 이슈
+1. **Security Issues 자동 해결 미구현**
+   - Refiner가 보안 이슈를 감지하지만 자동 수정 로직이 제한적
+   - `_apply_fix_heuristic()`에서 보안 이슈는 주석만 추가
+   - 향후: LLM 기반 보안 수정 로직 강화 필요
+
+2. **Quality Gate 반복 실패**
+   - 일부 경우 Quality Gate가 반복 실패 후 HITL로 전달
+   - max_refinement_iterations (3회) 후 수동 검토 필요
+
+#### 향후 작업
+- [ ] Security 이슈 자동 수정 로직 강화
+- [ ] Quality Gate 결과 상세 로깅
+- [ ] Refiner LLM 프롬프트 개선
+
+---
+
 ### 🎉 Major Features - Hybrid DeepAgents Workflow (2025-12-17)
 
 #### Added
