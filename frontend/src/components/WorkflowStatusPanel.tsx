@@ -1,6 +1,6 @@
 /**
- * WorkflowStatusPanel - Compact right sidebar
- * Claude Code inspired: terminal-like, minimal, efficient
+ * WorkflowStatusPanel - 우측 사이드바
+ * Claude Code 스타일: 터미널 형태, 최소화, 효율적
  */
 import { useState } from 'react';
 import { Artifact } from '../types/api';
@@ -49,6 +49,20 @@ interface WorkflowStatusPanelProps {
   projectDir?: string;
 }
 
+// 한글 에이전트 이름 매핑
+const agentKoreanNames: Record<string, string> = {
+  '🧠 Supervisor': '🧠 감독자',
+  '🏗️ Architect': '🏗️ 설계자',
+  '💻 Coder': '💻 코더',
+  '👀 Reviewer': '👀 검토자',
+  '🧪 QA Tester': '🧪 QA 테스터',
+  '🔒 Security': '🔒 보안 검사',
+  '🔧 Refiner': '🔧 개선자',
+  '📊 Aggregator': '📊 취합자',
+  '👤 Human Review': '👤 사용자 검토',
+  '💾 Persistence': '💾 저장',
+};
+
 const WorkflowStatusPanel = ({
   isRunning,
   agents,
@@ -65,7 +79,7 @@ const WorkflowStatusPanel = ({
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // Build file tree
+  // 파일 트리 생성
   const buildFileTree = (files: Artifact[]): FileTreeNode[] => {
     const root: Map<string, FileTreeNode> = new Map();
 
@@ -111,7 +125,7 @@ const WorkflowStatusPanel = ({
     return Array.from(root.values());
   };
 
-  // File icon by extension
+  // 파일 아이콘
   const getFileIcon = (filename: string): string => {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
     const icons: Record<string, string> = {
@@ -129,26 +143,26 @@ const WorkflowStatusPanel = ({
         return a.name.localeCompare(b.name);
       })
       .map(node => (
-        <div key={node.path} style={{ paddingLeft: depth * 12 }}>
-          <div className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-gray-700/50 text-xs group">
+        <div key={node.path} style={{ paddingLeft: depth * 8 }}>
+          <div className="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-gray-700/50 text-[10px] lg:text-xs group">
             {node.type === 'directory' ? (
               <>
                 <span className="text-yellow-500">📁</span>
-                <span className="text-yellow-400">{node.name}/</span>
+                <span className="text-yellow-400 truncate">{node.name}/</span>
               </>
             ) : (
               <>
-                <span>{getFileIcon(node.name)}</span>
-                <span className="text-gray-300 truncate flex-1">{node.name}</span>
+                <span className="flex-shrink-0">{getFileIcon(node.name)}</span>
+                <span className="text-gray-300 truncate flex-1 min-w-0">{node.name}</span>
                 {node.action && (
-                  <span className={`text-[9px] px-1 rounded ${
+                  <span className={`text-[8px] lg:text-[9px] px-1 rounded flex-shrink-0 ${
                     node.action === 'created' ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'
                   }`}>
-                    {node.action === 'created' ? '+' : '~'}
+                    {node.action === 'created' ? '+생성' : '~수정'}
                   </span>
                 )}
                 {node.sizeBytes !== undefined && (
-                  <span className="text-[9px] text-gray-600">
+                  <span className="text-[8px] lg:text-[9px] text-gray-600 flex-shrink-0 hidden sm:inline">
                     {node.sizeBytes < 1024 ? `${node.sizeBytes}B` : `${(node.sizeBytes / 1024).toFixed(1)}K`}
                   </span>
                 )}
@@ -160,42 +174,47 @@ const WorkflowStatusPanel = ({
       ));
   };
 
+  // 에이전트 이름 한글화
+  const getKoreanAgentName = (title: string): string => {
+    return agentKoreanNames[title] || title;
+  };
+
   const fileTree = savedFiles && savedFiles.length > 0 ? buildFileTree(savedFiles) : [];
   const createdCount = savedFiles?.filter(f => f.action === 'created').length || 0;
   const modifiedCount = savedFiles?.filter(f => f.action === 'modified').length || 0;
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-sm">
-      {/* Header */}
-      <div className="px-3 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-        <span className="font-medium text-xs text-gray-400">OUTPUT</span>
+    <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-xs lg:text-sm">
+      {/* 헤더 */}
+      <div className="px-2 lg:px-3 py-1.5 lg:py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+        <span className="font-medium text-[10px] lg:text-xs text-gray-400">출력</span>
         {isRunning ? (
-          <span className="flex items-center gap-1 text-[10px] text-green-400">
+          <span className="flex items-center gap-1 text-[9px] lg:text-[10px] text-green-400">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-            Live
+            실행 중
           </span>
         ) : savedFiles && savedFiles.length > 0 ? (
-          <span className="text-[10px] text-gray-500">✓ Done</span>
+          <span className="text-[9px] lg:text-[10px] text-gray-500">✓ 완료</span>
         ) : null}
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        {/* Live Output */}
+        {/* 실시간 출력 */}
         {(isRunning || streamingContent) && (
           <div className="border-b border-gray-800">
             <button
               onClick={() => toggleSection('output')}
-              className="w-full px-3 py-1.5 flex items-center justify-between text-xs font-medium text-gray-400 hover:bg-gray-800/50"
+              className="w-full px-2 lg:px-3 py-1 lg:py-1.5 flex items-center justify-between text-[10px] lg:text-xs font-medium text-gray-400 hover:bg-gray-800/50"
             >
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                Terminal
+                터미널
               </span>
               <span className="text-gray-600">{expandedSections.output ? '▼' : '▶'}</span>
             </button>
             {expandedSections.output && streamingContent && (
-              <div className="px-3 pb-2">
-                <pre className="font-mono text-[11px] text-gray-300 bg-black/30 p-2 rounded max-h-40 overflow-auto whitespace-pre-wrap leading-relaxed">
+              <div className="px-2 lg:px-3 pb-2">
+                <pre className="font-mono text-[9px] lg:text-[11px] text-gray-300 bg-black/30 p-1.5 lg:p-2 rounded max-h-32 lg:max-h-40 overflow-auto whitespace-pre-wrap leading-relaxed">
                   {streamingContent}
                   {isRunning && <span className="inline-block w-1.5 h-3 bg-green-400 animate-pulse ml-0.5" />}
                 </pre>
@@ -204,34 +223,34 @@ const WorkflowStatusPanel = ({
           </div>
         )}
 
-        {/* Files */}
+        {/* 파일 목록 */}
         {savedFiles && savedFiles.length > 0 && (
           <div>
             <button
               onClick={() => toggleSection('files')}
-              className="w-full px-3 py-1.5 flex items-center justify-between text-xs font-medium text-gray-400 hover:bg-gray-800/50"
+              className="w-full px-2 lg:px-3 py-1 lg:py-1.5 flex items-center justify-between text-[10px] lg:text-xs font-medium text-gray-400 hover:bg-gray-800/50"
             >
-              <span className="flex items-center gap-2">
-                <span>Files</span>
-                <span className="px-1.5 py-0.5 bg-gray-700 rounded text-[10px]">{savedFiles.length}</span>
+              <span className="flex items-center gap-1 lg:gap-2 flex-wrap">
+                <span>파일</span>
+                <span className="px-1 lg:px-1.5 py-0.5 bg-gray-700 rounded text-[9px] lg:text-[10px]">{savedFiles.length}</span>
                 {createdCount > 0 && (
-                  <span className="px-1 py-0.5 bg-green-500/20 text-green-400 rounded text-[10px]">+{createdCount}</span>
+                  <span className="px-1 py-0.5 bg-green-500/20 text-green-400 rounded text-[9px] lg:text-[10px]">+{createdCount}</span>
                 )}
                 {modifiedCount > 0 && (
-                  <span className="px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-[10px]">~{modifiedCount}</span>
+                  <span className="px-1 py-0.5 bg-amber-500/20 text-amber-400 rounded text-[9px] lg:text-[10px]">~{modifiedCount}</span>
                 )}
               </span>
               <span className="text-gray-600">{expandedSections.files ? '▼' : '▶'}</span>
             </button>
             {expandedSections.files && (
-              <div className="px-2 pb-2">
-                {/* Project Path */}
+              <div className="px-1.5 lg:px-2 pb-2">
+                {/* 프로젝트 경로 */}
                 {projectDir && (
-                  <div className="px-2 py-1 mb-1 text-[10px] text-gray-500 font-mono truncate border-b border-gray-800">
-                    {projectDir}
+                  <div className="px-1.5 lg:px-2 py-1 mb-1 text-[9px] lg:text-[10px] text-gray-500 font-mono truncate border-b border-gray-800">
+                    📂 {projectDir}
                   </div>
                 )}
-                {/* File Tree */}
+                {/* 파일 트리 */}
                 <div className="bg-gray-800/30 rounded p-1">
                   {renderFileTree(fileTree)}
                 </div>
@@ -240,30 +259,30 @@ const WorkflowStatusPanel = ({
           </div>
         )}
 
-        {/* Agent Details - Compact list */}
+        {/* 에이전트 목록 */}
         {agents.some(a => a.status !== 'pending') && (
-          <div className="px-3 py-2 border-t border-gray-800">
-            <div className="text-[10px] text-gray-500 mb-1.5">AGENTS</div>
-            <div className="space-y-1">
+          <div className="px-2 lg:px-3 py-1.5 lg:py-2 border-t border-gray-800">
+            <div className="text-[9px] lg:text-[10px] text-gray-500 mb-1 lg:mb-1.5">에이전트</div>
+            <div className="space-y-0.5 lg:space-y-1">
               {agents.filter(a => a.status !== 'pending').map(agent => (
-                <div key={agent.name} className="flex items-center gap-2 text-[11px]">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
+                <div key={agent.name} className="flex items-center gap-1.5 lg:gap-2 text-[10px] lg:text-[11px]">
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                     agent.status === 'running' ? 'bg-blue-500 animate-pulse' :
                     agent.status === 'completed' ? 'bg-green-500' :
                     agent.status === 'error' ? 'bg-red-500' : 'bg-gray-600'
                   }`} />
-                  <span className={`flex-1 truncate ${
+                  <span className={`flex-1 truncate min-w-0 ${
                     agent.status === 'running' ? 'text-blue-400' :
                     agent.status === 'completed' ? 'text-gray-400' :
                     agent.status === 'error' ? 'text-red-400' : 'text-gray-500'
                   }`}>
-                    {agent.title.replace(/^[\p{Emoji}]\s*/u, '')}
+                    {getKoreanAgentName(agent.title).replace(/^[\p{Emoji}]\s*/u, '')}
                   </span>
                   {agent.executionTime !== undefined && (
-                    <span className="text-gray-600 font-mono text-[10px]">{agent.executionTime.toFixed(1)}s</span>
+                    <span className="text-gray-600 font-mono text-[9px] lg:text-[10px] flex-shrink-0">{agent.executionTime.toFixed(1)}초</span>
                   )}
                   {agent.tokenUsage?.totalTokens ? (
-                    <span className="text-gray-600 font-mono text-[10px]">{agent.tokenUsage.totalTokens.toLocaleString()}</span>
+                    <span className="text-gray-600 font-mono text-[9px] lg:text-[10px] flex-shrink-0 hidden sm:inline">{agent.tokenUsage.totalTokens.toLocaleString()}</span>
                   ) : null}
                 </div>
               ))}
@@ -272,11 +291,11 @@ const WorkflowStatusPanel = ({
         )}
       </div>
 
-      {/* Footer Stats */}
+      {/* 하단 통계 */}
       {savedFiles && savedFiles.length > 0 && (
-        <div className="px-3 py-1.5 bg-gray-800 border-t border-gray-700 flex items-center justify-between text-[10px] text-gray-500">
-          <span>{savedFiles.filter(f => f.saved).length}/{savedFiles.length} saved</span>
-          {!isRunning && <span className="text-green-500">Complete</span>}
+        <div className="px-2 lg:px-3 py-1 lg:py-1.5 bg-gray-800 border-t border-gray-700 flex items-center justify-between text-[9px] lg:text-[10px] text-gray-500">
+          <span>{savedFiles.filter(f => f.saved).length}/{savedFiles.length} 저장됨</span>
+          {!isRunning && <span className="text-green-500">완료</span>}
         </div>
       )}
     </div>

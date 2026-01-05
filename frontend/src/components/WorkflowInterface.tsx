@@ -928,26 +928,26 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-medium text-gray-100">
-                  {workspaceStep === 'project' ? 'New Project' : 'Workspace Path'}
+                <h2 className="text-base sm:text-lg font-medium text-gray-100">
+                  {workspaceStep === 'project' ? '새 프로젝트' : '작업 경로'}
                 </h2>
-                <p className="text-xs text-gray-500">
-                  {workspaceStep === 'project' ? 'Step 1 of 2' : 'Step 2 of 2'}
+                <p className="text-[10px] sm:text-xs text-gray-500">
+                  {workspaceStep === 'project' ? '1/2 단계' : '2/2 단계'}
                 </p>
               </div>
             </div>
 
             {workspaceStep === 'project' ? (
-              <div className="mb-5">
-                <label className="block text-xs font-medium text-gray-400 mb-2">
-                  Project Name
+              <div className="mb-4 sm:mb-5">
+                <label className="block text-[10px] sm:text-xs font-medium text-gray-400 mb-1.5 sm:mb-2">
+                  프로젝트 이름
                 </label>
                 <input
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="my-awesome-project"
-                  className="w-full px-3 py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-sm"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-xs sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && projectName.trim()) {
                       handleWorkspaceSave();
@@ -955,21 +955,21 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   }}
                   autoFocus
                 />
-                <p className="mt-2 text-xs text-gray-600">
-                  A directory will be created with this name.
+                <p className="mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-gray-600">
+                  이 이름으로 디렉토리가 생성됩니다.
                 </p>
               </div>
             ) : (
-              <div className="mb-5">
-                <label className="block text-xs font-medium text-gray-400 mb-2">
-                  Base Workspace Path
+              <div className="mb-4 sm:mb-5">
+                <label className="block text-[10px] sm:text-xs font-medium text-gray-400 mb-1.5 sm:mb-2">
+                  기본 작업 경로
                 </label>
                 <input
                   type="text"
                   value={workspaceInput}
                   onChange={(e) => setWorkspaceInput(e.target.value)}
                   placeholder="/home/user/workspace"
-                  className="w-full px-3 py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-sm"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-xs sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleWorkspaceSave();
@@ -977,10 +977,10 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   }}
                   autoFocus
                 />
-                <div className="mt-2 p-2 bg-gray-800 border border-gray-700 rounded">
-                  <p className="text-xs text-gray-400">
-                    <span className="text-gray-500">Full path:</span>{' '}
-                    <code className="font-mono text-green-400">{workspaceInput}/{projectName}</code>
+                <div className="mt-1.5 sm:mt-2 p-1.5 sm:p-2 bg-gray-800 border border-gray-700 rounded">
+                  <p className="text-[10px] sm:text-xs text-gray-400">
+                    <span className="text-gray-500">전체 경로:</span>{' '}
+                    <code className="font-mono text-green-400 break-all">{workspaceInput}/{projectName}</code>
                   </p>
                 </div>
               </div>
@@ -990,17 +990,17 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               {workspaceStep === 'path' && (
                 <button
                   onClick={() => setWorkspaceStep('project')}
-                  className="px-3 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-400 text-sm transition-colors"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-400 text-xs sm:text-sm transition-colors"
                 >
-                  Back
+                  이전
                 </button>
               )}
               <button
                 onClick={handleWorkspaceSave}
                 disabled={workspaceStep === 'project' ? !projectName.trim() : !workspaceInput.trim()}
-                className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
+                className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-medium transition-colors"
               >
-                {workspaceStep === 'project' ? 'Next' : 'Continue'}
+                {workspaceStep === 'project' ? '다음' : '계속'}
               </button>
               {workspaceStep === 'project' && (
                 <button
@@ -1010,9 +1010,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                     localStorage.setItem('workflow_workspace', defaultPath);
                     setShowWorkspaceDialog(false);
                   }}
-                  className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 text-sm transition-colors"
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs sm:text-sm transition-colors"
                 >
-                  Skip
+                  건너뛰기
                 </button>
               )}
             </div>
@@ -1020,114 +1020,116 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       )}
 
-      {/* Save Conversation Confirmation Dialog - Dark Theme */}
+      {/* 대화 저장 확인 다이얼로그 */}
       {showSaveDialog && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg shadow-2xl max-w-md w-full p-5 border border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-gray-900 rounded-lg shadow-2xl max-w-md w-full p-4 sm:p-5 border border-gray-700">
+            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+                <svg className="w-4 sm:w-5 h-4 sm:h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-lg font-medium text-gray-100">Save Conversation?</h2>
-                <p className="text-xs text-gray-500">Keep this conversation for later</p>
+                <h2 className="text-base sm:text-lg font-medium text-gray-100">대화 저장</h2>
+                <p className="text-[10px] sm:text-xs text-gray-500">나중을 위해 이 대화를 저장합니다</p>
               </div>
             </div>
 
-            <p className="text-sm text-gray-400 mb-4">
-              Save this conversation to your history?
+            <p className="text-xs sm:text-sm text-gray-400 mb-3 sm:mb-4">
+              이 대화를 히스토리에 저장할까요?
             </p>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5 sm:space-y-2">
               <button
                 onClick={() => handleSaveConfirm(true, false)}
-                className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-medium transition-colors"
               >
-                Save This Time
+                이번만 저장
               </button>
               <button
                 onClick={() => handleSaveConfirm(true, true)}
-                className="w-full px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs sm:text-sm transition-colors"
               >
-                Always Save Automatically
+                항상 자동 저장
               </button>
               <button
                 onClick={() => handleSaveConfirm(false, false)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-500 text-sm transition-colors"
+                className="w-full px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-500 text-xs sm:text-sm transition-colors"
               >
-                Don't Save
+                저장 안 함
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* DeepSeek-R1 Thinking Indicator - Dark Theme */}
+      {/* DeepSeek-R1 사고 표시기 */}
       {isThinking && thinkingStream.length > 0 && (
-        <div className="bg-purple-900/30 border-b border-purple-800 px-3 py-1.5">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 animate-pulse">
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+        <div className="bg-purple-900/30 border-b border-purple-800 px-2 sm:px-3 py-1 sm:py-1.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="w-4 sm:w-5 h-4 sm:h-5 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 animate-pulse">
+              <svg className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             </div>
-            <span className="text-xs font-medium text-purple-300">Thinking...</span>
-            <span className="text-xs text-purple-500">{thinkingStream.length} blocks</span>
+            <span className="text-[10px] sm:text-xs font-medium text-purple-300">분석 중...</span>
+            <span className="text-[10px] sm:text-xs text-purple-500">{thinkingStream.length}개 블록</span>
           </div>
         </div>
       )}
 
-      {/* Workflow Output Area - Terminal Style */}
+      {/* 워크플로우 출력 영역 - 터미널 스타일 */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
-        <div className="p-3">
-          {/* Empty state - Terminal style */}
+        <div className="p-2 sm:p-3">
+          {/* 빈 상태 - 터미널 스타일 */}
           {conversationHistory.length === 0 && updates.length === 0 && !isRunning && (
-            <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-              <div className="font-mono text-gray-600 mb-4">
-                <div>╭─────────────────────────────────╮</div>
-                <div>│                                 │</div>
-                <div>│    <span className="text-blue-400">AI Code Agent</span> v1.0           │</div>
-                <div>│                                 │</div>
-                <div>│    <span className="text-gray-500">Enter a task to begin</span>        │</div>
-                <div>│                                 │</div>
-                <div>╰─────────────────────────────────╯</div>
+            <div className="flex flex-col items-center justify-center h-[50vh] sm:h-[60vh] text-center">
+              <div className="font-mono text-gray-600 mb-3 sm:mb-4 text-[10px] sm:text-xs">
+                <div className="hidden sm:block">╭─────────────────────────────────╮</div>
+                <div className="hidden sm:block">│                                 │</div>
+                <div className="sm:hidden text-blue-400">AI 코드 에이전트 v1.0</div>
+                <div className="hidden sm:block">│    <span className="text-blue-400">AI 코드 에이전트</span> v1.0        │</div>
+                <div className="hidden sm:block">│                                 │</div>
+                <div className="sm:hidden text-gray-500 mt-2">작업을 입력하여 시작하세요</div>
+                <div className="hidden sm:block">│    <span className="text-gray-500">작업을 입력하여 시작하세요</span>    │</div>
+                <div className="hidden sm:block">│                                 │</div>
+                <div className="hidden sm:block">╰─────────────────────────────────╯</div>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-600 font-mono">
-                <span className="text-blue-400">plan</span>
+              <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs text-gray-600 font-mono flex-wrap justify-center">
+                <span className="text-blue-400">설계</span>
                 <span>→</span>
-                <span className="text-green-400">code</span>
+                <span className="text-green-400">코딩</span>
                 <span>→</span>
-                <span className="text-purple-400">review</span>
+                <span className="text-purple-400">검토</span>
                 <span>→</span>
-                <span className="text-yellow-400">persist</span>
+                <span className="text-yellow-400">저장</span>
               </div>
               <button
                 onClick={() => setShowWorkspaceDialog(true)}
-                className="mt-4 text-xs text-gray-600 hover:text-gray-400 font-mono px-2 py-1 rounded border border-gray-800 hover:border-gray-700"
+                className="mt-3 sm:mt-4 text-[10px] sm:text-xs text-gray-600 hover:text-gray-400 font-mono px-2 py-1 rounded border border-gray-800 hover:border-gray-700 max-w-full truncate"
               >
                 $ cd {workspace}
               </button>
             </div>
           )}
 
-          {/* Conversation History - Terminal Style */}
+          {/* 대화 히스토리 - 터미널 스타일 */}
           {conversationHistory.length > 0 && (
-            <div className="space-y-2 mb-3">
+            <div className="space-y-1.5 sm:space-y-2 mb-2 sm:mb-3">
               {conversationHistory.map((turn, turnIndex) => (
-                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="font-mono text-xs">
+                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="font-mono text-[10px] sm:text-xs">
                   {turn.role === 'user' ? (
                     <div className="text-blue-400">
                       <span className="text-gray-600">$</span> {turn.content}
                     </div>
                   ) : (
                     <div className="border-l-2 border-gray-800 pl-2 text-gray-400">
-                      <div className="text-green-400 text-[10px]">✓ completed</div>
+                      <div className="text-green-400 text-[9px] sm:text-[10px]">✓ 완료</div>
                       <div className="whitespace-pre-wrap">{turn.content}</div>
                       {turn.artifacts && turn.artifacts.length > 0 && (
                         <div className="mt-1 text-gray-600">
-                          files: {turn.artifacts.map(a => a.filename).join(', ')}
+                          파일: {turn.artifacts.map(a => a.filename).join(', ')}
                         </div>
                       )}
                     </div>
@@ -1148,17 +1150,18 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               updates={updates}
               isRunning={isRunning}
               liveOutputs={liveOutputs}
+              savedFiles={savedFiles}
             />
           )}
 
-          {/* SharedContext Button - Dark Theme */}
+          {/* 공유 컨텍스트 버튼 */}
           {sharedContext && sharedContext.entries.length > 0 && (
-            <div className="mt-2">
+            <div className="mt-1.5 sm:mt-2">
               <button
                 onClick={() => setShowSharedContext(true)}
-                className="flex items-center gap-2 px-2 py-1 text-xs font-mono text-purple-400 hover:text-purple-300 border border-gray-800 rounded hover:border-gray-700 transition-colors"
+                className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs font-mono text-purple-400 hover:text-purple-300 border border-gray-800 rounded hover:border-gray-700 transition-colors"
               >
-                [context: {sharedContext.entries.length} entries]
+                [컨텍스트: {sharedContext.entries.length}개 항목]
               </button>
             </div>
           )}
@@ -1167,12 +1170,12 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       </div>
 
-      {/* Input Area - Compact, Dark */}
+      {/* 입력 영역 */}
       <div className="border-t border-gray-800 bg-gray-900">
-        <div className="px-3 py-2">
+        <div className="px-2 sm:px-3 py-1.5 sm:py-2">
           <form onSubmit={handleSubmit}>
-            <div className="flex items-center gap-2">
-              {/* Workspace Selector - Compact */}
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* 작업공간 선택기 */}
               <WorkspaceProjectSelector
                 currentWorkspace={workspace}
                 currentProject={workspace}
@@ -1190,45 +1193,45 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                 }}
               />
 
-              {/* Input field - Terminal style */}
-              <div className="relative flex-1">
+              {/* 입력 필드 - 터미널 스타일 */}
+              <div className="relative flex-1 min-w-0">
                 <input
                   ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Enter task or question..."
+                  placeholder="작업 또는 질문을 입력하세요..."
                   disabled={isRunning}
-                  className="w-full px-3 py-2 pr-20 bg-gray-800 text-gray-100 placeholder-gray-500 rounded-lg text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 disabled:opacity-50"
+                  className="w-full px-2 sm:px-3 py-1.5 sm:py-2 pr-16 sm:pr-20 bg-gray-800 text-gray-100 placeholder-gray-500 rounded-lg text-xs sm:text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={isRunning || !input.trim()}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5"
+                  className="absolute right-1 sm:right-1.5 top-1/2 -translate-y-1/2 px-2 sm:px-3 py-0.5 sm:py-1 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-[10px] sm:text-xs font-medium transition-colors flex items-center gap-1 sm:gap-1.5"
                 >
                   {isRunning ? (
                     <>
-                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                      <span className="hidden sm:inline">Running</span>
+                      <div className="w-2.5 sm:w-3 h-2.5 sm:h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                      <span className="hidden sm:inline">실행 중</span>
                     </>
                   ) : (
                     <>
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <svg className="w-2.5 sm:w-3 h-2.5 sm:h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                       </svg>
-                      <span className="hidden sm:inline">Run</span>
+                      <span className="hidden sm:inline">실행</span>
                     </>
                   )}
                 </button>
               </div>
 
-              {/* Toggle Panel - Icon only on mobile */}
+              {/* 패널 토글 - 모바일에서는 아이콘만 */}
               <button
                 onClick={() => setShowStatusPanel(!showStatusPanel)}
-                className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
-                title={showStatusPanel ? 'Hide panel' : 'Show panel'}
+                className="p-1.5 sm:p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors flex-shrink-0"
+                title={showStatusPanel ? '패널 숨기기' : '패널 보기'}
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <svg className="w-3.5 sm:w-4 h-3.5 sm:h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
                 </svg>
               </button>
