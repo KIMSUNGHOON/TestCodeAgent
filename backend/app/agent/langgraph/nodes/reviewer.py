@@ -174,7 +174,7 @@ Review this code for:
     if LLM_PROVIDER_AVAILABLE:
         try:
             provider = LLMProviderFactory.create(
-                model_type=settings.model_type,
+                model_type=settings.get_reasoning_model_type,
                 endpoint=review_endpoint,
                 model=review_model
             )
@@ -183,7 +183,7 @@ Review this code for:
             response = provider.generate_sync(review_prompt, TaskType.REVIEW)
 
             if response.parsed_json:
-                logger.info(f"🤖 Review via {settings.model_type} adapter")
+                logger.info(f"🤖 Review via {settings.get_reasoning_model_type} adapter")
                 return response.parsed_json
 
         except Exception as e:
@@ -208,8 +208,8 @@ Provide a detailed review in JSON format:
 
 Review:"""
 
-        # Log model info
-        logger.info(f"🤖 Reviewing with model: {review_model} (type: {settings.model_type})")
+        # Log model info (model type auto-detected from model name)
+        logger.info(f"🤖 Reviewing with model: {review_model} (type: {settings.get_reasoning_model_type})")
 
         # Retry logic with exponential backoff
         max_retries = 3

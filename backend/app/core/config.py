@@ -3,6 +3,34 @@ from pydantic_settings import BaseSettings
 from typing import List, Literal, Optional
 
 
+def detect_model_type(model_name: str) -> str:
+    """Auto-detect model type from model name.
+
+    Args:
+        model_name: Full model name (e.g., "deepseek-ai/DeepSeek-R1")
+
+    Returns:
+        Model type string: "deepseek", "qwen", "gpt", "claude", or "generic"
+    """
+    if not model_name:
+        return "generic"
+
+    name_lower = model_name.lower()
+
+    if "deepseek" in name_lower:
+        return "deepseek"
+    elif "qwen" in name_lower:
+        return "qwen"
+    elif "gpt" in name_lower or "openai" in name_lower:
+        return "gpt"
+    elif "claude" in name_lower or "anthropic" in name_lower:
+        return "claude"
+    elif "llama" in name_lower or "mistral" in name_lower or "mixtral" in name_lower:
+        return "generic"  # Use generic for other open models
+    else:
+        return "generic"
+
+
 class Settings(BaseSettings):
     """Application settings."""
 
@@ -14,9 +42,9 @@ class Settings(BaseSettings):
     llm_endpoint: str = "http://localhost:8001/v1"
     llm_model: str = "deepseek-ai/DeepSeek-R1"
 
-    # Model type for prompt selection
+    # Model type override (optional - auto-detected from model name if not set)
     # Options: "deepseek", "qwen", "gpt", "claude", "generic"
-    model_type: Literal["deepseek", "qwen", "gpt", "claude", "generic"] = "deepseek"
+    model_type: Optional[str] = None
 
     # Optional: Task-specific endpoints (override llm_endpoint if set)
     vllm_reasoning_endpoint: Optional[str] = None
@@ -45,6 +73,20 @@ class Settings(BaseSettings):
     def get_coding_model(self) -> str:
         """Get model for coding tasks."""
         return self.coding_model or self.llm_model
+
+    @property
+    def get_reasoning_model_type(self) -> str:
+        """Get model type for reasoning tasks (auto-detected from model name)."""
+        if self.model_type:
+            return self.model_type  # Use override if explicitly set
+        return detect_model_type(self.get_reasoning_model)
+
+    @property
+    def get_coding_model_type(self) -> str:
+        """Get model type for coding tasks (auto-detected from model name)."""
+        if self.model_type:
+            return self.model_type  # Use override if explicitly set
+        return detect_model_type(self.get_coding_model)
 
     # =========================
     # Agent Framework Selection

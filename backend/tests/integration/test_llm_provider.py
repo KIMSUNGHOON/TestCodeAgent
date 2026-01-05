@@ -369,12 +369,44 @@ def placeholder():
 class TestConfigIntegration:
     """Test 6: Config integration with settings"""
 
-    def test_settings_model_type(self):
-        """Settings has model_type attribute"""
+    def test_settings_model_type_auto_detection(self):
+        """Settings auto-detects model type from model names"""
         from app.core.config import settings
 
-        assert hasattr(settings, 'model_type')
-        assert settings.model_type in ["deepseek", "qwen", "gpt", "claude", "generic"]
+        # Should have model type getters for each task
+        assert hasattr(settings, 'get_coding_model_type')
+        assert hasattr(settings, 'get_reasoning_model_type')
+
+        # Model types should be valid values
+        valid_types = ["deepseek", "qwen", "gpt", "claude", "generic"]
+        assert settings.get_coding_model_type in valid_types
+        assert settings.get_reasoning_model_type in valid_types
+
+    def test_detect_model_type_function(self):
+        """Test the detect_model_type utility function"""
+        from app.core.config import detect_model_type
+
+        # DeepSeek models
+        assert detect_model_type("deepseek-ai/DeepSeek-R1") == "deepseek"
+        assert detect_model_type("DeepSeek-V2") == "deepseek"
+
+        # Qwen models
+        assert detect_model_type("Qwen/Qwen3-8B-Coder") == "qwen"
+        assert detect_model_type("qwen2.5-coder") == "qwen"
+
+        # OpenAI models
+        assert detect_model_type("gpt-4") == "gpt"
+        assert detect_model_type("openai/gpt-4-turbo") == "gpt"
+
+        # Claude models
+        assert detect_model_type("claude-3-opus") == "claude"
+        assert detect_model_type("anthropic/claude-3") == "claude"
+
+        # Generic/other models
+        assert detect_model_type("llama-3") == "generic"
+        assert detect_model_type("mistral-7b") == "generic"
+        assert detect_model_type("unknown-model") == "generic"
+        assert detect_model_type("") == "generic"
 
     def test_settings_endpoints(self):
         """Settings provides endpoint methods"""

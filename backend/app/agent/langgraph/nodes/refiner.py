@@ -300,7 +300,7 @@ Return the fixed code directly, without explanations or markdown formatting."""
     if LLM_PROVIDER_AVAILABLE and refine_endpoint:
         try:
             provider = LLMProviderFactory.create(
-                model_type=settings.model_type,
+                model_type=settings.get_coding_model_type,
                 endpoint=refine_endpoint,
                 model=refine_model
             )
@@ -319,7 +319,7 @@ Return the fixed code directly, without explanations or markdown formatting."""
                         lines = lines[:-1]
                     fixed_code = "\n".join(lines)
 
-                logger.info(f"🤖 Fix applied via {settings.model_type} adapter")
+                logger.info(f"🤖 Fix applied via {settings.get_coding_model_type} adapter")
                 return fixed_code
 
         except Exception as e:

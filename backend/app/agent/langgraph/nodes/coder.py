@@ -36,7 +36,7 @@ def _get_code_generation_prompt(user_request: str, task_type: str) -> tuple:
     Returns:
         Tuple of (prompt, config_dict)
     """
-    model_type = settings.model_type
+    model_type = settings.get_coding_model_type
     model_name = settings.get_coding_model
 
     if model_type == "qwen" and QWEN_CODER_SYSTEM_PROMPT:
@@ -277,8 +277,8 @@ def _generate_code_with_vllm(
         # Get model-appropriate prompt and config
         prompt, model_config = _get_code_generation_prompt(user_request, task_type)
 
-        # Log model info
-        logger.info(f"🤖 Using model: {coding_model} (type: {settings.model_type})")
+        # Log model info (model type auto-detected from model name)
+        logger.info(f"🤖 Using model: {coding_model} (type: {settings.get_coding_model_type})")
         logger.info(f"📡 Endpoint: {coding_endpoint}")
 
         # Call LLM endpoint with longer timeout and retry logic
