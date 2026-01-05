@@ -905,7 +905,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#FAF9F7]">
+    <div className="flex flex-col h-full bg-gray-950 text-gray-100">
       {/* Dashboard Header - Shows when workflow is active */}
       {(isRunning || totalProgress > 0 || savedFiles.length > 0) && (
         <DashboardHeader
@@ -921,10 +921,10 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         />
       )}
 
-      {/* Main Content Area - Conversation + Status Panel */}
+      {/* Main Content Area - Responsive flex layout */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* LEFT PANEL - Conversation Area (60%) */}
-        <div className="flex flex-col flex-1 min-w-0">
+        {/* LEFT PANEL - Conversation Area (fluid width) */}
+        <div className="flex flex-col flex-1 min-w-0 bg-gray-950">
       {/* Workspace Configuration Dialog */}
       {showWorkspaceDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -1094,92 +1094,72 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
       )}
 
       {/* Workflow Steps Area */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
+        <div className="max-w-4xl mx-auto px-4 py-4">
           {/* Empty state - only show when no history and no current updates */}
           {conversationHistory.length === 0 && updates.length === 0 && !isRunning && (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center mb-6 shadow-lg">
-                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center mb-4">
+                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-semibold text-[#1A1A1A] mb-3">AI Code Assistant</h2>
-              <p className="text-[#666666] max-w-md mb-6">
-                Ask questions or request coding tasks. The system automatically determines whether to use chat mode or multi-agent workflow.
+              <h2 className="text-xl font-medium text-gray-200 mb-2">AI Code Assistant</h2>
+              <p className="text-gray-500 text-sm max-w-md mb-4">
+                Enter a task or question. The system determines the appropriate mode automatically.
               </p>
-              <div className="space-y-3 mb-6">
-                <div className="flex items-center gap-4 text-sm text-[#999999]">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#DA7756]"></div>
-                    <span>Planning</span>
-                  </div>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                  </svg>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#16A34A]"></div>
-                    <span>Coding</span>
-                  </div>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                  </svg>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#2563EB]"></div>
-                    <span>Review</span>
-                  </div>
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <span>Plan</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                  <span>Code</span>
+                </div>
+                <span>→</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                  <span>Review</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#999999] bg-[#F5F4F2] px-3 py-2 rounded-lg border border-[#E5E5E5]">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                </svg>
-                <span>Workspace: <span className="font-mono font-medium text-[#666666]">{workspace}</span></span>
-                <button
-                  onClick={() => setShowWorkspaceDialog(true)}
-                  className="ml-2 text-[#DA7756] hover:text-[#C86A4A] transition-colors"
-                >
-                  Change
-                </button>
-              </div>
+              <button
+                onClick={() => setShowWorkspaceDialog(true)}
+                className="mt-3 text-xs text-gray-600 hover:text-gray-400 font-mono"
+              >
+                📁 {workspace}
+              </button>
             </div>
           )}
 
-          {/* Conversation History */}
+          {/* Conversation History - Compact, Dark */}
           {conversationHistory.length > 0 && (
-            <div className="space-y-6 mb-6">
+            <div className="space-y-3 mb-4">
               {conversationHistory.map((turn, turnIndex) => (
-                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="space-y-3">
+                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="space-y-2">
                   {turn.role === 'user' ? (
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-[#DA7756] flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                        </svg>
+                    <div className="flex items-start gap-2">
+                      <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center flex-shrink-0 text-xs">
+                        U
                       </div>
-                      <div className="flex-1 bg-white rounded-xl p-4 border border-[#E5E5E5] shadow-sm">
-                        <p className="text-[#1A1A1A]">{turn.content}</p>
+                      <div className="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-sm text-gray-200">
+                        {turn.content}
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-start gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#16A34A] to-[#15803D] flex items-center justify-center flex-shrink-0">
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-                        </svg>
+                    <div className="flex items-start gap-2">
+                      <div className="w-6 h-6 rounded bg-green-600 flex items-center justify-center flex-shrink-0 text-xs">
+                        AI
                       </div>
-                      <div className="flex-1 bg-[#F0FDF4] rounded-xl p-4 border border-[#BBF7D0] shadow-sm">
-                        <p className="text-[#166534] text-sm mb-2 font-medium">Completed</p>
-                        <p className="text-[#1A1A1A]">{turn.content}</p>
+                      <div className="flex-1 bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-700">
+                        <p className="text-xs text-green-400 mb-1">✓ Complete</p>
+                        <p className="text-sm text-gray-300">{turn.content}</p>
                         {turn.artifacts && turn.artifacts.length > 0 && (
-                          <div className="mt-3 pt-3 border-t border-[#BBF7D0]">
-                            <p className="text-xs text-[#166534] mb-2">Generated files:</p>
-                            <div className="flex flex-wrap gap-2">
+                          <div className="mt-2 pt-2 border-t border-gray-700">
+                            <p className="text-xs text-gray-500 mb-1">Files:</p>
+                            <div className="flex flex-wrap gap-1">
                               {turn.artifacts.map((artifact, i) => (
-                                <span key={i} className="inline-flex items-center px-2 py-1 rounded-md bg-white text-xs text-[#166534] border border-[#BBF7D0]">
-                                  <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                  </svg>
+                                <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 font-mono">
                                   {artifact.filename}
                                 </span>
                               ))}
@@ -1606,12 +1586,12 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       </div>
 
-      {/* Input Area */}
-      <div className="border-t border-[#E5E5E5] bg-white">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      {/* Input Area - Compact, Dark */}
+      <div className="border-t border-gray-800 bg-gray-900">
+        <div className="px-3 py-2">
           <form onSubmit={handleSubmit}>
-            <div className="flex items-center gap-3">
-              {/* Workspace/Project Selector */}
+            <div className="flex items-center gap-2">
+              {/* Workspace Selector - Compact */}
               <WorkspaceProjectSelector
                 currentWorkspace={workspace}
                 currentProject={workspace}
@@ -1629,64 +1609,57 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                 }}
               />
 
-              {/* Input field container */}
+              {/* Input field - Terminal style */}
               <div className="relative flex-1">
                 <input
                   ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask a question or describe a coding task..."
+                  placeholder="Enter task or question..."
                   disabled={isRunning}
-                  className="w-full px-4 py-3 pr-32 bg-[#F5F4F2] text-[#1A1A1A] placeholder-[#999999] rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#DA7756] focus:ring-opacity-50 border border-[#E5E5E5] disabled:opacity-50"
+                  className="w-full px-3 py-2 pr-20 bg-gray-800 text-gray-100 placeholder-gray-500 rounded-lg text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={isRunning || !input.trim()}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 rounded-xl bg-[#DA7756] hover:bg-[#C86A4A] disabled:bg-[#E5E5E5] disabled:cursor-not-allowed text-white font-medium text-sm transition-colors flex items-center gap-2"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-xs font-medium transition-colors flex items-center gap-1.5"
                 >
                   {isRunning ? (
                     <>
-                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      <span>Running</span>
+                      <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                      <span className="hidden sm:inline">Running</span>
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z" />
                       </svg>
-                      <span>Execute</span>
+                      <span className="hidden sm:inline">Run</span>
                     </>
                   )}
                 </button>
               </div>
+
+              {/* Toggle Panel - Icon only on mobile */}
+              <button
+                onClick={() => setShowStatusPanel(!showStatusPanel)}
+                className="p-2 rounded-md text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
+                title={showStatusPanel ? 'Hide panel' : 'Show panel'}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                </svg>
+              </button>
             </div>
           </form>
-          <div className="mt-2 flex items-center justify-between text-xs text-[#999999]">
-            <p>
-              Automatically uses chat or workflow mode based on your request
-            </p>
-            {/* Toggle Status Panel Button */}
-            <button
-              onClick={() => setShowStatusPanel(!showStatusPanel)}
-              className="flex items-center gap-1 text-[#666666] hover:text-[#1A1A1A] transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-              </svg>
-              <span>{showStatusPanel ? 'Hide' : 'Show'} Status</span>
-            </button>
-          </div>
         </div>
       </div>
       </div>{/* End of LEFT PANEL */}
 
-      {/* RIGHT PANEL - Workflow Status (40% width for 6:4 ratio) */}
+      {/* RIGHT PANEL - Workflow Status (responsive width) */}
       {showStatusPanel && (isRunning || savedFiles.length > 0 || totalProgress > 0) && (
-        <div className="w-2/5 min-w-[320px] max-w-[500px] border-l border-gray-200 flex-shrink-0 overflow-hidden">
+        <div className="hidden md:block w-80 lg:w-96 border-l border-gray-800 flex-shrink-0 overflow-hidden">
           <WorkflowStatusPanel
             isRunning={isRunning}
             agents={agentProgress}

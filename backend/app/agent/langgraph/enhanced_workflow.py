@@ -373,77 +373,14 @@ class EnhancedWorkflow:
             coder_start = time.time()
             state.update(architect_result)
 
-            # PARALLEL STREAMING: Show multiple files being generated simultaneously
-            # Group files into parallel batches (simulate parallel agent execution)
-            # Use configurable batch size (default 10 for H100, can be set via CODER_BATCH_SIZE)
-            from app.core.config import settings
-            batch_size = min(settings.coder_batch_size, len(files_to_create))
-            file_progress = {}  # Track progress for each file
-
-            # Initialize all files as "queued"
-            for i, file_info in enumerate(files_to_create):
-                file_path = file_info.get("path", f"file_{i}.py")
-                file_progress[file_path] = {
-                    "status": "queued",
-                    "progress": 0,
-                    "purpose": file_info.get("purpose", "Implementation"),
-                }
-
-            # Process files in parallel batches with progressive streaming
-            for batch_start in range(0, len(files_to_create), batch_size):
-                batch_end = min(batch_start + batch_size, len(files_to_create))
-                batch = files_to_create[batch_start:batch_end]
-
-                # Mark batch files as "in_progress"
-                for file_info in batch:
-                    file_path = file_info.get("path", f"file_{batch_start}.py")
-                    file_progress[file_path]["status"] = "generating"
-                    file_progress[file_path]["progress"] = 0
-
-                # Simulate progressive generation for all files in batch
-                for progress_step in range(0, 101, 25):
-                    # Build parallel streaming content showing all active files
-                    parallel_content = f"🔄 Generating {len(batch)} files in parallel:\n\n"
-
-                    for file_info in batch:
-                        file_path = file_info.get("path", f"file.py")
-                        purpose = file_info.get("purpose", "Implementation")
-                        file_progress[file_path]["progress"] = progress_step
-
-                        # Progress bar for each file
-                        bar_length = 20
-                        filled = int(bar_length * progress_step / 100)
-                        bar = "█" * filled + "░" * (bar_length - filled)
-
-                        parallel_content += f"📄 {file_path}\n"
-                        parallel_content += f"   [{bar}] {progress_step}%\n"
-                        parallel_content += f"   {purpose}\n\n"
-
-                    # Show overall progress
-                    completed = sum(1 for f in file_progress.values() if f["status"] == "completed")
-                    total = len(files_to_create)
-                    parallel_content += f"\n📊 Overall: {completed}/{total} files completed"
-
-                    yield self._create_update("coder", "streaming", {
-                        "streaming_files": [f.get("path", "file.py") for f in batch],
-                        "streaming_progress": f"{batch_start + len(batch)}/{len(files_to_create)}",
-                        "parallel_file_progress": {f.get("path", "file.py"): file_progress.get(f.get("path", "file.py"), {}) for f in batch},
-                        "message": f"Generating batch {batch_start // batch_size + 1}...",
-                        "streaming_content": parallel_content,
-                        "is_parallel": True,
-                        "batch_info": {
-                            "current": batch_start // batch_size + 1,
-                            "total": (len(files_to_create) + batch_size - 1) // batch_size,
-                            "files_in_batch": len(batch),
-                        }
-                    })
-                    await asyncio.sleep(0.2)
-
-                # Mark batch files as completed
-                for file_info in batch:
-                    file_path = file_info.get("path", f"file.py")
-                    file_progress[file_path]["status"] = "completed"
-                    file_progress[file_path]["progress"] = 100
+            # Show simple progress while coder generates code
+            # NOTE: We don't show specific file names here because coder may generate
+            # different files than architect planned. We show actual files after coder completes.
+            yield self._create_update("coder", "streaming", {
+                "message": "Generating code...",
+                "streaming_content": f"💻 Code Generation in Progress\n\n🤖 Model: {settings.get_coding_model}\n📁 Workspace: {project_dir}\n\n⏳ Generating production-ready code...",
+            })
+            await asyncio.sleep(0.5)
 
             coder_result = coder_node(state)
             agent_times["coder"] = time.time() - coder_start
