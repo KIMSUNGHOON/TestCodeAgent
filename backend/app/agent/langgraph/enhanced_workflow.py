@@ -817,13 +817,30 @@ class EnhancedWorkflow:
                 "message": "Saving files to workspace...",
             })
 
-            # Collect all artifacts from coder output
+            # CRITICAL: Collect ALL artifacts from ALL sources and merge
+            # Sources: 1) coder_output.artifacts, 2) state.artifacts, 3) state.final_artifacts (existing)
             coder_output = state.get("coder_output", {})
-            artifacts_to_save = coder_output.get("artifacts", [])
-            if not artifacts_to_save:
-                artifacts_to_save = state.get("artifacts", [])
+            coder_artifacts = coder_output.get("artifacts", [])
+            state_artifacts = state.get("artifacts", [])
+            existing_final = state.get("final_artifacts", [])
 
-            # Set final_artifacts for persistence
+            # Merge all artifacts by filename (later entries override earlier)
+            artifact_map = {}
+            for artifact in existing_final:
+                if artifact.get("filename"):
+                    artifact_map[artifact["filename"]] = artifact
+            for artifact in state_artifacts:
+                if artifact.get("filename"):
+                    artifact_map[artifact["filename"]] = artifact
+            for artifact in coder_artifacts:
+                if artifact.get("filename"):
+                    artifact_map[artifact["filename"]] = artifact
+
+            # Convert back to list
+            artifacts_to_save = list(artifact_map.values())
+            logger.info(f"📁 Collected artifacts: {len(coder_artifacts)} from coder, {len(state_artifacts)} from state, {len(existing_final)} existing → {len(artifacts_to_save)} total")
+
+            # Set final_artifacts for persistence (accumulated, not overwritten)
             state["final_artifacts"] = artifacts_to_save
             state["workflow_status"] = "completed" if all_passed else "completed_with_issues"
 

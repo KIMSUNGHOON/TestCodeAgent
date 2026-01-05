@@ -171,36 +171,56 @@ def refiner_node(state: QualityGateState) -> Dict:
     # CRITICAL FIX: Apply diffs to actual files AND update artifacts
     workspace_root = state.get("workspace_root", "/tmp/workspace")
     updated_artifacts = []
+    updated_filenames = set()  # Track which files were updated
 
     for code_diff in code_diffs:
         # Write modified content to file
         from app.agent.langgraph.tools.filesystem_tools import write_file_tool
 
+        filename = code_diff["file_path"].split("/")[-1]  # Get filename
         result = write_file_tool(
-            file_path=code_diff["file_path"].split("/")[-1],  # Get filename
+            file_path=filename,
             content=code_diff["modified_content"],
             workspace_root=workspace_root
         )
 
         if result["success"]:
             logger.info(f"✅ Applied fix to: {code_diff['file_path']}")
+            updated_filenames.add(filename)
 
             # Update artifact with new content
             updated_artifacts.append({
-                "filename": code_diff["file_path"].split("/")[-1],
+                "filename": filename,
                 "file_path": result["file_path"],
                 "language": "python",
                 "content": code_diff["modified_content"],
                 "size_bytes": len(code_diff["modified_content"]),
-                "checksum": "updated"
+                "checksum": "updated",
+                "action": "modified",
+                "saved": True,
             })
         else:
             logger.error(f"❌ Failed to apply fix: {result.get('error')}")
 
-    # Update coder_output with refined artifacts
+    # CRITICAL: Merge updated artifacts with existing artifacts (don't replace!)
+    # Keep existing artifacts that weren't updated
+    existing_artifacts = state.get("coder_output", {}).get("artifacts", [])
+    merged_artifacts = []
+
+    # Add existing artifacts that weren't modified
+    for artifact in existing_artifacts:
+        if artifact.get("filename") not in updated_filenames:
+            merged_artifacts.append(artifact)
+
+    # Add updated artifacts
+    merged_artifacts.extend(updated_artifacts)
+
+    logger.info(f"📁 Artifacts: {len(existing_artifacts)} existing, {len(updated_artifacts)} updated, {len(merged_artifacts)} total")
+
+    # Update coder_output with MERGED artifacts (not replaced)
     updated_coder_output = state.get("coder_output", {}).copy()
+    updated_coder_output["artifacts"] = merged_artifacts
     if updated_artifacts:
-        updated_coder_output["artifacts"] = updated_artifacts
         updated_coder_output["status"] = "refined"
 
     # Determine if fixes are sufficient

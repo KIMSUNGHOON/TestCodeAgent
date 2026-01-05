@@ -79,50 +79,74 @@ const WorkflowStatusPanel = ({
     setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // 파일 트리 생성
+  // 파일 트리 생성 (개선된 알고리즘 - 디렉토리 구조 정확히 표시)
   const buildFileTree = (files: Artifact[]): FileTreeNode[] => {
-    const root: Map<string, FileTreeNode> = new Map();
+    // Use nested Maps for efficient tree building
+    interface TreeNode {
+      node: FileTreeNode;
+      childMap: Map<string, TreeNode>;
+    }
+
+    const rootMap = new Map<string, TreeNode>();
 
     files.forEach(file => {
-      const parts = file.filename.split('/');
-      let currentLevel = root;
+      // Handle both path formats: "dir/file.ext" and "file.ext"
+      const filename = file.filename || '';
+      const parts = filename.split('/').filter(p => p.length > 0);
+      if (parts.length === 0) return;
+
+      let currentLevel = rootMap;
 
       parts.forEach((part, index) => {
         const isLastPart = index === parts.length - 1;
         const currentPath = parts.slice(0, index + 1).join('/');
 
         if (!currentLevel.has(part)) {
-          const node: FileTreeNode = {
+          const newNode: FileTreeNode = {
             name: part,
             path: currentPath,
             type: isLastPart ? 'file' : 'directory',
-            ...(isLastPart && {
-              language: file.language,
-              saved: file.saved,
-              savedPath: file.saved_path || undefined,
-              relativePath: file.relative_path,
-              description: file.description,
-              content: file.content?.slice(0, 100),
-              action: file.action,
-              sizeBytes: file.size_bytes,
-            }),
+            children: isLastPart ? undefined : [],
           };
-          if (!isLastPart) node.children = [];
-          currentLevel.set(part, node);
+
+          // Add file-specific properties
+          if (isLastPart) {
+            newNode.language = file.language;
+            newNode.saved = file.saved;
+            newNode.savedPath = file.saved_path || undefined;
+            newNode.relativePath = file.relative_path;
+            newNode.description = file.description;
+            newNode.content = file.content?.slice(0, 100);
+            newNode.action = file.action;
+            newNode.sizeBytes = file.size_bytes;
+          }
+
+          currentLevel.set(part, {
+            node: newNode,
+            childMap: new Map(),
+          });
         }
 
         if (!isLastPart) {
-          const existingNode = currentLevel.get(part)!;
-          if (!existingNode.children) existingNode.children = [];
-          const childMap = new Map<string, FileTreeNode>();
-          existingNode.children.forEach(child => childMap.set(child.name, child));
-          currentLevel = childMap;
-          existingNode.children = Array.from(childMap.values());
+          currentLevel = currentLevel.get(part)!.childMap;
         }
       });
     });
 
-    return Array.from(root.values());
+    // Convert nested Maps to array structure
+    const convertToArray = (map: Map<string, TreeNode>): FileTreeNode[] => {
+      const result: FileTreeNode[] = [];
+      map.forEach((treeNode) => {
+        const node = { ...treeNode.node };
+        if (treeNode.childMap.size > 0) {
+          node.children = convertToArray(treeNode.childMap);
+        }
+        result.push(node);
+      });
+      return result;
+    };
+
+    return convertToArray(rootMap);
   };
 
   // 파일 아이콘
