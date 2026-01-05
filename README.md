@@ -186,7 +186,26 @@ TestCodeAgent/
 │   │   ├── App.tsx                    # Main app
 │   │   └── index.css                  # Claude.ai color palette
 │   └── package.json
+├── shared/                       # Shared modules across backend
+│   ├── llm/                      # LLM Provider abstraction
+│   │   ├── base.py               # BaseLLMProvider, LLMConfig, TaskType
+│   │   ├── adapters/
+│   │   │   ├── deepseek_adapter.py   # DeepSeek-R1 with <think> tags
+│   │   │   ├── qwen_adapter.py       # Qwen coding optimization
+│   │   │   └── generic_adapter.py    # GPT, Claude, Llama, Mistral
+│   │   └── __init__.py
+│   └── prompts/
+│       └── generic.py            # Model-agnostic prompts
+├── docs/                         # Technical documentation
+│   ├── LLM_MODEL_CHANGE_PLAN.md
+│   ├── MOCK_MODE.md
+│   ├── REFINEMENT_CYCLE_GUIDE.md
+│   ├── MULTI_USER_ANALYSIS.md
+│   ├── OPTIMIZATION_RECOMMENDATIONS.md
+│   └── archive/                  # Historical documents
 ├── docker-compose.yml
+├── CHANGELOG.md
+├── INSTALL_CONDA.md
 └── README.md
 ```
 
@@ -506,6 +525,78 @@ Existing sessions using standard framework continue to work. New features:
 - **Standard:** Lower overhead, faster startup
 - **DeepAgents:** Higher overhead, better for complex multi-step tasks
 - **Recommendation:** Use Standard for simple tasks, DeepAgents for complex workflows
+
+### v2.2 - LLM Provider Abstraction Layer (January 2026)
+
+**Flexible Model Switching:**
+- 🔄 **Unified LLM Interface**: Switch between any LLM model with minimal configuration
+- 🎛️ **Model-Specific Adapters**: Optimized prompts for DeepSeek, Qwen, GPT, Claude, and generic models
+- 🧠 **Task-Aware Prompts**: Different prompt strategies for reasoning, coding, review, and refinement
+
+**LLM Provider Factory:**
+```python
+from shared.llm import LLMProviderFactory, TaskType
+
+# Create provider for any model type
+provider = LLMProviderFactory.create(
+    model_type="deepseek",  # or "qwen", "gpt", "claude", "generic"
+    endpoint="http://localhost:8001/v1",
+    model="deepseek-ai/DeepSeek-R1"
+)
+
+# Generate with task-specific configuration
+response = await provider.generate(
+    prompt="Implement user authentication",
+    task_type=TaskType.CODING  # REASONING, CODING, REVIEW, REFINE, GENERAL
+)
+```
+
+**Available Adapters:**
+
+| Adapter | Model Type | Special Features |
+|---------|-----------|------------------|
+| `DeepSeekAdapter` | deepseek | `<think>` tag parsing, reasoning optimization |
+| `QwenAdapter` | qwen | Coding-optimized, low temperature |
+| `GenericAdapter` | gpt, claude, llama, mistral | Universal OpenAI-compatible API |
+
+**Configuration:**
+```env
+# Unified model configuration
+MODEL_TYPE=deepseek          # deepseek, qwen, gpt, claude, generic
+LLM_ENDPOINT=http://localhost:8001/v1
+LLM_MODEL=deepseek-ai/DeepSeek-R1
+
+# Optional: Separate endpoints for different tasks
+VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
+VLLM_CODING_ENDPOINT=http://localhost:8002/v1
+```
+
+**Single Model Deployment:**
+```python
+# Use one model for all tasks (e.g., GPT-OSS-120B)
+settings.model_type = "generic"
+settings.llm_endpoint = "http://your-llm-server/v1"
+settings.llm_model = "gpt-oss-120b"
+```
+
+**Key Benefits:**
+- 🚀 **Easy Model Switching**: Change models without code modifications
+- 🎯 **Task-Optimized Prompts**: Each adapter uses optimal prompt format
+- 🔧 **Graceful Fallback**: Heuristic-based fallback when LLM unavailable
+- 📊 **Usage Tracking**: Token usage and response metadata
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [README.md](README.md) | Main project documentation |
+| [INSTALL_CONDA.md](INSTALL_CONDA.md) | Conda installation guide |
+| [CHANGELOG.md](CHANGELOG.md) | Version history and changes |
+| [docs/LLM_MODEL_CHANGE_PLAN.md](docs/LLM_MODEL_CHANGE_PLAN.md) | LLM abstraction implementation plan |
+| [docs/MOCK_MODE.md](docs/MOCK_MODE.md) | Mock mode testing guide |
+| [docs/REFINEMENT_CYCLE_GUIDE.md](docs/REFINEMENT_CYCLE_GUIDE.md) | Code refinement workflow guide |
+| [docs/MULTI_USER_ANALYSIS.md](docs/MULTI_USER_ANALYSIS.md) | Multi-user concurrency analysis |
+| [docs/OPTIMIZATION_RECOMMENDATIONS.md](docs/OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU optimization guide |
 
 ## 📚 References
 
