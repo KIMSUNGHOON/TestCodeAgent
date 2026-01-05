@@ -28,7 +28,7 @@ fi
 # Check if .env exists
 if [ ! -f backend/.env ]; then
     echo -e "${YELLOW}⚠️  Creating backend/.env from .env.example${NC}"
-    cp backend/.env.example backend/.env
+    cp .env.example backend/.env
 fi
 
 # Check if frontend dependencies are installed
