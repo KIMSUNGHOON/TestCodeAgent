@@ -170,30 +170,42 @@ class Settings(BaseSettings):
 
 ## 📝 구현 계획
 
-### Stage 1: 기반 구조 구현 (1-2일)
+### Stage 1: 기반 구조 구현 ✅ 완료
 
-- [ ] `shared/llm/base.py` - LLM Provider 인터페이스 정의
-- [ ] `shared/llm/adapters/` - 모델별 어댑터 구현
-  - [ ] `deepseek_adapter.py`
-  - [ ] `qwen_adapter.py`
-  - [ ] `generic_adapter.py` (GPT 등 범용)
-- [ ] `backend/app/core/config.py` - 설정 구조 확장
+- [x] `shared/llm/base.py` - LLM Provider 인터페이스 정의
+  - `BaseLLMProvider` 추상 클래스
+  - `LLMConfig`, `LLMResponse` 데이터 클래스
+  - `TaskType` enum (REASONING, CODING, REVIEW, REFINE, GENERAL)
+  - `LLMProviderFactory` 팩토리 패턴
+- [x] `shared/llm/adapters/` - 모델별 어댑터 구현
+  - [x] `deepseek_adapter.py` - `<think>` 태그 지원
+  - [x] `qwen_adapter.py` - 코딩 특화 설정
+  - [x] `generic_adapter.py` - GPT, Claude, Llama, Mistral 지원
+- [x] `backend/app/core/config.py` - 설정 구조 확장
+  - `model_type`, `llm_endpoint`, `llm_model` 추가
+  - `get_reasoning_endpoint`, `get_coding_endpoint` 프로퍼티
 
-### Stage 2: 노드 리팩토링 (2-3일)
+### Stage 2: 노드 리팩토링 ✅ 완료
 
-- [ ] `coder.py` - LLM Provider 인터페이스 사용으로 변경
-- [ ] `reviewer.py` - 동일
-- [ ] `refiner.py` - 실제 LLM 호출 구현 (현재 시뮬레이션)
-- [ ] `supervisor.py` - 어댑터 패턴 적용
+- [x] `coder.py` - LLM Provider 인터페이스 사용으로 변경
+  - `_get_code_generation_prompt()` 모델별 프롬프트 선택
+- [x] `reviewer.py` - LLM Provider 어댑터 적용
+  - `LLMProviderFactory.create()` 사용
+- [x] `refiner.py` - 실제 LLM 호출 구현
+  - `_apply_fix_with_llm()` 함수 추가
+  - Fallback to heuristic 지원
+- [ ] `supervisor.py` - 어댑터 패턴 적용 (선택적)
 
-### Stage 3: 프롬프트 통합 (1-2일)
+### Stage 3: 프롬프트 통합 ✅ 완료
 
-- [ ] `shared/prompts/base.py` - 추상 프롬프트 템플릿
-- [ ] `shared/prompts/task_prompts.py` - 태스크별 프롬프트 (모델 독립적)
-- [ ] 기존 `deepseek_r1.py`, `qwen_coder.py` → 어댑터로 통합
+- [x] `shared/prompts/generic.py` - 범용 프롬프트 템플릿
+- [x] 어댑터 내 통합 프롬프트
+  - 각 어댑터에 `SYSTEM_PROMPTS` 딕셔너리 포함
+  - `format_prompt()`, `format_system_prompt()` 메서드
 
-### Stage 4: 테스트 및 검증 (1일)
+### Stage 4: 테스트 및 검증 🔄 진행 중
 
+- [x] 모듈 임포트 테스트
 - [ ] 단일 모델 모드 테스트
 - [ ] 멀티 모델 모드 테스트
 - [ ] Fallback 동작 검증
@@ -282,5 +294,6 @@ else:
 
 ---
 
-*Last Updated: 2026-01-02*
+*Last Updated: 2026-01-05*
 *Author: AI Assistant*
+*Implementation Status: Stage 1-3 Complete*

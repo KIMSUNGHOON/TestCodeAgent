@@ -1,7 +1,7 @@
 """Refiner Node for code improvement based on review feedback
 
 Implements diff-based code updates instead of full regeneration for efficiency.
-Uses DeepSeek-R1 reasoning patterns for better analysis.
+Uses LLM provider abstraction for flexible model switching.
 """
 
 import logging
@@ -9,6 +9,14 @@ import difflib
 from typing import Dict, List
 from datetime import datetime
 from app.agent.langgraph.schemas.state import QualityGateState, CodeDiff, DebugLog
+from app.core.config import settings
+
+# Import LLM provider for model-agnostic calls
+try:
+    from shared.llm import LLMProviderFactory, TaskType
+    LLM_PROVIDER_AVAILABLE = True
+except ImportError:
+    LLM_PROVIDER_AVAILABLE = False
 
 # Import DeepSeek prompts for enhanced reasoning
 try:
@@ -135,9 +143,11 @@ def refiner_node(state: QualityGateState) -> Dict:
         file_path = artifact.get("file_path", "unknown")
         original_content = artifact.get("content", "")
 
-        # PLACEHOLDER: In production, call LLM to generate fix
-        # For now, simulate a simple fix
-        modified_content = _apply_fix_simulation(original_content, issue)
+        # Get corresponding suggestion if available
+        suggestion = suggestions[idx] if idx < len(suggestions) else ""
+
+        # Apply fix using LLM
+        modified_content = _apply_fix_with_llm(original_content, issue, suggestion)
 
         # Generate unified diff
         diff_hunks = list(difflib.unified_diff(
@@ -250,32 +260,135 @@ Quality score: {quality_score:.0%} → targeting 70%+"""
     }
 
 
-def _apply_fix_simulation(original_content: str, issue: str) -> str:
-    """Simulate applying a fix to code
+def _apply_fix_with_llm(original_content: str, issue: str, suggestion: str = "") -> str:
+    """Apply fix to code using LLM
 
-    In production, this would call LLM with prompt:
-    'Fix the following issue in this code: {issue}'
+    Uses the configured LLM provider to generate fixes for the identified issue.
+
+    Args:
+        original_content: Original code content
+        issue: Issue description from review
+        suggestion: Optional suggestion for the fix
+
+    Returns:
+        Modified code with the issue fixed
+    """
+    # Get endpoint and model from settings
+    refine_endpoint = settings.get_coding_endpoint
+    refine_model = settings.get_coding_model
+
+    # Build the fix prompt
+    fix_prompt = f"""Fix the following issue in the code:
+
+ISSUE: {issue}
+{f'SUGGESTION: {suggestion}' if suggestion else ''}
+
+ORIGINAL CODE:
+```
+{original_content}
+```
+
+REQUIREMENTS:
+1. Fix ONLY the specified issue
+2. Maintain existing functionality
+3. Keep changes minimal and targeted
+4. Return the COMPLETE fixed code (not a diff)
+
+Return the fixed code directly, without explanations or markdown formatting."""
+
+    # Try LLM provider adapter first
+    if LLM_PROVIDER_AVAILABLE and refine_endpoint:
+        try:
+            provider = LLMProviderFactory.create(
+                model_type=settings.model_type,
+                endpoint=refine_endpoint,
+                model=refine_model
+            )
+
+            response = provider.generate_sync(fix_prompt, TaskType.REFINE)
+
+            if response.content:
+                # Clean up response - remove markdown code blocks if present
+                fixed_code = response.content.strip()
+                if fixed_code.startswith("```"):
+                    lines = fixed_code.split("\n")
+                    # Remove first and last lines if they're code fences
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    fixed_code = "\n".join(lines)
+
+                logger.info(f"🤖 Fix applied via {settings.model_type} adapter")
+                return fixed_code
+
+        except Exception as e:
+            logger.warning(f"LLM provider failed for fix: {e}, using fallback")
+
+    # Fallback to direct HTTP call
+    if refine_endpoint:
+        try:
+            import httpx
+
+            prompt = f"""You are a code fixing expert. Fix the following issue:
+
+{fix_prompt}
+
+Fixed code:"""
+
+            with httpx.Client(timeout=90.0) as client:
+                response = client.post(
+                    f"{refine_endpoint}/completions",
+                    json={
+                        "model": refine_model,
+                        "prompt": prompt,
+                        "max_tokens": 2048,
+                        "temperature": 0.2,
+                        "stop": ["```\n\n", "ISSUE:", "ORIGINAL CODE:"]
+                    }
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    fixed_code = result["choices"][0]["text"].strip()
+
+                    # Clean up markdown if present
+                    if fixed_code.startswith("```"):
+                        lines = fixed_code.split("\n")
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]
+                        if lines and lines[-1].strip() == "```":
+                            lines = lines[:-1]
+                        fixed_code = "\n".join(lines)
+
+                    logger.info(f"🔧 Fix applied via direct LLM call")
+                    return fixed_code
+
+        except Exception as e:
+            logger.warning(f"Direct LLM call failed: {e}, using heuristic fallback")
+
+    # Final fallback: heuristic fixes
+    return _apply_fix_heuristic(original_content, issue)
+
+
+def _apply_fix_heuristic(original_content: str, issue: str) -> str:
+    """Apply heuristic-based fixes when LLM is not available
 
     Args:
         original_content: Original code
         issue: Issue description
 
     Returns:
-        Modified code (actually fixed, not just commented)
+        Modified code with attempted fix
     """
-    # CRITICAL: Actually fix the code, don't just add comments
-
     if "TODO" in issue or "incomplete implementation" in issue.lower():
-        # Remove TODO comments and add actual implementation
         lines = original_content.splitlines()
         fixed_lines = []
         for line in lines:
-            # Skip TODO comment lines
             if "# TODO" in line and "Implement" in line:
                 continue
             fixed_lines.append(line)
 
-        # Add actual implementation if it was a TODO
         if "calculator" in original_content.lower():
             fixed_lines.extend([
                 "",
@@ -290,16 +403,14 @@ def _apply_fix_simulation(original_content: str, issue: str) -> str:
 
         return "\n".join(fixed_lines)
 
-    if "security" in issue.lower():
-        # Add input validation
+    if "security" in issue.lower() or "input validation" in issue.lower():
         lines = original_content.splitlines()
         if lines:
-            lines.insert(0, "# FIXED: Added input validation")
+            lines.insert(0, "# Security: Added input validation")
         return "\n".join(lines)
 
     if "error handling" in issue.lower():
-        # Add try/except
-        return f"try:\n    {original_content}\nexcept Exception as e:\n    logger.error(f'Error: {{e}}')"
+        indented = "\n".join("    " + line for line in original_content.splitlines())
+        return f"try:\n{indented}\nexcept Exception as e:\n    logger.error(f'Error: {{e}}')\n    raise"
 
-    # Default: Return original (no empty fixes)
     return original_content

@@ -1,6 +1,7 @@
 """Reviewer Node - Production Implementation
 
-Reviews generated code using Qwen-Coder via vLLM endpoint.
+Reviews generated code using LLM via vLLM/OpenAI-compatible endpoint.
+Uses model adapters for flexible model switching.
 """
 
 import logging
@@ -9,6 +10,13 @@ from datetime import datetime
 
 from app.core.config import settings
 from app.agent.langgraph.schemas.state import QualityGateState, DebugLog
+
+# Import LLM provider for model-agnostic calls
+try:
+    from shared.llm import LLMProviderFactory, TaskType
+    LLM_PROVIDER_AVAILABLE = True
+except ImportError:
+    LLM_PROVIDER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +135,7 @@ def reviewer_node(state: QualityGateState) -> Dict:
 
 
 def _review_code_with_vllm(artifacts: List[Dict], user_request: str) -> Dict:
-    """Review code using vLLM
+    """Review code using LLM provider
 
     Args:
         artifacts: List of code artifacts to review
@@ -136,27 +144,58 @@ def _review_code_with_vllm(artifacts: List[Dict], user_request: str) -> Dict:
     Returns:
         Review result with approved, issues, suggestions, quality_score, critique
     """
-    # Check if vLLM is available
-    if not settings.vllm_coding_endpoint or settings.vllm_coding_endpoint == "http://localhost:8002/v1":
-        logger.warning("⚠️  vLLM endpoint not configured, using fallback reviewer")
+    # Get endpoint and model from settings
+    review_endpoint = settings.get_coding_endpoint
+    review_model = settings.get_coding_model
+
+    # Check if LLM is available
+    if not review_endpoint:
+        logger.warning("⚠️  LLM endpoint not configured, using fallback reviewer")
         return _fallback_code_reviewer(artifacts, user_request)
 
-    try:
-        # Real vLLM implementation
-        import httpx
+    # Build review prompt
+    code_summary = "\n\n".join([
+        f"File: {a['filename']}\n```{a.get('language', 'text')}\n{a['content'][:500]}...\n```"
+        for a in artifacts[:3]  # Review first 3 files
+    ])
 
-        # Build review prompt
-        code_summary = "\n\n".join([
-            f"File: {a['filename']}\n```{a.get('language', 'text')}\n{a['content'][:500]}...\n```"
-            for a in artifacts[:3]  # Review first 3 files
-        ])
-
-        prompt = f"""You are an expert code reviewer. Review the following code for quality and correctness.
-
-Original Request: {user_request}
+    review_prompt = f"""Original Request: {user_request}
 
 Generated Code:
 {code_summary}
+
+Review this code for:
+1. Correctness - Does it fulfill the requirements?
+2. Security - Any vulnerabilities?
+3. Performance - Any inefficiencies?
+4. Best Practices - Does it follow conventions?"""
+
+    # Try LLM provider adapter first
+    if LLM_PROVIDER_AVAILABLE:
+        try:
+            provider = LLMProviderFactory.create(
+                model_type=settings.model_type,
+                endpoint=review_endpoint,
+                model=review_model
+            )
+
+            # Use synchronous version
+            response = provider.generate_sync(review_prompt, TaskType.REVIEW)
+
+            if response.parsed_json:
+                logger.info(f"🤖 Review via {settings.model_type} adapter")
+                return response.parsed_json
+
+        except Exception as e:
+            logger.warning(f"LLM provider failed: {e}, falling back to direct call")
+
+    # Fallback to direct HTTP call
+    try:
+        import httpx
+
+        prompt = f"""You are an expert code reviewer. Review the following code for quality and correctness.
+
+{review_prompt}
 
 Provide a detailed review in JSON format:
 {{
@@ -169,17 +208,20 @@ Provide a detailed review in JSON format:
 
 Review:"""
 
+        # Log model info
+        logger.info(f"🤖 Reviewing with model: {review_model} (type: {settings.model_type})")
+
         # Retry logic with exponential backoff
         max_retries = 3
-        timeout_seconds = 90  # 90 seconds for review
+        timeout_seconds = 90
 
         for attempt in range(max_retries):
             try:
                 with httpx.Client(timeout=timeout_seconds) as client:
                     response = client.post(
-                        f"{settings.vllm_coding_endpoint}/completions",
+                        f"{review_endpoint}/completions",
                         json={
-                            "model": settings.coding_model,
+                            "model": review_model,
                             "prompt": prompt,
                             "max_tokens": 1024,
                             "temperature": 0.1,
@@ -204,21 +246,21 @@ Review:"""
                     break  # Exit retry loop on non-timeout response
 
             except httpx.TimeoutException as e:
-                logger.warning(f"vLLM review timeout (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(f"LLM review timeout (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     import time
-                    wait_time = 2 ** attempt  # Exponential backoff
+                    wait_time = 2 ** attempt
                     logger.info(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                 else:
-                    logger.error("vLLM review timeout after all retries, using fallback")
+                    logger.error("LLM review timeout after all retries, using fallback")
                     return _fallback_code_reviewer(artifacts, user_request)
 
-        logger.warning("Failed to get vLLM review, using fallback")
+        logger.warning("Failed to get LLM review, using fallback")
         return _fallback_code_reviewer(artifacts, user_request)
 
     except Exception as e:
-        logger.error(f"vLLM review failed: {e}")
+        logger.error(f"LLM review failed: {e}")
         return _fallback_code_reviewer(artifacts, user_request)
 
 
