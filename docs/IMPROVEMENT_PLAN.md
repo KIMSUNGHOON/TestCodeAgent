@@ -1,7 +1,7 @@
 # Coding Agent System Improvement Plan
 
 **Created**: 2026-01-06
-**Status**: Planning Phase
+**Status**: In Progress (Issue #1 Fixed)
 
 ---
 
@@ -13,10 +13,11 @@ This document outlines identified issues and proposed improvements for the TestC
 
 ## 2. Identified Issues
 
-### Issue #1: Security Gate False Positive for `ast.literal_eval`
+### Issue #1: Security Gate False Positive for `ast.literal_eval` ✅ FIXED
 
 **Severity**: High
 **Impact**: Prevents code quality from reaching 100%
+**Status**: ✅ Fixed on 2026-01-06
 
 **Problem Description**:
 The Security Gate incorrectly flags `ast.literal_eval()` as a security vulnerability because the pattern matching detects "eval" substring. However, `ast.literal_eval()` is the safe, recommended alternative to `eval()`.
@@ -30,17 +31,23 @@ WARNING - [critical] dangerous_eval_python in calculator_gui.py:18
 - Pattern `r'\beval\s*\('` matches `ast.literal_eval(` due to "eval" substring
 - The regex boundary `\b` matches at "l_eval" because underscore is a word character
 
-**Proposed Solution**:
+**Solution Implemented**:
+Added `exclude_patterns` feature to the security scanner that filters out safe patterns:
 ```python
-# Current pattern (problematic)
-r'\beval\s*\('
-
-# Improved pattern (excludes ast.literal_eval)
-r'(?<!literal_)\beval\s*\('  # Negative lookbehind
-
-# Or more explicit
-r'\b(?<![\w\.])eval\s*\(' and not 'ast.literal_eval'
+"dangerous_eval_python": {
+    "patterns": [
+        r"\beval\s*\(",  # eval() call
+        r"\bexec\s*\(",  # exec() call
+    ],
+    "exclude_patterns": [
+        r"ast\.literal_eval\s*\(",  # ast.literal_eval is safe
+        r"literal_eval\s*\(",  # imported literal_eval is also safe
+    ],
+    ...
+}
 ```
+
+The scanner now checks if a match falls within a safe pattern context before flagging it.
 
 ---
 
@@ -155,10 +162,10 @@ normalized_file_path = original_file_path.replace("\\", "/")
 
 ### Phase 1: Critical Fixes (Immediate)
 
-| Task | Priority | Effort | Impact |
-|------|----------|--------|--------|
-| Fix Security Gate false positive for ast.literal_eval | High | Low | High |
-| Increase Refiner iteration limit | Medium | Low | Medium |
+| Task | Priority | Effort | Impact | Status |
+|------|----------|--------|--------|--------|
+| Fix Security Gate false positive for ast.literal_eval | High | Low | High | ✅ Done |
+| Increase Refiner iteration limit | Medium | Low | Medium | Pending |
 
 ### Phase 2: Quality Improvements (Short-term)
 
@@ -256,3 +263,4 @@ When continuing development on Linux:
 | Date | Change |
 |------|--------|
 | 2026-01-06 | Initial improvement plan created |
+| 2026-01-06 | Issue #1 Fixed: Added exclude_patterns to security scanner for ast.literal_eval |

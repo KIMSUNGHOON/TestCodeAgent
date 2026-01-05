@@ -54,8 +54,12 @@ class SecurityScanner:
         },
         "dangerous_eval_python": {
             "patterns": [
-                r"(?<!ast\.literal_)eval\s*\(",  # eval() not preceded by ast.literal_
-                r"(?<!_)exec\s*\(",  # exec() not preceded by underscore
+                r"\beval\s*\(",  # eval() call
+                r"\bexec\s*\(",  # exec() call
+            ],
+            "exclude_patterns": [
+                r"ast\.literal_eval\s*\(",  # ast.literal_eval is safe
+                r"literal_eval\s*\(",  # imported literal_eval is also safe
             ],
             "severity": "high",
             "description": "Dangerous eval/exec usage in Python",
@@ -172,10 +176,32 @@ class SecurityScanner:
             if not SecurityScanner.should_scan_for_vuln(file_type, vuln_file_types):
                 continue
 
+            exclude_patterns = config.get("exclude_patterns", [])
+
             for pattern in config["patterns"]:
                 try:
                     matches = re.finditer(pattern, code, re.IGNORECASE | re.MULTILINE)
                     for match in matches:
+                        # Check if this match should be excluded
+                        match_start = match.start()
+                        match_end = match.end()
+
+                        # Get surrounding context (50 chars before and after)
+                        context_start = max(0, match_start - 50)
+                        context_end = min(len(code), match_end + 50)
+                        context = code[context_start:context_end]
+
+                        # Check if any exclude pattern matches in context
+                        is_excluded = False
+                        for exclude_pattern in exclude_patterns:
+                            if re.search(exclude_pattern, context, re.IGNORECASE):
+                                is_excluded = True
+                                logger.debug(f"Excluding match '{match.group()}' due to safe pattern: {exclude_pattern}")
+                                break
+
+                        if is_excluded:
+                            continue
+
                         # Calculate line number
                         line_number = code[:match.start()].count('\n') + 1
 
