@@ -450,12 +450,20 @@ class EnhancedWorkflow:
             if len(generated_artifacts) > 5:
                 coder_summary += f"\n... and {len(generated_artifacts) - 5} more files"
 
+            # Extract token_usage from coder result
+            coder_token_usage = coder_result.get("token_usage", {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            })
+
             yield self._create_update("coder", "completed", {
                 "coder_output": coder_result.get("coder_output"),
                 "artifacts": generated_artifacts,
                 "execution_time": agent_times["coder"],
                 "completed_agents": completed_agents.copy(),
                 "streaming_content": coder_summary,
+                "token_usage": coder_token_usage,  # Include token usage in SSE
             })
 
             # ==================== PHASE 4: QUALITY GATES WITH REFINEMENT LOOP ====================

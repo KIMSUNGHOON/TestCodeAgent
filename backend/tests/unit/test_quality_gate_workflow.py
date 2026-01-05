@@ -71,7 +71,8 @@ class TestSupervisorNode:
         updates = supervisor_node(state)
 
         assert updates["task_type"] == "implementation"
-        assert updates["execution_mode"] == "parallel"
+        # Simple task -> linear -> sequential execution
+        assert updates["execution_mode"] == "sequential"
         assert updates["max_iterations"] == 3
 
     def test_detects_review_task(self):
@@ -84,7 +85,8 @@ class TestSupervisorNode:
         updates = supervisor_node(state)
 
         assert updates["task_type"] == "review"
-        assert updates["execution_mode"] == "sequential"
+        # Contains "auth" keyword -> CRITICAL -> parallel execution
+        assert updates["execution_mode"] == "parallel"
 
     def test_detects_testing_task(self):
         """Test detection of testing tasks"""
@@ -329,3 +331,94 @@ class TestQualityAggregator:
         updates = quality_aggregator_node(state)
 
         assert updates["workflow_status"] == "failed"
+
+
+class TestCoderNode:
+    """Test coder node functionality"""
+
+    def test_coder_returns_token_usage(self):
+        """Test that coder node returns token_usage in result"""
+        from app.agent.langgraph.nodes.coder import coder_node
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = create_initial_state(
+                user_request="Create a simple calculator",
+                workspace_root=tmpdir,
+                task_type="implementation"
+            )
+            state["enable_debug"] = True
+
+            result = coder_node(state)
+
+            # Check that result has token_usage key
+            assert "token_usage" in result, "coder_node should return token_usage"
+
+            # Check token_usage structure
+            token_usage = result["token_usage"]
+            assert "prompt_tokens" in token_usage
+            assert "completion_tokens" in token_usage
+            assert "total_tokens" in token_usage
+
+            # Values should be integers >= 0
+            assert isinstance(token_usage["prompt_tokens"], int)
+            assert isinstance(token_usage["completion_tokens"], int)
+            assert isinstance(token_usage["total_tokens"], int)
+            assert token_usage["prompt_tokens"] >= 0
+            assert token_usage["completion_tokens"] >= 0
+            assert token_usage["total_tokens"] >= 0
+
+    def test_coder_output_includes_token_usage(self):
+        """Test that coder_output also contains token_usage"""
+        from app.agent.langgraph.nodes.coder import coder_node
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state = create_initial_state(
+                user_request="Create a basic web app",
+                workspace_root=tmpdir,
+                task_type="implementation"
+            )
+            state["enable_debug"] = True
+
+            result = coder_node(state)
+
+            # Check coder_output structure
+            assert "coder_output" in result
+            coder_output = result["coder_output"]
+            assert "token_usage" in coder_output, "coder_output should include token_usage"
+
+    def test_fallback_generator_returns_tuple(self):
+        """Test that fallback code generator works correctly"""
+        from app.agent.langgraph.nodes.coder import _fallback_code_generator
+
+        files = _fallback_code_generator("Create a calculator", "implementation")
+
+        assert isinstance(files, list)
+        assert len(files) > 0
+        assert "filename" in files[0]
+        assert "content" in files[0]
+
+    def test_generate_code_with_vllm_returns_tuple(self):
+        """Test _generate_code_with_vllm returns (files, token_usage) tuple"""
+        from app.agent.langgraph.nodes.coder import _generate_code_with_vllm
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Will use fallback since vLLM endpoint is not configured
+            result = _generate_code_with_vllm(
+                user_request="Create a test app",
+                task_type="implementation",
+                workspace_root=tmpdir
+            )
+
+            # Should return a tuple
+            assert isinstance(result, tuple), "_generate_code_with_vllm should return a tuple"
+            assert len(result) == 2, "Tuple should have 2 elements (files, token_usage)"
+
+            files, token_usage = result
+            assert isinstance(files, list)
+            assert isinstance(token_usage, dict)
+            assert "prompt_tokens" in token_usage
+            assert "completion_tokens" in token_usage
+            assert "total_tokens" in token_usage

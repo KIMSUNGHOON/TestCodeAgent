@@ -42,7 +42,7 @@ export const StreamingCodeBlock: React.FC<StreamingCodeBlockProps> = ({
   language,
   content,
   isStreaming,
-  agent,
+  agent: _agent,  // Reserved for future use (agent identifier)
   agentTitle,
 }) => {
   const codeRef = useRef<HTMLPreElement>(null);

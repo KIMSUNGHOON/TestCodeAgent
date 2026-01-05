@@ -704,6 +704,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                 content: hitlReq.content,
                 priority: hitlReq.priority,
                 allow_skip: hitlReq.allow_skip,
+                created_at: hitlReq.created_at || new Date().toISOString(),
+                status: hitlReq.status || 'pending',
               });
               setIsHitlModalOpen(true);
               continue; // Don't add to updates list yet
@@ -868,7 +870,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         {
           agent: 'Human Approval',
           type: action === 'approve' || action === 'confirm' ? 'completed' : 'error',
-          status: action === 'approve' || action === 'confirm' ? 'completed' : 'rejected',
+          status: action === 'approve' || action === 'confirm' ? 'completed' : 'error',
           message: action === 'approve' || action === 'confirm'
             ? 'Changes approved by user'
             : `Changes ${action} by user${feedback ? `: ${feedback}` : ''}`,

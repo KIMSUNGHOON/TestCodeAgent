@@ -40,7 +40,7 @@ def quality_aggregator_node(state: QualityGateState) -> Dict:
 
     failed_tests = [t for t in test_results if not t.get("passed", False)]
 
-    review_feedback = state.get("review_feedback", {})
+    review_feedback = state.get("review_feedback") or {}  # Handle explicit None
     review_issues = review_feedback.get("issues", [])
 
     # Log gate results

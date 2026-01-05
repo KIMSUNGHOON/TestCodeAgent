@@ -154,8 +154,8 @@ def coder_node(state: QualityGateState) -> Dict:
         ))
 
     try:
-        # Generate code using vLLM
-        generated_files = _generate_code_with_vllm(
+        # Generate code using vLLM (returns tuple of files and token_usage)
+        generated_files, token_usage = _generate_code_with_vllm(
             user_request=user_request,
             task_type=task_type,
             workspace_root=workspace_root
@@ -193,7 +193,7 @@ def coder_node(state: QualityGateState) -> Dict:
             else:
                 logger.error(f"❌ Failed to write {filename}: {result['error']}")
 
-        # Add result debug log
+        # Add result debug log with actual token usage
         if state.get("enable_debug"):
             debug_logs.append(DebugLog(
                 timestamp=datetime.utcnow().isoformat(),
@@ -205,21 +205,19 @@ def coder_node(state: QualityGateState) -> Dict:
                     "files": [a["filename"] for a in artifacts],
                     "total_bytes": sum(a["size_bytes"] for a in artifacts)
                 },
-                token_usage={
-                    "prompt_tokens": 0,  # Will be populated by actual vLLM call
-                    "completion_tokens": 0,
-                    "total_tokens": 0
-                }
+                token_usage=token_usage  # Use actual token_usage from vLLM
             ))
 
         return {
             "coder_output": {
                 "artifacts": artifacts,
                 "status": "completed" if artifacts else "failed",
-                "files_generated": len(artifacts)
+                "files_generated": len(artifacts),
+                "token_usage": token_usage  # Include token usage in output
             },
             "artifacts": artifacts,  # Top-level for frontend
             "debug_logs": debug_logs,
+            "token_usage": token_usage  # Top-level for SSE events
         }
 
     except Exception as e:
@@ -250,7 +248,7 @@ def _generate_code_with_vllm(
     user_request: str,
     task_type: str,
     workspace_root: str
-) -> List[Dict]:
+) -> tuple:
     """Generate code using LLM via vLLM/OpenAI-compatible endpoint
 
     Args:
@@ -259,16 +257,21 @@ def _generate_code_with_vllm(
         workspace_root: Workspace root directory
 
     Returns:
-        List of file dictionaries with filename, content, language, description
+        Tuple of (files_list, token_usage_dict)
+        - files_list: List of file dictionaries with filename, content, language, description
+        - token_usage_dict: Dictionary with prompt_tokens, completion_tokens, total_tokens
     """
     # Get endpoint and model from settings (supports both unified and split configs)
     coding_endpoint = settings.get_coding_endpoint
     coding_model = settings.get_coding_model
 
+    # Default token usage (will be updated on successful LLM call)
+    token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
     # Check if endpoint is configured
     if not coding_endpoint:
         logger.warning("⚠️  LLM coding endpoint not configured, using fallback generator")
-        return _fallback_code_generator(user_request, task_type)
+        return _fallback_code_generator(user_request, task_type), token_usage
 
     try:
         # Real vLLM implementation
@@ -303,6 +306,15 @@ def _generate_code_with_vllm(
                         result = response.json()
                         generated_text = result["choices"][0]["text"]
 
+                        # Extract token usage from vLLM response
+                        usage = result.get("usage", {})
+                        token_usage = {
+                            "prompt_tokens": usage.get("prompt_tokens", 0),
+                            "completion_tokens": usage.get("completion_tokens", 0),
+                            "total_tokens": usage.get("total_tokens", 0)
+                        }
+                        logger.info(f"📊 Token usage: {token_usage}")
+
                         # Parse JSON response
                         try:
                             # Extract JSON from response
@@ -311,10 +323,10 @@ def _generate_code_with_vllm(
                             if json_start != -1 and json_end > json_start:
                                 json_str = generated_text[json_start:json_end]
                                 parsed = json.loads(json_str)
-                                return parsed.get("files", [])
+                                return parsed.get("files", []), token_usage
                         except json.JSONDecodeError:
                             logger.warning("Failed to parse vLLM JSON response, using fallback")
-                            return _fallback_code_generator(user_request, task_type)
+                            return _fallback_code_generator(user_request, task_type), token_usage
                     else:
                         logger.error(f"vLLM request failed: {response.status_code}")
                         if attempt < max_retries - 1:
@@ -323,7 +335,7 @@ def _generate_code_with_vllm(
                             logger.info(f"Retrying in {wait_time}s... (attempt {attempt + 2}/{max_retries})")
                             time.sleep(wait_time)
                             continue
-                        return _fallback_code_generator(user_request, task_type)
+                        return _fallback_code_generator(user_request, task_type), token_usage
                     break  # Success, exit retry loop
 
             except httpx.TimeoutException as e:
@@ -335,11 +347,14 @@ def _generate_code_with_vllm(
                     time.sleep(wait_time)
                 else:
                     logger.error("vLLM timeout after all retries, using fallback")
-                    return _fallback_code_generator(user_request, task_type)
+                    return _fallback_code_generator(user_request, task_type), token_usage
 
     except Exception as e:
         logger.error(f"vLLM call failed: {e}", exc_info=True)
-        return _fallback_code_generator(user_request, task_type)
+        return _fallback_code_generator(user_request, task_type), token_usage
+
+    # Fallback if we exit the loop without returning (should not happen)
+    return _fallback_code_generator(user_request, task_type), token_usage
 
 
 def _fallback_code_generator(user_request: str, task_type: str) -> List[Dict]:

@@ -10,7 +10,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -56,17 +55,21 @@ interface HITLRequest {
 
 interface HITLModalProps {
   request: HITLRequest;
+  isOpen?: boolean;  // Optional - modal shown when request exists and isOpen is true/undefined
+  onClose?: () => void;  // Alias for onCancel, called when modal is closed
   onApprove: (feedback?: string) => void;
   onReject: (reason: string) => void;
   onEdit: (modifiedContent: string, feedback?: string) => void;
   onRetry: (instructions: string) => void;
   onSelect: (optionId: string, feedback?: string) => void;
   onConfirm: (feedback?: string) => void;
-  onCancel: () => void;
+  onCancel?: () => void;  // Made optional since onClose is preferred
 }
 
 const HITLModal = ({
   request,
+  isOpen = true,  // Default to true if not provided
+  onClose,
   onApprove,
   onReject,
   onEdit,
@@ -75,6 +78,10 @@ const HITLModal = ({
   onConfirm,
   onCancel,
 }: HITLModalProps) => {
+  // Use onClose if provided, otherwise fall back to onCancel
+  const handleClose = onClose || onCancel || (() => {});
+
+  // State hooks must be called before any early returns
   const [feedback, setFeedback] = useState('');
   const [editedContent, setEditedContent] = useState(request.content.code || '');
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -87,6 +94,9 @@ const HITLModal = ({
     setSelectedOption(null);
     setIsEditing(false);
   }, [request.request_id]);
+
+  // Don't render if not open
+  if (!isOpen) return null;
 
   const renderContent = () => {
     switch (request.checkpoint_type) {
@@ -144,7 +154,7 @@ const HITLModal = ({
               Reject
             </button>
             <button
-              onClick={onCancel}
+              onClick={handleClose}
               className="px-6 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
             >
               Cancel
@@ -213,7 +223,7 @@ const HITLModal = ({
               Reset
             </button>
             <button
-              onClick={onCancel}
+              onClick={handleClose}
               className="px-6 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
             >
               Cancel
@@ -233,7 +243,7 @@ const HITLModal = ({
               Confirm Selection
             </button>
             <button
-              onClick={onCancel}
+              onClick={handleClose}
               className="px-6 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
             >
               Cancel
@@ -252,7 +262,7 @@ const HITLModal = ({
               Yes, Proceed
             </button>
             <button
-              onClick={onCancel}
+              onClick={handleClose}
               className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white font-medium transition-colors flex items-center justify-center gap-2"
             >
               <XIcon />
@@ -300,7 +310,7 @@ const HITLModal = ({
               </div>
             </div>
             <button
-              onClick={onCancel}
+              onClick={handleClose}
               className="p-2 rounded-lg hover:bg-[#F5F4F2] text-[#666666] transition-colors"
             >
               <XIcon />

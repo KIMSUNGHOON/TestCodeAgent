@@ -83,7 +83,7 @@ const formatTime = (seconds: number): string => {
 };
 
 export const AgentCard: React.FC<AgentCardProps> = ({
-  name,
+  name: _name,  // Agent identifier (used for key in parent component)
   title,
   description,
   status,
