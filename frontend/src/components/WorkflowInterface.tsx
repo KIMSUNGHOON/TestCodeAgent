@@ -841,14 +841,21 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
   // Handle HITL response
   const handleHitlResponse = async (action: string, feedback?: string, modifiedContent?: string) => {
-    if (!hitlRequest) return;
+    if (!hitlRequest) {
+      console.error('No HITL request to respond to');
+      return;
+    }
+
+    console.log(`[HITL] Submitting response: action=${action}, request_id=${hitlRequest.request_id}`);
 
     try {
-      await apiClient.submitHITLResponse(hitlRequest.request_id, {
+      const result = await apiClient.submitHITLResponse(hitlRequest.request_id, {
         action: action as any,
         feedback,
         modified_content: modifiedContent,
       });
+
+      console.log('[HITL] Response submitted successfully:', result);
 
       // Close modal and clear request
       setIsHitlModalOpen(false);
@@ -866,8 +873,18 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
             : `Changes ${action} by user${feedback ? `: ${feedback}` : ''}`,
         },
       ]);
-    } catch (error) {
-      console.error('Failed to submit HITL response:', error);
+    } catch (error: any) {
+      console.error('[HITL] Failed to submit response:', error);
+      // Show error in UI
+      setUpdates(prev => [
+        ...prev,
+        {
+          agent: 'Human Approval',
+          type: 'error',
+          status: 'error',
+          message: `Failed to submit response: ${error?.response?.data?.detail || error?.message || 'Unknown error'}`,
+        },
+      ]);
     }
   };
 
