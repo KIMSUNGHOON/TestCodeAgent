@@ -306,11 +306,29 @@ class EnhancedWorkflow:
                 project_name = f"project_{int(time.time())}"
 
             # Create project directory within workspace
+            # If directory already exists, append a unique suffix
             import os
+            base_project_name = project_name
             project_dir = os.path.join(workspace_root, project_name)
+            suffix = 1
+            while os.path.exists(project_dir):
+                project_name = f"{base_project_name}_{suffix}"
+                project_dir = os.path.join(workspace_root, project_name)
+                suffix += 1
+                if suffix > 100:  # Safety limit
+                    project_name = f"{base_project_name}_{int(time.time())}"
+                    project_dir = os.path.join(workspace_root, project_name)
+                    break
+
             try:
-                os.makedirs(project_dir, exist_ok=True)
+                os.makedirs(project_dir, exist_ok=False)  # Fail if somehow still exists
                 logger.info(f"📁 Created project directory: {project_dir}")
+            except FileExistsError:
+                # Very unlikely but handle gracefully
+                project_name = f"{base_project_name}_{int(time.time())}"
+                project_dir = os.path.join(workspace_root, project_name)
+                os.makedirs(project_dir, exist_ok=True)
+                logger.info(f"📁 Created fallback project directory: {project_dir}")
             except Exception as e:
                 logger.error(f"Failed to create project directory: {e}")
                 project_dir = workspace_root  # Fallback to workspace root
