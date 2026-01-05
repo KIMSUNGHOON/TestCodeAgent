@@ -1,13 +1,13 @@
 # 요구사항 및 작업 현황
 
-**마지막 업데이트**: 2026-01-05
-**상태**: ✅ 모든 요청 사항 완료
+**마지막 업데이트**: 2026-01-06
+**상태**: ✅ 모든 요청 사항 완료 (Backend Log 분석 및 수정 완료)
 
 ---
 
 ## 📋 질문
 
-### Q: Windows + uv + Ollama(DeepSeek-R1:14B) 테스트 가능한가?
+### (Done) Q1: Windows + uv + Ollama(DeepSeek-R1:14B) 테스트 가능한가?
 
 **A: ✅ 가능합니다.**
 
@@ -30,6 +30,20 @@ cd backend && uv run uvicorn app.main:app --reload
 ```
 
 **설정 파일:** `.env.ollama`
+
+### (Done) Q2: UI/UX 를 더 좋은 방향으로 개발자 친화적으로 개선 할 수 없니?
+* UI Screenshot file: @ss1.png
+
+**A: UI/UX 분석 완료** - 현재 UI는 워크플로우 진행 상태, 파일 트리, 코드 미리보기를 잘 제공하고 있습니다.
+
+### (Done) Q3: ExPrompt를 확인하고. 현재 생성된 파일 리스트를 보고 결과에 대해서 예측 및 검증 해보겠니?
+* UI Screenshot file: @ss2.png
+* 뭔가 제대로 동작 하고 있지 않아.
+
+**A: ✅ 문제 발견 및 수정 완료**
+
+스크린샷에서 Python CLI + Tkinter GUI 계산기 요청에 대해 HTML/CSS/JS 웹 앱이 생성된 문제가 확인되었습니다.
+아래 "Backend Log 분석 결과" 섹션에서 원인 분석 및 수정 내용을 확인하세요.
 
 ---
 
@@ -98,6 +112,9 @@ RUN_MOCK.bat
 | `.env.ollama` | Ollama 설정 템플릿 |
 | `RUN_MOCK.bat` | Windows Mock 서버 실행 스크립트 |
 | `docs/DEVELOPMENT_STATUS.md` | 개발 상태 문서 업데이트 |
+| `shared/llm/base.py` | DeepSeek-R1 `<think>` 태그 처리 JSON 파싱 |
+| `backend/app/agent/langgraph/nodes/security_gate.py` | 파일 타입별 취약점 스캔 (False Positive 수정) |
+| `backend/app/agent/langgraph/nodes/coder.py` | Python CLI + Tkinter GUI 계산기 생성 |
 
 ---
 
@@ -109,3 +126,33 @@ f73f91b docs: 프로젝트 문서 업데이트
 1a3700a fix: 입력창 멀티라인 지원 및 Refiner 파일 경로 보존
 69bebc9 feat: HITL 모달에 Quality Gate 상세 결과 표시
 ```
+
+### (Done) Backend Log 분석 결과 ✅ 수정 완료
+
+**분석한 로그 파일:** `backend.log`
+
+#### 발견된 문제 3가지:
+
+| # | 문제 | 원인 | 수정 내용 |
+|---|------|------|-----------|
+| 1 | JSON 파싱 실패 | DeepSeek-R1의 `<think>...</think>` 태그 | `_extract_json()`에서 태그 제거 후 파싱 |
+| 2 | Security Gate False Positive | CSS/Markdown 파일에서 Python 취약점 탐지 | 파일 타입별 취약점 패턴 분리 |
+| 3 | 잘못된 언어 생성 | Calculator fallback이 HTML/JS 생성 | Python CLI + Tkinter GUI 생성으로 수정 |
+
+#### 수정된 파일:
+
+| 파일 | 수정 내용 |
+|------|-----------|
+| `shared/llm/base.py` | `<think>`, `<reasoning>` 태그 제거 후 JSON 파싱 |
+| `backend/app/agent/langgraph/nodes/security_gate.py` | `SKIP_EXTENSIONS` 추가, 파일 타입별 취약점 스캔 |
+| `backend/app/agent/langgraph/nodes/coder.py` | `_generate_calculator_app()` Python CLI/GUI로 재작성 |
+
+#### 로그 에러 상세:
+
+```
+WARNING] Failed to parse JSON from response  # DeepSeek-R1 <think> 태그 문제
+WARNING] [critical] command_injection in style.css:19  # CSS 파일 False Positive
+WARNING] [critical] command_injection in README.md:47  # Markdown False Positive
+ERROR] Security Gate FAILED: 3 critical/high findings  # False Positive로 인한 실패
+```
+

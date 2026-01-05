@@ -15,61 +15,121 @@ logger = logging.getLogger(__name__)
 class SecurityScanner:
     """OWASP-based security vulnerability scanner"""
 
-    # OWASP Top 10 patterns
+    # File extensions that should be scanned for each vulnerability type
+    SCANNABLE_EXTENSIONS = {
+        "python": [".py"],
+        "javascript": [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"],
+        "backend": [".py", ".java", ".go", ".rs", ".rb", ".php", ".cs"],
+        "web": [".js", ".jsx", ".ts", ".tsx", ".html", ".htm"],
+        "config": [".json", ".yaml", ".yml", ".env", ".ini", ".cfg"],
+    }
+
+    # File extensions to SKIP entirely (documentation, styles, etc.)
+    SKIP_EXTENSIONS = [".md", ".txt", ".css", ".scss", ".less", ".svg", ".png", ".jpg", ".gif"]
+
+    # OWASP Top 10 patterns with file type context
     VULNERABILITY_PATTERNS = {
         "sql_injection": {
             "patterns": [
                 r"execute\s*\(\s*['\"].*%s.*['\"]\s*%",  # String formatting in SQL
-                r"f['\"]SELECT.*FROM.*\{.*\}",  # f-strings with SELECT in SQL (case insensitive handled by re.IGNORECASE)
+                r"f['\"]SELECT.*FROM.*\{.*\}",  # f-strings with SELECT in SQL
                 r"cursor\.execute\s*\([^)]*\+[^)]*\)",  # String concatenation in SQL
             ],
             "severity": "critical",
             "description": "Potential SQL injection vulnerability",
-            "recommendation": "Use parameterized queries with placeholders (?)"
+            "recommendation": "Use parameterized queries with placeholders (?)",
+            "file_types": ["backend"],  # Only scan backend files
         },
-        "command_injection": {
+        "command_injection_python": {
             "patterns": [
                 r"os\.system\s*\(",
                 r"subprocess\.call\s*\([^)]*shell\s*=\s*True",
-                r"eval\s*\(",
-                r"exec\s*\(",
+                r"subprocess\.run\s*\([^)]*shell\s*=\s*True",
+                r"subprocess\.Popen\s*\([^)]*shell\s*=\s*True",
             ],
             "severity": "critical",
-            "description": "Potential command injection vulnerability",
-            "recommendation": "Avoid shell=True, use subprocess with list arguments"
+            "description": "Potential command injection vulnerability (Python)",
+            "recommendation": "Avoid shell=True, use subprocess with list arguments",
+            "file_types": ["python"],  # Only scan Python files
+        },
+        "dangerous_eval_python": {
+            "patterns": [
+                r"(?<!ast\.literal_)eval\s*\(",  # eval() not preceded by ast.literal_
+                r"(?<!_)exec\s*\(",  # exec() not preceded by underscore
+            ],
+            "severity": "high",
+            "description": "Dangerous eval/exec usage in Python",
+            "recommendation": "Use ast.literal_eval() for safe evaluation",
+            "file_types": ["python"],  # Only scan Python files - JS eval is different
         },
         "path_traversal": {
             "patterns": [
-                r'[\'"]\.\./',  # "../" in strings
-                r'[\'"]\.\.[/\\]',  # ".." with path separators
-                r"open\s*\([^)]*\.\.",  # open() with ".."
+                r"open\s*\([^)]*\.\.[/\\]",  # open() with ".."
+                r"Path\s*\([^)]*\.\.[/\\]",  # Path() with ".."
             ],
             "severity": "high",
             "description": "Potential path traversal vulnerability",
-            "recommendation": "Use FileValidator to sanitize paths"
+            "recommendation": "Use FileValidator to sanitize paths",
+            "file_types": ["backend"],
         },
         "hardcoded_secrets": {
             "patterns": [
-                r"password\s*=\s*['\"][^'\"]+['\"]",
-                r"api[_-]?key\s*=\s*['\"][^'\"]+['\"]",
-                r"secret\s*=\s*['\"][^'\"]+['\"]",
-                r"token\s*=\s*['\"][^'\"]+['\"]",
+                r"(?:password|passwd|pwd)\s*=\s*['\"][^'\"]{4,}['\"]",  # Min 4 chars
+                r"api[_-]?key\s*=\s*['\"][^'\"]{8,}['\"]",  # Min 8 chars for API keys
+                r"(?:secret|token)\s*=\s*['\"][^'\"]{8,}['\"]",  # Min 8 chars
             ],
             "severity": "high",
             "description": "Potential hardcoded secret",
-            "recommendation": "Use environment variables or secure vaults"
+            "recommendation": "Use environment variables or secure vaults",
+            "file_types": ["backend", "config"],
         },
-        "xss": {
+        "xss_javascript": {
             "patterns": [
-                r"innerHTML\s*=",
+                r"innerHTML\s*=\s*[^;]*\+",  # innerHTML with concatenation
                 r"dangerouslySetInnerHTML",
-                r"document\.write\s*\(",
+                r"document\.write\s*\([^)]*\+",  # document.write with concatenation
             ],
             "severity": "medium",
             "description": "Potential XSS vulnerability",
-            "recommendation": "Use safe DOM manipulation methods"
+            "recommendation": "Use safe DOM manipulation methods or sanitize input",
+            "file_types": ["web"],
         }
     }
+
+    @staticmethod
+    def get_file_type(filename: str) -> str:
+        """Determine the file type category based on extension"""
+        ext = "." + filename.split(".")[-1].lower() if "." in filename else ""
+
+        if ext in SecurityScanner.SCANNABLE_EXTENSIONS["python"]:
+            return "python"
+        elif ext in SecurityScanner.SCANNABLE_EXTENSIONS["javascript"]:
+            return "javascript"
+        elif ext in SecurityScanner.SCANNABLE_EXTENSIONS["web"]:
+            return "web"
+        elif ext in SecurityScanner.SCANNABLE_EXTENSIONS["config"]:
+            return "config"
+        elif ext in SecurityScanner.SKIP_EXTENSIONS:
+            return "skip"
+        else:
+            return "backend"  # Default to backend for unknown types
+
+    @staticmethod
+    def should_scan_for_vuln(file_type: str, vuln_file_types: List[str]) -> bool:
+        """Check if this file type should be scanned for a specific vulnerability"""
+        if file_type == "skip":
+            return False
+
+        # Check if file type matches any of the vulnerability's target types
+        for target_type in vuln_file_types:
+            if file_type == target_type:
+                return True
+            # Check if file type is in the category
+            if target_type in SecurityScanner.SCANNABLE_EXTENSIONS:
+                ext = f".{file_type}" if not file_type.startswith(".") else file_type
+                if ext in SecurityScanner.SCANNABLE_EXTENSIONS.get(target_type, []):
+                    return True
+        return False
 
     @staticmethod
     def scan_code(code: str, filename: str) -> List[SecurityFinding]:
@@ -84,22 +144,38 @@ class SecurityScanner:
         """
         findings: List[SecurityFinding] = []
 
-        for vuln_type, config in SecurityScanner.VULNERABILITY_PATTERNS.items():
-            for pattern in config["patterns"]:
-                matches = re.finditer(pattern, code, re.IGNORECASE | re.MULTILINE)
-                for match in matches:
-                    # Calculate line number
-                    line_number = code[:match.start()].count('\n') + 1
+        # Determine file type
+        file_type = SecurityScanner.get_file_type(filename)
 
-                    finding = SecurityFinding(
-                        severity=config["severity"],
-                        category=vuln_type,
-                        description=config["description"],
-                        file_path=filename,
-                        line_number=line_number,
-                        recommendation=config["recommendation"]
-                    )
-                    findings.append(finding)
+        # Skip non-code files (documentation, styles, images)
+        if file_type == "skip":
+            logger.debug(f"⏭️  Skipping security scan for {filename} (non-code file)")
+            return findings
+
+        for vuln_type, config in SecurityScanner.VULNERABILITY_PATTERNS.items():
+            # Check if this vulnerability type applies to this file type
+            vuln_file_types = config.get("file_types", ["backend"])
+            if not SecurityScanner.should_scan_for_vuln(file_type, vuln_file_types):
+                continue
+
+            for pattern in config["patterns"]:
+                try:
+                    matches = re.finditer(pattern, code, re.IGNORECASE | re.MULTILINE)
+                    for match in matches:
+                        # Calculate line number
+                        line_number = code[:match.start()].count('\n') + 1
+
+                        finding = SecurityFinding(
+                            severity=config["severity"],
+                            category=vuln_type,
+                            description=config["description"],
+                            file_path=filename,
+                            line_number=line_number,
+                            recommendation=config["recommendation"]
+                        )
+                        findings.append(finding)
+                except re.error as e:
+                    logger.warning(f"Regex error scanning {filename} for {vuln_type}: {e}")
 
         return findings
 

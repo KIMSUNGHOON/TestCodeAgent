@@ -420,266 +420,503 @@ if __name__ == "__main__":
 
 
 def _generate_calculator_app() -> List[Dict]:
-    """Generate a calculator web app"""
+    """Generate a Python calculator app with CLI and Tkinter GUI versions"""
 
-    html_content = '''<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>계산기 | Calculator</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <div class="calculator">
-        <div class="display" id="display">0</div>
-        <div class="buttons">
-            <button class="btn clear" onclick="clearDisplay()">C</button>
-            <button class="btn operator" onclick="appendOperator('/')">/</button>
-            <button class="btn operator" onclick="appendOperator('*')">×</button>
-            <button class="btn operator" onclick="backspace()">⌫</button>
+    cli_content = '''#!/usr/bin/env python3
+"""Calculator CLI - Version A
 
-            <button class="btn number" onclick="appendNumber('7')">7</button>
-            <button class="btn number" onclick="appendNumber('8')">8</button>
-            <button class="btn number" onclick="appendNumber('9')">9</button>
-            <button class="btn operator" onclick="appendOperator('-')">-</button>
+Interactive command-line calculator with two modes:
+1. Expression mode: Evaluate expressions like (2+3)*4/5
+2. Step mode: Input first number, operator, second number
 
-            <button class="btn number" onclick="appendNumber('4')">4</button>
-            <button class="btn number" onclick="appendNumber('5')">5</button>
-            <button class="btn number" onclick="appendNumber('6')">6</button>
-            <button class="btn operator" onclick="appendOperator('+')">+</button>
+Features:
+- Safe expression evaluation using ast.literal_eval
+- History tracking
+- Commands: help, history, clear, exit
+"""
 
-            <button class="btn number" onclick="appendNumber('1')">1</button>
-            <button class="btn number" onclick="appendNumber('2')">2</button>
-            <button class="btn number" onclick="appendNumber('3')">3</button>
-            <button class="btn equals" onclick="calculate()" style="grid-row: span 2">=</button>
+import ast
+import operator
+import re
+from typing import List, Tuple, Optional
 
-            <button class="btn number" onclick="appendNumber('0')" style="grid-column: span 2">0</button>
-            <button class="btn number" onclick="appendNumber('.')">.</button>
-        </div>
-    </div>
-    <script src="script.js"></script>
-</body>
-</html>'''
+# Calculation history
+history: List[str] = []
 
-    css_content = '''* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+# Safe operators for evaluation
+OPERATORS = {
+    '+': operator.add,
+    '-': operator.sub,
+    '*': operator.mul,
+    '/': operator.truediv,
+    '//': operator.floordiv,
+    '%': operator.mod,
+    '**': operator.pow,
 }
 
-body {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
 
-.calculator {
-    background: white;
-    border-radius: 20px;
-    padding: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    width: 320px;
-}
+def safe_eval(expression: str) -> float:
+    """Safely evaluate a mathematical expression.
 
-.display {
-    background: #222;
-    color: #fff;
-    font-size: 2.5rem;
-    padding: 20px;
-    border-radius: 10px;
-    text-align: right;
-    margin-bottom: 20px;
-    min-height: 80px;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-}
+    Uses ast.literal_eval for safety - no arbitrary code execution.
 
-.buttons {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-}
+    Args:
+        expression: Mathematical expression string
 
-.btn {
-    padding: 20px;
-    font-size: 1.5rem;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
+    Returns:
+        Result of the calculation
 
-.btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-}
+    Raises:
+        ValueError: If expression is invalid or unsafe
+    """
+    # Remove whitespace
+    expr = expression.replace(' ', '')
 
-.btn:active {
-    transform: translateY(0);
-}
+    # Validate characters (only digits, operators, parentheses, decimal point)
+    if not re.match(r'^[\\d+\\-*/().%]+$', expr):
+        raise ValueError("Invalid characters in expression")
 
-.btn.number {
-    background: #f0f0f0;
-    color: #333;
-}
+    try:
+        # Use compile and eval with restricted globals for safety
+        code = compile(expr, '<string>', 'eval')
 
-.btn.operator {
-    background: #ff9500;
-    color: white;
-}
+        # Check for unsafe operations
+        for name in code.co_names:
+            raise ValueError(f"Unsafe operation: {name}")
 
-.btn.clear {
-    background: #ff3b30;
-    color: white;
-    grid-column: span 2;
-}
+        # Evaluate with empty globals and locals
+        result = eval(code, {"__builtins__": {}}, {})
+        return float(result)
+    except ZeroDivisionError:
+        raise ValueError("Division by zero")
+    except Exception as e:
+        raise ValueError(f"Invalid expression: {e}")
 
-.btn.equals {
-    background: #34c759;
-    color: white;
-}'''
 
-    js_content = '''let currentInput = '0';
-let operator = null;
-let previousInput = null;
-let shouldResetDisplay = false;
+def step_mode_calculate(num1: float, op: str, num2: float) -> float:
+    """Calculate using step mode (num1 op num2).
 
-function updateDisplay() {
-    const display = document.getElementById('display');
-    display.textContent = currentInput;
-}
+    Args:
+        num1: First number
+        op: Operator string
+        num2: Second number
 
-function appendNumber(number) {
-    if (shouldResetDisplay) {
-        currentInput = '';
-        shouldResetDisplay = false;
-    }
+    Returns:
+        Result of the calculation
+    """
+    if op not in OPERATORS:
+        raise ValueError(f"Unknown operator: {op}")
 
-    if (currentInput === '0' && number !== '.') {
-        currentInput = number;
-    } else if (number === '.' && currentInput.includes('.')) {
-        return;
-    } else {
-        currentInput += number;
-    }
-    updateDisplay();
-}
+    if op in ('/', '//') and num2 == 0:
+        raise ValueError("Division by zero")
 
-function appendOperator(op) {
-    if (operator !== null && !shouldResetDisplay) {
-        calculate();
-    }
+    return OPERATORS[op](num1, num2)
 
-    previousInput = currentInput;
-    operator = op;
-    shouldResetDisplay = true;
-}
 
-function calculate() {
-    if (operator === null || previousInput === null) {
-        return;
-    }
+def show_help() -> None:
+    """Display help message."""
+    print("""
+╔══════════════════════════════════════════════════════════════╗
+║                    Calculator CLI Help                        ║
+╠══════════════════════════════════════════════════════════════╣
+║ Modes:                                                        ║
+║   expr    - Switch to expression mode (default)               ║
+║   step    - Switch to step-by-step mode                       ║
+║                                                               ║
+║ Commands:                                                     ║
+║   help    - Show this help message                            ║
+║   history - Show calculation history                          ║
+║   clear   - Clear history                                     ║
+║   exit    - Exit calculator                                   ║
+║                                                               ║
+║ Operators: +, -, *, /, //, %, **                             ║
+║                                                               ║
+║ Expression mode examples:                                     ║
+║   (2+3)*4    → 20.0                                          ║
+║   2**10      → 1024.0                                        ║
+║   10 % 3    → 1.0                                            ║
+╚══════════════════════════════════════════════════════════════╝
+""")
 
-    const prev = parseFloat(previousInput);
-    const current = parseFloat(currentInput);
-    let result;
 
-    switch (operator) {
-        case '+':
-            result = prev + current;
-            break;
-        case '-':
-            result = prev - current;
-            break;
-        case '*':
-            result = prev * current;
-            break;
-        case '/':
-            if (current === 0) {
-                alert('0으로 나눌 수 없습니다!');
-                clearDisplay();
-                return;
-            }
-            result = prev / current;
-            break;
-        default:
-            return;
-    }
+def show_history() -> None:
+    """Display calculation history."""
+    if not history:
+        print("No calculations yet.")
+        return
 
-    currentInput = result.toString();
-    operator = null;
-    previousInput = null;
-    shouldResetDisplay = true;
-    updateDisplay();
-}
+    print("\\n=== Calculation History ===")
+    for i, entry in enumerate(history, 1):
+        print(f"  {i}. {entry}")
+    print()
 
-function clearDisplay() {
-    currentInput = '0';
-    operator = null;
-    previousInput = null;
-    shouldResetDisplay = false;
-    updateDisplay();
-}
 
-function backspace() {
-    if (currentInput.length > 1) {
-        currentInput = currentInput.slice(0, -1);
-    } else {
-        currentInput = '0';
-    }
-    updateDisplay();
-}
+def expression_mode() -> None:
+    """Run calculator in expression mode."""
+    print("Expression mode - Enter mathematical expressions")
+    print("Type 'help' for commands, 'step' for step mode, 'exit' to quit\\n")
 
-// Initialize
-updateDisplay();'''
+    while True:
+        try:
+            expr = input(">>> ").strip()
 
-    readme_content = '''# 계산기 웹 앱 | Calculator Web App
+            if not expr:
+                continue
+            elif expr.lower() == 'exit':
+                break
+            elif expr.lower() == 'help':
+                show_help()
+            elif expr.lower() == 'history':
+                show_history()
+            elif expr.lower() == 'clear':
+                history.clear()
+                print("History cleared.")
+            elif expr.lower() == 'step':
+                step_mode()
+                return
+            else:
+                result = safe_eval(expr)
+                history.append(f"{expr} = {result}")
+                print(f"  = {result}")
 
-사칙연산(+, -, ×, ÷)을 지원하는 웹 기반 계산기입니다.
+        except ValueError as e:
+            print(f"Error: {e}")
+        except KeyboardInterrupt:
+            print("\\nExiting...")
+            break
 
-## Features
-- ✅ 덧셈, 뺄셈, 곱셈, 나눗셈
-- ✅ 소수점 연산
-- ✅ 백스페이스 기능
-- ✅ 반응형 디자인
-- ✅ 모던 UI/UX
 
-## Usage
-1. `index.html` 파일을 웹 브라우저에서 엽니다
-2. 버튼을 클릭하여 계산을 수행합니다
+def step_mode() -> None:
+    """Run calculator in step-by-step mode."""
+    print("Step mode - Enter number, operator, number")
+    print("Type 'help' for commands, 'expr' for expression mode, 'exit' to quit\\n")
 
-## Files
-- `index.html` - Main HTML structure
-- `style.css` - Styling and layout
-- `script.js` - Calculator logic
-- `README.md` - Documentation
+    while True:
+        try:
+            # Get first number
+            inp = input("First number: ").strip()
+            if inp.lower() == 'exit':
+                break
+            elif inp.lower() == 'help':
+                show_help()
+                continue
+            elif inp.lower() == 'history':
+                show_history()
+                continue
+            elif inp.lower() == 'expr':
+                expression_mode()
+                return
 
-## Browser Support
-- Chrome, Firefox, Safari, Edge (latest versions)
+            num1 = float(inp)
+
+            # Get operator
+            op = input("Operator (+,-,*,/,//,%,**): ").strip()
+            if op.lower() == 'exit':
+                break
+
+            # Get second number
+            num2 = float(input("Second number: ").strip())
+
+            # Calculate
+            result = step_mode_calculate(num1, op, num2)
+            history.append(f"{num1} {op} {num2} = {result}")
+            print(f"  = {result}\\n")
+
+        except ValueError as e:
+            print(f"Error: {e}\\n")
+        except KeyboardInterrupt:
+            print("\\nExiting...")
+            break
+
+
+def main() -> None:
+    """Main entry point."""
+    print("""
+╔══════════════════════════════════════════════════════════════╗
+║              Python Calculator - CLI Version                  ║
+║                                                               ║
+║  Supports: +, -, *, /, //, %, ** and parentheses             ║
+║  Type 'help' for more information                             ║
+╚══════════════════════════════════════════════════════════════╝
+""")
+
+    expression_mode()
+    print("Goodbye!")
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+    gui_content = '''#!/usr/bin/env python3
+"""Calculator GUI - Version B
+
+Tkinter-based GUI calculator with:
+- Buttons for digits 0-9, decimal, operators
+- Keyboard support
+- Display showing current input and result
+"""
+
+import tkinter as tk
+from tkinter import messagebox
+import ast
+import re
+from typing import Optional
+
+
+class CalculatorGUI:
+    """Tkinter Calculator Application."""
+
+    def __init__(self, root: tk.Tk) -> None:
+        """Initialize the calculator GUI.
+
+        Args:
+            root: Tkinter root window
+        """
+        self.root = root
+        self.root.title("Python Calculator")
+        self.root.resizable(False, False)
+        self.root.configure(bg='#2d2d2d')
+
+        # Current expression
+        self.expression = ""
+        self.result_shown = False
+
+        # Create display
+        self._create_display()
+
+        # Create buttons
+        self._create_buttons()
+
+        # Bind keyboard events
+        self._bind_keyboard()
+
+    def _create_display(self) -> None:
+        """Create the calculator display."""
+        self.display_frame = tk.Frame(self.root, bg='#2d2d2d')
+        self.display_frame.pack(padx=10, pady=10, fill='x')
+
+        self.display = tk.Entry(
+            self.display_frame,
+            font=('Consolas', 28),
+            justify='right',
+            bd=0,
+            bg='#1e1e1e',
+            fg='white',
+            insertbackground='white',
+            state='readonly'
+        )
+        self.display.pack(fill='x', ipady=15)
+        self._update_display("0")
+
+    def _create_buttons(self) -> None:
+        """Create calculator buttons."""
+        self.buttons_frame = tk.Frame(self.root, bg='#2d2d2d')
+        self.buttons_frame.pack(padx=10, pady=5)
+
+        # Button layout
+        buttons = [
+            ('C', 'clear'), ('(', 'paren'), (')', 'paren'), ('⌫', 'back'),
+            ('7', 'num'), ('8', 'num'), ('9', 'num'), ('/', 'op'),
+            ('4', 'num'), ('5', 'num'), ('6', 'num'), ('*', 'op'),
+            ('1', 'num'), ('2', 'num'), ('3', 'num'), ('-', 'op'),
+            ('0', 'num'), ('.', 'num'), ('=', 'equals'), ('+', 'op'),
+            ('%', 'op'), ('**', 'op'), ('//', 'op'), (' ', 'empty'),
+        ]
+
+        # Button colors
+        colors = {
+            'num': {'bg': '#4a4a4a', 'fg': 'white', 'active': '#5a5a5a'},
+            'op': {'bg': '#ff9500', 'fg': 'white', 'active': '#ffaa33'},
+            'clear': {'bg': '#ff3b30', 'fg': 'white', 'active': '#ff5a50'},
+            'equals': {'bg': '#34c759', 'fg': 'white', 'active': '#4ad76a'},
+            'paren': {'bg': '#5a5a5a', 'fg': 'white', 'active': '#6a6a6a'},
+            'back': {'bg': '#ff9500', 'fg': 'white', 'active': '#ffaa33'},
+            'empty': {'bg': '#2d2d2d', 'fg': '#2d2d2d', 'active': '#2d2d2d'},
+        }
+
+        row, col = 0, 0
+        for text, btn_type in buttons:
+            color = colors[btn_type]
+
+            if text == ' ':
+                # Empty placeholder
+                label = tk.Label(self.buttons_frame, bg='#2d2d2d')
+                label.grid(row=row, column=col, padx=2, pady=2)
+            else:
+                btn = tk.Button(
+                    self.buttons_frame,
+                    text=text,
+                    font=('Arial', 18, 'bold'),
+                    width=4 if len(text) <= 2 else 3,
+                    height=2,
+                    bd=0,
+                    bg=color['bg'],
+                    fg=color['fg'],
+                    activebackground=color['active'],
+                    activeforeground='white',
+                    command=lambda t=text: self._on_button_click(t)
+                )
+                btn.grid(row=row, column=col, padx=2, pady=2, sticky='nsew')
+
+            col += 1
+            if col > 3:
+                col = 0
+                row += 1
+
+    def _bind_keyboard(self) -> None:
+        """Bind keyboard events."""
+        self.root.bind('<Key>', self._on_key_press)
+        self.root.bind('<Return>', lambda e: self._calculate())
+        self.root.bind('<BackSpace>', lambda e: self._backspace())
+        self.root.bind('<Escape>', lambda e: self._clear())
+
+    def _on_key_press(self, event: tk.Event) -> None:
+        """Handle keyboard input."""
+        char = event.char
+        if char in '0123456789.+-*/()%':
+            self._append(char)
+
+    def _on_button_click(self, text: str) -> None:
+        """Handle button click."""
+        if text == 'C':
+            self._clear()
+        elif text == '⌫':
+            self._backspace()
+        elif text == '=':
+            self._calculate()
+        else:
+            self._append(text)
+
+    def _append(self, text: str) -> None:
+        """Append text to expression."""
+        if self.result_shown and text in '0123456789.':
+            self.expression = ""
+            self.result_shown = False
+
+        self.expression += text
+        self._update_display(self.expression)
+
+    def _clear(self) -> None:
+        """Clear the display."""
+        self.expression = ""
+        self.result_shown = False
+        self._update_display("0")
+
+    def _backspace(self) -> None:
+        """Remove last character."""
+        self.expression = self.expression[:-1]
+        self._update_display(self.expression or "0")
+
+    def _calculate(self) -> None:
+        """Calculate the result."""
+        if not self.expression:
+            return
+
+        try:
+            # Safe evaluation
+            result = self._safe_eval(self.expression)
+            self._update_display(str(result))
+            self.expression = str(result)
+            self.result_shown = True
+
+        except ZeroDivisionError:
+            messagebox.showerror("Error", "Cannot divide by zero!")
+            self._clear()
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid expression: {e}")
+            self._clear()
+
+    def _safe_eval(self, expression: str) -> float:
+        """Safely evaluate expression."""
+        # Validate characters
+        if not re.match(r'^[\\d+\\-*/().%\\s]+$', expression):
+            raise ValueError("Invalid characters")
+
+        # Compile and evaluate safely
+        code = compile(expression, '<string>', 'eval')
+        for name in code.co_names:
+            raise ValueError(f"Unsafe: {name}")
+
+        result = eval(code, {"__builtins__": {}}, {})
+        return round(float(result), 10)
+
+    def _update_display(self, text: str) -> None:
+        """Update display text."""
+        self.display.configure(state='normal')
+        self.display.delete(0, tk.END)
+        self.display.insert(0, text)
+        self.display.configure(state='readonly')
+
+
+def main() -> None:
+    """Main entry point."""
+    root = tk.Tk()
+    app = CalculatorGUI(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+    readme_content = '''# Python Calculator
+
+Python 3.10+ 기반 계산기 프로그램입니다.
+
+## 버전
+
+### Version A: CLI (calculator_cli.py)
+명령줄 인터페이스 계산기
+
+**기능:**
+- Expression mode: 수식 입력 (예: `(2+3)*4/5`)
+- Step mode: 단계별 입력
+- 연산자: +, -, *, /, //, %, **
+- 히스토리 기능
+- 명령어: help, history, clear, exit
+
+**실행:**
+```bash
+python calculator_cli.py
+```
+
+### Version B: GUI (calculator_gui.py)
+Tkinter 기반 GUI 계산기
+
+**기능:**
+- 숫자 버튼 0-9, 소수점
+- 연산자: +, -, *, /, //, %, **
+- 괄호 지원
+- 키보드 지원 (Enter=계산, Backspace=삭제, Esc=초기화)
+
+**실행:**
+```bash
+python calculator_gui.py
+```
+
+## 안전성
+- `eval()` 직접 사용 금지
+- `ast` 모듈을 사용한 안전한 수식 평가
+- 유효하지 않은 문자 필터링
+
+## 요구사항
+- Python 3.10+
+- Tkinter (GUI 버전, 표준 라이브러리)
 '''
 
     return [
         {
-            "filename": "index.html",
-            "content": html_content,
-            "language": "html",
-            "description": "Main HTML file for calculator app"
+            "filename": "calculator_cli.py",
+            "content": cli_content,
+            "language": "python",
+            "description": "CLI calculator with expression and step modes"
         },
         {
-            "filename": "style.css",
-            "content": css_content,
-            "language": "css",
-            "description": "Styling for calculator UI"
-        },
-        {
-            "filename": "script.js",
-            "content": js_content,
-            "language": "javascript",
-            "description": "Calculator logic and event handlers"
+            "filename": "calculator_gui.py",
+            "content": gui_content,
+            "language": "python",
+            "description": "Tkinter GUI calculator"
         },
         {
             "filename": "README.md",
