@@ -472,24 +472,40 @@ class EnhancedWorkflow:
                         "streaming_content": f"🔄 Refinement Loop - Iteration {refinement_iteration}/{max_refinement_iterations}\n\nRe-evaluating code quality after fixes...",
                     })
 
-                # Run all quality gates
+                # Run all quality gates IN PARALLEL for faster execution
                 gate_results = {}
-                for gate_name, gate_func in [
+                gates_to_run = [
                     ("reviewer", reviewer_node),
                     ("qa_gate", qa_gate_node),
                     ("security_gate", security_gate_node),
-                ]:
-                    gate_display = gate_name if refinement_iteration == 0 else f"{gate_name}_r{refinement_iteration}"
+                ]
 
+                # Send "starting" updates for all gates at once
+                for gate_name, _ in gates_to_run:
                     yield self._create_update(gate_name, "starting", {
                         "message": f"Running {self._get_agent_info(gate_name)['title']}..." + (f" (iteration {refinement_iteration + 1})" if refinement_iteration > 0 else ""),
                         "refinement_iteration": refinement_iteration,
+                        "parallel": True,
                     })
 
+                # Helper to run a single gate in thread pool (sync functions)
+                async def run_gate(gate_name: str, gate_func) -> tuple:
                     gate_start = time.time()
-                    gate_result = gate_func(state)
+                    # Run sync function in thread pool to not block
+                    result = await asyncio.to_thread(gate_func, state)
                     gate_time = time.time() - gate_start
+                    return gate_name, result, gate_time
 
+                # Run all gates in parallel
+                parallel_start = time.time()
+                gate_tasks = [run_gate(name, func) for name, func in gates_to_run]
+                parallel_results = await asyncio.gather(*gate_tasks)
+                total_parallel_time = time.time() - parallel_start
+
+                logger.info(f"⚡ Quality gates completed in parallel: {total_parallel_time:.2f}s (vs ~{sum(r[2] for r in parallel_results):.2f}s sequential)")
+
+                # Process results and send completion updates
+                for gate_name, gate_result, gate_time in parallel_results:
                     # Track time only for first iteration
                     if refinement_iteration == 0:
                         agent_times[gate_name] = gate_time
@@ -511,6 +527,7 @@ class EnhancedWorkflow:
                         "completed_agents": completed_agents.copy(),
                         "streaming_content": gate_content,
                         "refinement_iteration": refinement_iteration,
+                        "parallel": True,
                     })
 
                 # Check if all gates passed
