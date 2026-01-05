@@ -116,19 +116,33 @@ class SecurityScanner:
 
     @staticmethod
     def should_scan_for_vuln(file_type: str, vuln_file_types: List[str]) -> bool:
-        """Check if this file type should be scanned for a specific vulnerability"""
+        """Check if this file type should be scanned for a specific vulnerability
+
+        Args:
+            file_type: The detected file type (e.g., "python", "javascript", "web")
+            vuln_file_types: List of target file types for this vulnerability
+
+        Returns:
+            True if this file should be scanned for this vulnerability
+        """
         if file_type == "skip":
             return False
 
-        # Check if file type matches any of the vulnerability's target types
+        # Direct match
+        if file_type in vuln_file_types:
+            return True
+
+        # Check if file type is a subcategory of target type
+        # E.g., "python" files should be scanned for "backend" vulnerabilities
         for target_type in vuln_file_types:
-            if file_type == target_type:
-                return True
-            # Check if file type is in the category
             if target_type in SecurityScanner.SCANNABLE_EXTENSIONS:
-                ext = f".{file_type}" if not file_type.startswith(".") else file_type
-                if ext in SecurityScanner.SCANNABLE_EXTENSIONS.get(target_type, []):
+                # Get extensions for this file type
+                file_type_exts = SecurityScanner.SCANNABLE_EXTENSIONS.get(file_type, [])
+                target_exts = SecurityScanner.SCANNABLE_EXTENSIONS.get(target_type, [])
+                # Check if there's any overlap (e.g., .py is in both python and backend)
+                if any(ext in target_exts for ext in file_type_exts):
                     return True
+
         return False
 
     @staticmethod
