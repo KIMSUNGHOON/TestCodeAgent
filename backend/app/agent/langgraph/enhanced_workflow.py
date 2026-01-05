@@ -619,21 +619,84 @@ class EnhancedWorkflow:
             if complexity in ["complex", "critical"] or not all_passed:
                 hitl_request_id = f"final_review_{workflow_id}"
 
-                # Create and register HITL request
+                # Collect all quality gate results for HITL display
+                security_findings = state.get("security_findings", [])
+                qa_test_results = state.get("qa_test_results", [])
+                review_feedback = state.get("review_feedback", {})
+                final_artifacts = state.get("final_artifacts", [])
+
+                # Build detailed summary for HITL display
+                summary_parts = []
+                if not state.get("security_passed", True):
+                    critical_findings = [f for f in security_findings if f.get("severity") in ["critical", "high"]]
+                    summary_parts.append(f"🔒 보안: {len(critical_findings)}개 치명적/높음 이슈 발견")
+                else:
+                    summary_parts.append("🔒 보안: ✅ 통과")
+
+                if not state.get("tests_passed", True):
+                    failed_tests = [t for t in qa_test_results if not t.get("passed", True)]
+                    summary_parts.append(f"🧪 QA: {len(failed_tests)}개 테스트 실패")
+                else:
+                    summary_parts.append("🧪 QA: ✅ 통과")
+
+                if not state.get("review_approved", True):
+                    issues = review_feedback.get("issues", [])
+                    summary_parts.append(f"👀 리뷰: {len(issues)}개 이슈 발견")
+                else:
+                    summary_parts.append("👀 리뷰: ✅ 승인됨")
+
+                summary_parts.append(f"\n📁 생성된 파일: {len(final_artifacts)}개")
+
+                # Create and register HITL request with detailed content
                 hitl_request = self._create_hitl_request(
                     request_id=hitl_request_id,
                     workflow_id=workflow_id,
                     stage_id="final_approval",
                     checkpoint_type=HITLCheckpointType.APPROVAL if all_passed else HITLCheckpointType.REVIEW,
-                    title="Final Review Required" if all_passed else "Issues Found - Review Required",
-                    description="Please review the generated code before saving.",
+                    title="최종 검토 필요" if all_passed else "⚠️ 이슈 발견 - 검토 필요",
+                    description="생성된 코드를 저장하기 전에 검토해주세요.",
                     content={
                         "type": "code_review",
-                        "artifacts_count": len(state.get("final_artifacts", [])),
+                        "summary": "\n".join(summary_parts),
+                        "artifacts_count": len(final_artifacts),
                         "quality_summary": {
                             "security_passed": state.get("security_passed"),
                             "tests_passed": state.get("tests_passed"),
                             "review_approved": state.get("review_approved"),
+                        },
+                        "details": {
+                            "artifacts": [
+                                {
+                                    "filename": a.get("filename"),
+                                    "file_path": a.get("file_path"),
+                                    "language": a.get("language"),
+                                    "description": a.get("description"),
+                                    "action": a.get("action"),
+                                }
+                                for a in final_artifacts[:10]  # Limit to 10 for display
+                            ],
+                            "security_findings": [
+                                {
+                                    "severity": f.get("severity"),
+                                    "category": f.get("category"),
+                                    "description": f.get("description"),
+                                    "file_path": f.get("file_path"),
+                                    "line_number": f.get("line_number"),
+                                    "recommendation": f.get("recommendation"),
+                                }
+                                for f in security_findings
+                            ],
+                            "qa_results": [
+                                {
+                                    "test_name": t.get("test_name"),
+                                    "passed": t.get("passed"),
+                                    "error": t.get("error"),
+                                }
+                                for t in qa_test_results
+                            ],
+                            "review_issues": review_feedback.get("issues", []),
+                            "review_suggestions": review_feedback.get("suggestions", []),
+                            "quality_score": review_feedback.get("quality_score", 0),
                         }
                     },
                     priority="critical" if not all_passed else "high",

@@ -289,25 +289,128 @@ const HITLModal = ({
 
 const ApprovalView = ({ request }: { request: HITLRequest }) => {
   const { content } = request;
-  const artifacts = content.details?.artifacts as Array<{filename?: string; file_path?: string; language?: string}> | undefined;
+  const details = content.details as {
+    artifacts?: Array<{filename?: string; file_path?: string; language?: string; action?: string}>;
+    security_findings?: Array<{severity?: string; category?: string; description?: string; file_path?: string; line_number?: number; recommendation?: string}>;
+    qa_results?: Array<{test_name?: string; passed?: boolean; error?: string}>;
+    review_issues?: string[];
+    review_suggestions?: string[];
+    quality_score?: number;
+  } | undefined;
+
+  const artifacts = details?.artifacts;
+  const securityFindings = details?.security_findings || [];
+  const qaResults = details?.qa_results || [];
+  const reviewIssues = details?.review_issues || [];
+  const reviewSuggestions = details?.review_suggestions || [];
 
   return (
     <div className="space-y-3">
+      {/* Summary */}
       {content.summary && (
         <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-          <p className="text-sm text-gray-300">{content.summary}</p>
+          <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">{content.summary}</pre>
         </div>
       )}
+
+      {/* Security Findings */}
+      {securityFindings.length > 0 && (
+        <div className="bg-red-900/20 rounded-lg p-3 border border-red-800/50">
+          <h3 className="text-xs text-red-400 mb-2 font-medium">🔒 보안 이슈 ({securityFindings.length})</h3>
+          <div className="space-y-2 max-h-40 overflow-y-auto">
+            {securityFindings.map((f, i) => (
+              <div key={i} className="text-xs bg-gray-900/50 rounded p-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    f.severity === 'critical' ? 'bg-red-600 text-white' :
+                    f.severity === 'high' ? 'bg-orange-600 text-white' :
+                    f.severity === 'medium' ? 'bg-yellow-600 text-white' :
+                    'bg-gray-600 text-white'
+                  }`}>
+                    {f.severity?.toUpperCase()}
+                  </span>
+                  <span className="text-gray-400">{f.category}</span>
+                </div>
+                <p className="text-gray-300">{f.description}</p>
+                {f.file_path && (
+                  <p className="text-gray-500 mt-1 font-mono">
+                    📄 {f.file_path}{f.line_number ? `:${f.line_number}` : ''}
+                  </p>
+                )}
+                {f.recommendation && (
+                  <p className="text-green-400 mt-1 text-[10px]">💡 {f.recommendation}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* QA Results */}
+      {qaResults.length > 0 && (
+        <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+          <h3 className="text-xs text-gray-400 mb-2 font-medium">🧪 QA 테스트 결과</h3>
+          <div className="space-y-1">
+            {qaResults.map((t, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs">
+                <span className={t.passed ? 'text-green-400' : 'text-red-400'}>
+                  {t.passed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">{t.test_name}</span>
+                {t.error && <span className="text-red-400 text-[10px]">({t.error})</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review Issues */}
+      {reviewIssues.length > 0 && (
+        <div className="bg-amber-900/20 rounded-lg p-3 border border-amber-800/50">
+          <h3 className="text-xs text-amber-400 mb-2 font-medium">👀 리뷰 이슈 ({reviewIssues.length})</h3>
+          <ul className="space-y-1">
+            {reviewIssues.map((issue, i) => (
+              <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                <span className="text-amber-400">•</span>
+                {typeof issue === 'string' ? issue : (issue as {issue?: string}).issue}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Review Suggestions */}
+      {reviewSuggestions.length > 0 && (
+        <div className="bg-blue-900/20 rounded-lg p-3 border border-blue-800/50">
+          <h3 className="text-xs text-blue-400 mb-2 font-medium">💡 개선 제안 ({reviewSuggestions.length})</h3>
+          <ul className="space-y-1">
+            {reviewSuggestions.map((sug, i) => (
+              <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                <span className="text-blue-400">•</span>
+                {typeof sug === 'string' ? sug : (sug as {suggestion?: string}).suggestion}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Workflow Plan */}
       {content.workflow_plan && (
         <WorkflowPlanPreview plan={content.workflow_plan} />
       )}
+
+      {/* Artifacts */}
       {artifacts && artifacts.length > 0 && (
         <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
-          <h3 className="text-xs text-gray-500 mb-2">Artifacts</h3>
-          <div className="space-y-1">
+          <h3 className="text-xs text-gray-500 mb-2">📁 생성된 파일 ({artifacts.length})</h3>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
             {artifacts.map((a, i) => (
-              <div key={i} className="text-xs font-mono text-gray-400">
-                {a.filename || a.file_path} <span className="text-gray-600">[{a.language || 'unknown'}]</span>
+              <div key={i} className="text-xs font-mono text-gray-400 flex items-center gap-2">
+                <span className={a.action === 'created' ? 'text-green-400' : 'text-yellow-400'}>
+                  {a.action === 'created' ? '+' : '~'}
+                </span>
+                {a.filename || a.file_path}
+                <span className="text-gray-600">[{a.language || 'unknown'}]</span>
               </div>
             ))}
           </div>
@@ -329,11 +432,92 @@ const ReviewView = ({
   onEditedContentChange: (content: string) => void;
 }) => {
   const { content } = request;
+  const details = content.details as {
+    artifacts?: Array<{filename?: string; file_path?: string; language?: string; action?: string}>;
+    security_findings?: Array<{severity?: string; category?: string; description?: string; file_path?: string; line_number?: number; recommendation?: string}>;
+    qa_results?: Array<{test_name?: string; passed?: boolean; error?: string}>;
+    review_issues?: string[];
+    review_suggestions?: string[];
+    quality_score?: number;
+  } | undefined;
+
+  const securityFindings = details?.security_findings || [];
+  const reviewIssues = details?.review_issues || [];
+  const reviewSuggestions = details?.review_suggestions || [];
+
   return (
     <div className="space-y-3">
+      {/* Summary */}
       {content.summary && (
-        <div className="text-sm text-gray-400 mb-2">{content.summary}</div>
+        <div className="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+          <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans">{content.summary}</pre>
+        </div>
       )}
+
+      {/* Security Findings - Critical for Review */}
+      {securityFindings.length > 0 && (
+        <div className="bg-red-900/20 rounded-lg p-3 border border-red-800/50">
+          <h3 className="text-xs text-red-400 mb-2 font-medium">🔒 보안 이슈 - 검토 필요 ({securityFindings.length})</h3>
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {securityFindings.map((f, i) => (
+              <div key={i} className="text-xs bg-gray-900/50 rounded p-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    f.severity === 'critical' ? 'bg-red-600 text-white' :
+                    f.severity === 'high' ? 'bg-orange-600 text-white' :
+                    f.severity === 'medium' ? 'bg-yellow-600 text-white' :
+                    'bg-gray-600 text-white'
+                  }`}>
+                    {f.severity?.toUpperCase()}
+                  </span>
+                  <span className="text-gray-400">{f.category}</span>
+                </div>
+                <p className="text-gray-300">{f.description}</p>
+                {f.file_path && (
+                  <p className="text-gray-500 mt-1 font-mono text-[10px]">
+                    📄 {f.file_path}{f.line_number ? `:${f.line_number}` : ''}
+                  </p>
+                )}
+                {f.recommendation && (
+                  <p className="text-green-400 mt-1 text-[10px]">💡 권장: {f.recommendation}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review Issues */}
+      {reviewIssues.length > 0 && (
+        <div className="bg-amber-900/20 rounded-lg p-3 border border-amber-800/50">
+          <h3 className="text-xs text-amber-400 mb-2 font-medium">👀 코드 리뷰 이슈 ({reviewIssues.length})</h3>
+          <ul className="space-y-1">
+            {reviewIssues.map((issue, i) => (
+              <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                <span className="text-amber-400">•</span>
+                {typeof issue === 'string' ? issue : (issue as {issue?: string}).issue}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Review Suggestions */}
+      {reviewSuggestions.length > 0 && (
+        <div className="bg-blue-900/20 rounded-lg p-3 border border-blue-800/50">
+          <h3 className="text-xs text-blue-400 mb-2 font-medium">💡 개선 제안</h3>
+          <ul className="space-y-1">
+            {reviewSuggestions.map((sug, i) => (
+              <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                <span className="text-blue-400">•</span>
+                {typeof sug === 'string' ? sug : (sug as {suggestion?: string}).suggestion}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Code Editor */}
       {content.code && (
         <div className="rounded-lg border border-gray-800 overflow-hidden">
           <div className="px-3 py-1.5 bg-gray-800 flex items-center justify-between">
