@@ -173,26 +173,11 @@ def _run_qa_checks(artifacts: List[Dict]) -> Dict:
         "message": "No syntax errors" if not syntax_errors else f"Errors: {'; '.join(syntax_errors[:3])}"
     }
 
-    # Check 4: Security checks (basic)
-    security_issues = []
-    for artifact in artifacts:
-        content = artifact.get("content", "")
-        filename = artifact.get("filename", "unknown")
+    # Note: Security checks are delegated to Security Gate (security_gate.py)
+    # to avoid duplicate detection and false positives.
+    # Security Gate has more sophisticated patterns with exclude_patterns support.
 
-        # Check for common security issues
-        if "eval(" in content:
-            security_issues.append(f"{filename}: Uses dangerous eval()")
-        if "exec(" in content:
-            security_issues.append(f"{filename}: Uses dangerous exec()")
-        if "innerHTML" in content and "=" in content:
-            security_issues.append(f"{filename}: Potential XSS via innerHTML")
-
-    checks["security"] = {
-        "passed": len(security_issues) == 0,
-        "message": "No security issues" if not security_issues else f"Issues: {'; '.join(security_issues[:3])}"
-    }
-
-    # Check 5: Documentation exists
+    # Check 4: Documentation exists
     has_readme = any(a.get("filename", "").lower() == "readme.md" for a in artifacts)
     has_docs = any(
         '"""' in a.get("content", "") or "'''" in a.get("content", "") or "<!--" in a.get("content", "")
@@ -203,8 +188,8 @@ def _run_qa_checks(artifacts: List[Dict]) -> Dict:
         "message": "Documentation found" if (has_readme or has_docs) else "No documentation"
     }
 
-    # Overall pass/fail
-    critical_checks = ["file_count", "no_empty_files", "syntax_valid", "security"]
+    # Overall pass/fail (security is handled by Security Gate)
+    critical_checks = ["file_count", "no_empty_files", "syntax_valid"]
     passed = all(checks[name]["passed"] for name in critical_checks if name in checks)
 
     return {

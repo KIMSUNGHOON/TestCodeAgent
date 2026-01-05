@@ -29,6 +29,13 @@ try:
 except ImportError:
     DEEPSEEK_PROMPTS_AVAILABLE = False
 
+# Import path utilities for cross-platform compatibility
+try:
+    from shared.utils.path_utils import get_relative_path, get_filename
+    PATH_UTILS_AVAILABLE = True
+except ImportError:
+    PATH_UTILS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -215,28 +222,23 @@ def refiner_node(state: QualityGateState) -> Dict:
         # Write modified content to file
         from app.agent.langgraph.tools.filesystem_tools import write_file_tool
 
-        # CRITICAL FIX: Use full relative path to preserve directory structure
-        # file_path may be:
-        # - Just filename: "main.py"
-        # - Relative path from workspace: "src/main.py"
-        # - Full path: "/home/user/workspace/project/src/main.py"
-        import os
+        # Use centralized path utilities for cross-platform compatibility
         original_file_path = code_diff["file_path"]
 
-        # Normalize path separators for cross-platform compatibility
-        normalized_workspace = workspace_root.replace("\\", "/")
-        normalized_file_path = original_file_path.replace("\\", "/")
-
-        # If it's an absolute path starting with workspace_root, make it relative
-        if normalized_file_path.startswith(normalized_workspace):
-            relative_path = normalized_file_path[len(normalized_workspace):].lstrip("/")
+        # Get relative path using shared utility (handles Windows/Linux/Mac)
+        if PATH_UTILS_AVAILABLE:
+            relative_path = get_relative_path(original_file_path, workspace_root)
+            filename = get_filename(relative_path)
         else:
-            # Use as-is (already relative or just filename)
-            # Strip both forward and backslashes for Windows compatibility
-            relative_path = normalized_file_path.lstrip("/")
-
-        # Extract just filename for artifact tracking
-        filename = os.path.basename(relative_path)
+            # Fallback to inline normalization
+            import os
+            normalized_workspace = workspace_root.replace("\\", "/")
+            normalized_file_path = original_file_path.replace("\\", "/")
+            if normalized_file_path.startswith(normalized_workspace):
+                relative_path = normalized_file_path[len(normalized_workspace):].lstrip("/")
+            else:
+                relative_path = normalized_file_path.lstrip("/")
+            filename = os.path.basename(relative_path)
 
         logger.info(f"📝 Writing fix: {relative_path} (in {workspace_root})")
 

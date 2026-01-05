@@ -6,6 +6,8 @@ Specialized adapter for DeepSeek-R1 reasoning model with <think> tag support.
 import logging
 import re
 import httpx
+import asyncio
+import time
 from typing import Optional, AsyncGenerator, List
 
 from shared.llm.base import (
@@ -17,6 +19,24 @@ from shared.llm.base import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_backoff(attempt: int, base_delay: float = 1.0, max_delay: float = 30.0) -> float:
+    """Calculate exponential backoff delay with jitter.
+
+    Args:
+        attempt: Current retry attempt (0-indexed)
+        base_delay: Base delay in seconds
+        max_delay: Maximum delay in seconds
+
+    Returns:
+        Delay in seconds with jitter
+    """
+    import random
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    # Add jitter (0.5x to 1.5x)
+    jitter = delay * (0.5 + random.random())
+    return jitter
 
 
 # DeepSeek-R1 specific system prompts with <think> tag requirements
@@ -223,7 +243,7 @@ Provide review in JSON format:
         config_override: Optional[LLMConfig] = None,
         max_retries: int = 2
     ) -> LLMResponse:
-        """Generate response from DeepSeek-R1 with retry for empty responses"""
+        """Generate response from DeepSeek-R1 with retry and exponential backoff"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
@@ -246,10 +266,12 @@ Provide review in JSON format:
                         result = response.json()
                         content = result["choices"][0]["text"]
 
-                        # Retry on empty response
+                        # Retry on empty response with backoff
                         if not content or not content.strip():
                             if attempt < max_retries:
-                                logger.warning(f"Empty response from DeepSeek, retrying ({attempt + 1}/{max_retries})...")
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Empty response from DeepSeek, retrying in {backoff:.1f}s ({attempt + 1}/{max_retries})...")
+                                await asyncio.sleep(backoff)
                                 continue
                             else:
                                 logger.error("Empty response from DeepSeek after all retries")
@@ -259,11 +281,22 @@ Provide review in JSON format:
                         llm_response.raw_response = result
                         return llm_response
                     else:
+                        # Retry on server errors (5xx) with backoff
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"DeepSeek server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            await asyncio.sleep(backoff)
+                            continue
                         logger.error(f"DeepSeek request failed: {response.status_code}")
                         raise Exception(f"DeepSeek request failed: {response.status_code}")
 
             except httpx.TimeoutException:
-                logger.error("DeepSeek request timed out")
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"DeepSeek request timed out, retrying in {backoff:.1f}s...")
+                    await asyncio.sleep(backoff)
+                    continue
+                logger.error("DeepSeek request timed out after all retries")
                 raise
 
         # Should not reach here, but return empty response as fallback
@@ -276,7 +309,7 @@ Provide review in JSON format:
         config_override: Optional[LLMConfig] = None,
         max_retries: int = 2
     ) -> LLMResponse:
-        """Synchronous generation for DeepSeek-R1 with retry for empty responses"""
+        """Synchronous generation for DeepSeek-R1 with retry and exponential backoff"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
@@ -299,10 +332,12 @@ Provide review in JSON format:
                         result = response.json()
                         content = result["choices"][0]["text"]
 
-                        # Retry on empty response
+                        # Retry on empty response with backoff
                         if not content or not content.strip():
                             if attempt < max_retries:
-                                logger.warning(f"Empty response from DeepSeek (sync), retrying ({attempt + 1}/{max_retries})...")
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Empty response from DeepSeek (sync), retrying in {backoff:.1f}s ({attempt + 1}/{max_retries})...")
+                                time.sleep(backoff)
                                 continue
                             else:
                                 logger.error("Empty response from DeepSeek (sync) after all retries")
@@ -312,11 +347,22 @@ Provide review in JSON format:
                         llm_response.raw_response = result
                         return llm_response
                     else:
+                        # Retry on server errors (5xx) with backoff
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"DeepSeek server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            time.sleep(backoff)
+                            continue
                         logger.error(f"DeepSeek request failed: {response.status_code}")
                         raise Exception(f"DeepSeek request failed: {response.status_code}")
 
             except httpx.TimeoutException:
-                logger.error("DeepSeek request timed out")
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"DeepSeek request timed out, retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                    continue
+                logger.error("DeepSeek request timed out after all retries")
                 raise
 
         # Should not reach here, but return empty response as fallback

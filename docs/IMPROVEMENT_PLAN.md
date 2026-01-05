@@ -1,7 +1,7 @@
 # Coding Agent System Improvement Plan
 
 **Created**: 2026-01-06
-**Status**: In Progress (Issue #1 Fixed)
+**Status**: Phase 1 & 2 Complete
 
 ---
 
@@ -162,11 +162,11 @@ normalized_file_path = original_file_path.replace("\\", "/")
 
 ### Phase 2: Quality Improvements (Short-term)
 
-| Task | Priority | Effort | Impact |
-|------|----------|--------|--------|
-| Remove security patterns from QA Gate | Medium | Low | Medium |
-| Centralize path normalization utilities | Low | Medium | Medium |
-| Add retry backoff in LLM adapters | Low | Low | Low |
+| Task | Priority | Effort | Impact | Status |
+|------|----------|--------|--------|--------|
+| Remove security patterns from QA Gate | Medium | Low | Medium | ✅ Done |
+| Centralize path normalization utilities | Low | Medium | Medium | ✅ Done |
+| Add retry backoff in LLM adapters | Low | Low | Low | ✅ Done |
 
 ### Phase 3: Architecture Enhancements (Long-term)
 
@@ -258,3 +258,6 @@ When continuing development on Linux:
 | 2026-01-06 | Initial improvement plan created |
 | 2026-01-06 | Issue #1 Fixed: Added exclude_patterns to security scanner for ast.literal_eval |
 | 2026-01-06 | Issue #2 Fixed: Increased default max_iterations from 3 to 5 |
+| 2026-01-06 | Phase 2: Removed security patterns from QA Gate (delegate to Security Gate) |
+| 2026-01-06 | Phase 2: Created shared/utils/path_utils.py for cross-platform path handling |
+| 2026-01-06 | Phase 2: Added exponential backoff to DeepSeek adapter retry logic |
