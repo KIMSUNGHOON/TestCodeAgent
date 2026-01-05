@@ -51,10 +51,11 @@ The scanner now checks if a match falls within a safe pattern context before fla
 
 ---
 
-### Issue #2: Refiner Iteration Limit Too Low
+### Issue #2: Refiner Iteration Limit Too Low ✅ FIXED
 
 **Severity**: Medium
 **Impact**: Complex issues cannot be resolved within 3 iterations
+**Status**: ✅ Fixed on 2026-01-06
 
 **Problem Description**:
 The Refiner node has a maximum iteration limit of 3, which is insufficient for resolving complex security issues that require multiple code changes.
@@ -69,25 +70,17 @@ WARNING - Max refinement iterations reached (3)
 - Security fixes often require understanding context, not just pattern replacement
 - LLM may need multiple attempts to generate correct fix
 
-**Proposed Solutions**:
+**Solution Implemented**:
+Increased default max_iterations from 3 to 5 in:
+- `enhanced_workflow.py`: Main refinement loop
+- `aggregator.py`: Quality aggregator default
+- `quality_gate_workflow.py`: Self-heal and routing defaults
 
-Option A: Increase iteration limit
-```python
-max_iterations: int = 5  # Increase from 3 to 5
-```
-
-Option B: Smart iteration based on issue complexity
-```python
-def get_max_iterations(issues: List[QualityIssue]) -> int:
-    critical_count = sum(1 for i in issues if i.severity == "critical")
-    if critical_count > 2:
-        return 5
-    elif critical_count > 0:
-        return 4
-    return 3
-```
-
-Option C: Allow user configuration via workflow parameters
+Note: The supervisor still determines max_iterations intelligently based on task complexity:
+- SIMPLE: 3 iterations
+- MODERATE: 5 iterations (new default)
+- COMPLEX: 7 iterations
+- CRITICAL: 10 iterations
 
 ---
 
@@ -165,7 +158,7 @@ normalized_file_path = original_file_path.replace("\\", "/")
 | Task | Priority | Effort | Impact | Status |
 |------|----------|--------|--------|--------|
 | Fix Security Gate false positive for ast.literal_eval | High | Low | High | ✅ Done |
-| Increase Refiner iteration limit | Medium | Low | Medium | Pending |
+| Increase Refiner iteration limit | Medium | Low | Medium | ✅ Done |
 
 ### Phase 2: Quality Improvements (Short-term)
 
@@ -264,3 +257,4 @@ When continuing development on Linux:
 |------|--------|
 | 2026-01-06 | Initial improvement plan created |
 | 2026-01-06 | Issue #1 Fixed: Added exclude_patterns to security scanner for ast.literal_eval |
+| 2026-01-06 | Issue #2 Fixed: Increased default max_iterations from 3 to 5 |

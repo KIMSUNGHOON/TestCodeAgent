@@ -56,7 +56,7 @@ def quality_aggregator_node(state: QualityGateState) -> Dict:
 
     # Determine workflow status
     iteration = state.get("iteration", 0)
-    max_iterations = state.get("max_iterations", 3)
+    max_iterations = state.get("max_iterations", 5)
 
     if all_passed:
         workflow_status = "completed"

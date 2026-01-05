@@ -423,7 +423,7 @@ class EnhancedWorkflow:
 
             # ==================== PHASE 4: QUALITY GATES WITH REFINEMENT LOOP ====================
             complexity = supervisor_analysis.get("complexity", "moderate")
-            max_refinement_iterations = 3
+            max_refinement_iterations = 5  # Increased from 3 for complex security fixes
             refinement_iteration = 0
             all_gates_passed = False
 

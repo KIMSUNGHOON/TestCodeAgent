@@ -123,7 +123,7 @@ class QualityGateWorkflow:
         logger.info("🔧 Self-Heal Node: Analyzing failures...")
 
         iteration = state.get("iteration", 0)
-        max_iterations = state.get("max_iterations", 3)
+        max_iterations = state.get("max_iterations", 5)
 
         # Increment iteration
         new_iteration = iteration + 1
@@ -168,7 +168,7 @@ class QualityGateWorkflow:
         """
         workflow_status = state.get("workflow_status", "running")
         iteration = state.get("iteration", 0)
-        max_iterations = state.get("max_iterations", 3)
+        max_iterations = state.get("max_iterations", 5)
 
         if workflow_status == "completed":
             return "persist"

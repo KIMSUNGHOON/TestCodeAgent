@@ -195,7 +195,7 @@ ERROR] Security Gate FAILED: 3 critical/high findings  # False Positive로 인�
 | # | 이슈 | 심각도 | 상태 |
 |---|------|--------|------|
 | 1 | Security Gate False Positive (`ast.literal_eval` 오탐) | High | ✅ 수정 완료 |
-| 2 | Refiner 반복 제한 (3회 → 5회로 증가 필요) | Medium | 🔄 개선 필요 |
+| 2 | Refiner 반복 제한 (3회 → 5회로 증가) | Medium | ✅ 수정 완료 |
 | 3 | QA Gate 중복 보안 검사 | Low | 📋 검토 필요 |
 | 4 | Empty LLM Response 처리 | Medium | ✅ 수정 완료 |
 | 5 | Windows 경로 정규화 | Medium | ✅ 수정 완료 |
@@ -209,11 +209,14 @@ ERROR] Security Gate FAILED: 3 critical/high findings  # False Positive로 인�
 | `shared/llm/adapters/deepseek_adapter.py` | Empty response retry 로직 추가 |
 | `backend/app/agent/langgraph/nodes/refiner.py` | Windows 경로 정규화 수정 |
 | `backend/app/agent/langgraph/nodes/security_gate.py` | `ast.literal_eval` 오탐 수정 (exclude_patterns 추가) |
+| `backend/app/agent/langgraph/enhanced_workflow.py` | max_refinement_iterations 3→5 증가 |
+| `backend/app/agent/langgraph/nodes/aggregator.py` | max_iterations 기본값 3→5 증가 |
+| `backend/app/agent/langgraph/quality_gate_workflow.py` | max_iterations 기본값 3→5 증가 |
 
 ### 다음 단계 (Linux 환경)
 
 1. ~~Security Gate의 `ast.literal_eval` 패턴 수정~~ ✅ 완료
-2. Refiner 반복 제한 5회로 증가
+2. ~~Refiner 반복 제한 5회로 증가~~ ✅ 완료
 3. 전체 테스트 실행 및 검증
 
 ---
