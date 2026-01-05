@@ -378,9 +378,9 @@ class EnhancedWorkflow:
             # different files than architect planned. We show actual files after coder completes.
             yield self._create_update("coder", "streaming", {
                 "message": "Generating code...",
-                "streaming_content": f"💻 Code Generation in Progress\n\n🤖 Model: {settings.get_coding_model}\n📁 Workspace: {project_dir}\n\n⏳ Generating production-ready code...",
+                "streaming_content": f"$ generating code...\n> workspace: {project_dir}\n> files: {len(files_to_create)} planned\n\n[waiting for coder output...]",
             })
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
             coder_result = coder_node(state)
             agent_times["coder"] = time.time() - coder_start

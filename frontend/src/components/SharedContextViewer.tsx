@@ -1,6 +1,6 @@
 /**
  * SharedContextViewer - Displays shared context between parallel agents
- * Shows what data each agent contributed and accessed
+ * Dark theme for consistency with Claude Code style
  */
 import { useState } from 'react';
 
@@ -42,96 +42,96 @@ const SharedContextViewer = ({ data, isVisible, onClose }: SharedContextViewerPr
 
   const getAgentColor = (agentType: string) => {
     const colors: Record<string, string> = {
-      'CodingAgent': 'bg-green-100 text-green-800 border-green-300',
-      'PlanningAgent': 'bg-orange-100 text-orange-800 border-orange-300',
-      'ReviewAgent': 'bg-blue-100 text-blue-800 border-blue-300',
-      'Orchestrator': 'bg-purple-100 text-purple-800 border-purple-300',
+      'CodingAgent': 'bg-green-900/50 text-green-400 border-green-700',
+      'PlanningAgent': 'bg-orange-900/50 text-orange-400 border-orange-700',
+      'ReviewAgent': 'bg-blue-900/50 text-blue-400 border-blue-700',
+      'Orchestrator': 'bg-purple-900/50 text-purple-400 border-purple-700',
     };
-    return colors[agentType] || 'bg-gray-100 text-gray-800 border-gray-300';
+    return colors[agentType] || 'bg-gray-800 text-gray-400 border-gray-700';
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[800px] max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 rounded-lg shadow-xl w-[800px] max-w-full max-h-[80vh] flex flex-col border border-gray-700">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Shared Context</h2>
-              <p className="text-sm text-gray-500">
-                {data.entries.length} entries · {data.access_log.length} operations
+              <h2 className="text-sm font-medium text-gray-100">Shared Context</h2>
+              <p className="text-xs text-gray-500">
+                {data.entries.length} entries · {data.access_log.length} ops
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-1.5 rounded hover:bg-gray-800 transition-colors text-gray-500 hover:text-gray-300"
           >
-            <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b">
+        <div className="flex border-b border-gray-700">
           <button
             onClick={() => setActiveTab('entries')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'entries'
-                ? 'border-purple-500 text-purple-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-purple-500 text-purple-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            Context Entries ({data.entries.length})
+            Entries ({data.entries.length})
           </button>
           <button
             onClick={() => setActiveTab('log')}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'log'
-                ? 'border-purple-500 text-purple-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-purple-500 text-purple-400'
+                : 'border-transparent text-gray-500 hover:text-gray-300'
             }`}
           >
-            Access Log ({data.access_log.length})
+            Log ({data.access_log.length})
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3">
           {activeTab === 'entries' ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {data.entries.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No shared context entries yet
+                <div className="text-center py-6 text-gray-600 text-sm">
+                  No shared context entries
                 </div>
               ) : (
                 data.entries.map((entry, idx) => (
                   <div
                     key={idx}
-                    className="border rounded-lg overflow-hidden"
+                    className="border border-gray-800 rounded overflow-hidden"
                   >
                     <div
-                      className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                      className="flex items-center justify-between p-2 bg-gray-800/50 cursor-pointer hover:bg-gray-800"
                       onClick={() => setExpandedEntry(expandedEntry === entry.key ? null : entry.key)}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className={`px-2 py-1 text-xs font-medium rounded border ${getAgentColor(entry.agent_type)}`}>
-                          {entry.agent_type}
+                      <div className="flex items-center gap-2">
+                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${getAgentColor(entry.agent_type)}`}>
+                          {entry.agent_type.replace('Agent', '')}
                         </span>
-                        <span className="font-mono text-sm text-gray-700">{entry.key}</span>
+                        <span className="font-mono text-xs text-gray-400">{entry.key}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">
+                        <span className="text-[10px] text-gray-600">
                           {new Date(entry.timestamp).toLocaleTimeString()}
                         </span>
                         <svg
-                          className={`w-4 h-4 text-gray-400 transition-transform ${expandedEntry === entry.key ? 'rotate-180' : ''}`}
+                          className={`w-3 h-3 text-gray-600 transition-transform ${expandedEntry === entry.key ? 'rotate-180' : ''}`}
                           fill="none"
                           viewBox="0 0 24 24"
                           strokeWidth={1.5}
@@ -142,19 +142,16 @@ const SharedContextViewer = ({ data, isVisible, onClose }: SharedContextViewerPr
                       </div>
                     </div>
                     {expandedEntry === entry.key && (
-                      <div className="p-3 border-t bg-white">
-                        <div className="text-xs text-gray-500 mb-2">
-                          <strong>Agent ID:</strong> {entry.agent_id}
+                      <div className="p-2 border-t border-gray-800 bg-gray-900/50">
+                        <div className="text-[10px] text-gray-600 mb-1">
+                          <span className="text-gray-500">agent:</span> {entry.agent_id}
                         </div>
                         {entry.description && (
-                          <div className="text-xs text-gray-500 mb-2">
-                            <strong>Description:</strong> {entry.description}
+                          <div className="text-[10px] text-gray-600 mb-1">
+                            <span className="text-gray-500">desc:</span> {entry.description}
                           </div>
                         )}
-                        <div className="text-xs text-gray-500 mb-2">
-                          <strong>Value Preview:</strong>
-                        </div>
-                        <pre className="text-xs bg-gray-100 p-2 rounded overflow-x-auto max-h-48">
+                        <pre className="text-xs font-mono bg-gray-950 text-gray-400 p-2 rounded overflow-x-auto max-h-40 mt-1">
                           {entry.value_preview}
                         </pre>
                       </div>
@@ -164,44 +161,44 @@ const SharedContextViewer = ({ data, isVisible, onClose }: SharedContextViewerPr
               )}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1 font-mono text-xs">
               {data.access_log.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  No access log entries yet
+                <div className="text-center py-6 text-gray-600">
+                  No access log entries
                 </div>
               ) : (
                 data.access_log.map((log, idx) => (
                   <div
                     key={idx}
-                    className={`flex items-center gap-3 p-2 rounded-lg ${
-                      log.action === 'set' ? 'bg-green-50' : 'bg-blue-50'
+                    className={`flex items-center gap-2 p-1.5 rounded ${
+                      log.action === 'set' ? 'bg-green-900/20' : 'bg-blue-900/20'
                     }`}
                   >
-                    <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                    <span className={`px-1 py-0.5 text-[10px] font-medium rounded ${
                       log.action === 'set'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-blue-100 text-blue-700'
+                        ? 'bg-green-900/50 text-green-400'
+                        : 'bg-blue-900/50 text-blue-400'
                     }`}>
-                      {log.action.toUpperCase()}
+                      {log.action}
                     </span>
-                    <div className="flex-1 text-sm">
+                    <div className="flex-1 text-gray-400">
                       {log.action === 'set' ? (
-                        <span>
-                          <span className="font-medium">{log.agent_id}</span>
+                        <>
+                          <span className="text-gray-300">{log.agent_id}</span>
                           {' → '}
-                          <span className="font-mono text-purple-600">{log.key}</span>
-                        </span>
+                          <span className="text-purple-400">{log.key}</span>
+                        </>
                       ) : (
-                        <span>
-                          <span className="font-medium">{log.requesting_agent}</span>
+                        <>
+                          <span className="text-gray-300">{log.requesting_agent}</span>
                           {' ← '}
-                          <span className="font-mono text-purple-600">{log.key}</span>
+                          <span className="text-purple-400">{log.key}</span>
                           {' from '}
-                          <span className="font-medium">{log.source_agent}</span>
-                        </span>
+                          <span className="text-gray-300">{log.source_agent}</span>
+                        </>
                       )}
                     </div>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-[10px] text-gray-600">
                       {new Date(log.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
@@ -212,9 +209,9 @@ const SharedContextViewer = ({ data, isVisible, onClose }: SharedContextViewerPr
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t bg-gray-50">
-          <p className="text-xs text-gray-500 text-center">
-            Shared context allows parallel agents to share information and reference each other's outputs
+        <div className="p-2 border-t border-gray-800">
+          <p className="text-[10px] text-gray-600 text-center">
+            Shared context enables agents to share data and reference outputs
           </p>
         </div>
       </div>

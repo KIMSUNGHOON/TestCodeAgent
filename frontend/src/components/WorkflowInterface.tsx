@@ -5,7 +5,6 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { WorkflowUpdate, Artifact, WorkflowInfo, HITLRequest, HITLCheckpointType } from '../types/api';
-import WorkflowStep from './WorkflowStep';
 import SharedContextViewer from './SharedContextViewer';
 import WorkflowGraph from './WorkflowGraph';
 import WorkspaceProjectSelector from './WorkspaceProjectSelector';
@@ -13,6 +12,7 @@ import DebugPanel from './DebugPanel';
 import HITLModal from './HITLModal';
 import WorkflowStatusPanel from './WorkflowStatusPanel';
 import DashboardHeader from './DashboardHeader';
+import TerminalOutput from './TerminalOutput';
 import apiClient from '../api/client';
 
 // Agent status for progress tracking
@@ -90,7 +90,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   const [currentWorkflowInfo, setCurrentWorkflowInfo] = useState<WorkflowInfo | null>(null);
   const [sharedContext, setSharedContext] = useState<SharedContextData | null>(null);
   const [showSharedContext, setShowSharedContext] = useState(false);
-  const [executionMode, setExecutionMode] = useState<'sequential' | 'parallel' | null>(null);
+  const [, setExecutionMode] = useState<'sequential' | 'parallel' | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -162,14 +162,6 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // Format elapsed time
-  const formatTime = (seconds: number): string => {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`;
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}m ${secs.toFixed(0)}s`;
   };
 
   // Track elapsed time during workflow
@@ -925,29 +917,29 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* LEFT PANEL - Conversation Area (fluid width) */}
         <div className="flex flex-col flex-1 min-w-0 bg-gray-950">
-      {/* Workspace Configuration Dialog */}
+      {/* Workspace Configuration Dialog - Dark Theme */}
       {showWorkspaceDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg shadow-2xl max-w-lg w-full p-5 border border-gray-700">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#DA7756] to-[#C86A4A] flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-[#1A1A1A]">
+                <h2 className="text-lg font-medium text-gray-100">
                   {workspaceStep === 'project' ? 'New Project' : 'Workspace Path'}
                 </h2>
-                <p className="text-sm text-[#666666]">
+                <p className="text-xs text-gray-500">
                   {workspaceStep === 'project' ? 'Step 1 of 2' : 'Step 2 of 2'}
                 </p>
               </div>
             </div>
 
             {workspaceStep === 'project' ? (
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-[#666666] mb-2">
+              <div className="mb-5">
+                <label className="block text-xs font-medium text-gray-400 mb-2">
                   Project Name
                 </label>
                 <input
@@ -955,7 +947,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   placeholder="my-awesome-project"
-                  className="w-full px-4 py-3 bg-[#F5F4F2] text-[#1A1A1A] placeholder-[#999999] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#DA7756] border border-[#E5E5E5]"
+                  className="w-full px-3 py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && projectName.trim()) {
                       handleWorkspaceSave();
@@ -963,13 +955,13 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   }}
                   autoFocus
                 />
-                <p className="mt-2 text-xs text-[#999999]">
-                  A directory will be created with this name in your workspace.
+                <p className="mt-2 text-xs text-gray-600">
+                  A directory will be created with this name.
                 </p>
               </div>
             ) : (
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-[#666666] mb-2">
+              <div className="mb-5">
+                <label className="block text-xs font-medium text-gray-400 mb-2">
                   Base Workspace Path
                 </label>
                 <input
@@ -977,7 +969,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   value={workspaceInput}
                   onChange={(e) => setWorkspaceInput(e.target.value)}
                   placeholder="/home/user/workspace"
-                  className="w-full px-4 py-3 bg-[#F5F4F2] text-[#1A1A1A] placeholder-[#999999] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#DA7756] border border-[#E5E5E5]"
+                  className="w-full px-3 py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       handleWorkspaceSave();
@@ -985,23 +977,20 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   }}
                   autoFocus
                 />
-                <div className="mt-3 p-3 bg-[#F0FDF4] border border-[#BBF7D0] rounded-lg">
-                  <p className="text-xs text-[#166534]">
-                    <span className="font-medium">Full path:</span><br />
-                    <code className="font-mono">{workspaceInput}/{projectName}</code>
+                <div className="mt-2 p-2 bg-gray-800 border border-gray-700 rounded">
+                  <p className="text-xs text-gray-400">
+                    <span className="text-gray-500">Full path:</span>{' '}
+                    <code className="font-mono text-green-400">{workspaceInput}/{projectName}</code>
                   </p>
                 </div>
-                <p className="mt-2 text-xs text-[#999999]">
-                  All generated files will be saved here. You can change this later in settings.
-                </p>
               </div>
             )}
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {workspaceStep === 'path' && (
                 <button
                   onClick={() => setWorkspaceStep('project')}
-                  className="px-4 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
+                  className="px-3 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-400 text-sm transition-colors"
                 >
                   Back
                 </button>
@@ -1009,20 +998,19 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               <button
                 onClick={handleWorkspaceSave}
                 disabled={workspaceStep === 'project' ? !projectName.trim() : !workspaceInput.trim()}
-                className="flex-1 px-4 py-3 rounded-xl bg-[#DA7756] hover:bg-[#C86A4A] disabled:bg-[#E5E5E5] disabled:cursor-not-allowed text-white font-medium transition-colors"
+                className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 disabled:text-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
               >
                 {workspaceStep === 'project' ? 'Next' : 'Continue'}
               </button>
               {workspaceStep === 'project' && (
                 <button
                   onClick={() => {
-                    // Use default if user skips
                     const defaultPath = '/home/user/workspace/new-project';
                     setWorkspace(defaultPath);
                     localStorage.setItem('workflow_workspace', defaultPath);
                     setShowWorkspaceDialog(false);
                   }}
-                  className="px-4 py-3 rounded-xl bg-[#F5F4F2] hover:bg-[#E5E5E5] text-[#666666] font-medium transition-colors"
+                  className="px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 text-sm transition-colors"
                 >
                   Skip
                 </button>
@@ -1032,42 +1020,42 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       )}
 
-      {/* Save Conversation Confirmation Dialog */}
+      {/* Save Conversation Confirmation Dialog - Dark Theme */}
       {showSaveDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg shadow-2xl max-w-md w-full p-5 border border-gray-700">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B82F6] to-[#2563EB] flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-[#1A1A1A]">Save Conversation?</h2>
-                <p className="text-sm text-[#666666]">Keep this conversation for later</p>
+                <h2 className="text-lg font-medium text-gray-100">Save Conversation?</h2>
+                <p className="text-xs text-gray-500">Keep this conversation for later</p>
               </div>
             </div>
 
-            <p className="text-sm text-[#666666] mb-6">
-              Do you want to save this conversation to your history? You can access it later from the sidebar.
+            <p className="text-sm text-gray-400 mb-4">
+              Save this conversation to your history?
             </p>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <button
                 onClick={() => handleSaveConfirm(true, false)}
-                className="w-full px-4 py-3 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium transition-colors"
+                className="w-full px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
               >
                 Save This Time
               </button>
               <button
                 onClick={() => handleSaveConfirm(true, true)}
-                className="w-full px-4 py-3 rounded-xl bg-[#F5F4F2] hover:bg-[#E5E5E5] text-[#1A1A1A] font-medium transition-colors"
+                className="w-full px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors"
               >
                 Always Save Automatically
               </button>
               <button
                 onClick={() => handleSaveConfirm(false, false)}
-                className="w-full px-4 py-3 rounded-xl border border-[#E5E5E5] hover:bg-[#F5F4F2] text-[#666666] font-medium transition-colors"
+                className="w-full px-3 py-2 rounded-lg border border-gray-700 hover:bg-gray-800 text-gray-500 text-sm transition-colors"
               >
                 Don't Save
               </button>
@@ -1076,97 +1064,72 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         </div>
       )}
 
-      {/* DeepSeek-R1 Thinking Indicator - Compact version for left panel */}
+      {/* DeepSeek-R1 Thinking Indicator - Dark Theme */}
       {isThinking && thinkingStream.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-200 px-4 py-2">
+        <div className="bg-purple-900/30 border-b border-purple-800 px-3 py-1.5">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center flex-shrink-0 animate-pulse">
+            <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0 animate-pulse">
               <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             </div>
-            <span className="text-sm font-semibold text-purple-800">DeepSeek-R1 Thinking</span>
-            <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
-              {thinkingStream.length} block{thinkingStream.length !== 1 ? 's' : ''}
-            </span>
+            <span className="text-xs font-medium text-purple-300">Thinking...</span>
+            <span className="text-xs text-purple-500">{thinkingStream.length} blocks</span>
           </div>
         </div>
       )}
 
-      {/* Workflow Steps Area */}
+      {/* Workflow Output Area - Terminal Style */}
       <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          {/* Empty state - only show when no history and no current updates */}
+        <div className="p-3">
+          {/* Empty state - Terminal style */}
           {conversationHistory.length === 0 && updates.length === 0 && !isRunning && (
             <div className="flex flex-col items-center justify-center h-[60vh] text-center">
-              <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center mb-4">
-                <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
+              <div className="font-mono text-gray-600 mb-4">
+                <div>╭─────────────────────────────────╮</div>
+                <div>│                                 │</div>
+                <div>│    <span className="text-blue-400">AI Code Agent</span> v1.0           │</div>
+                <div>│                                 │</div>
+                <div>│    <span className="text-gray-500">Enter a task to begin</span>        │</div>
+                <div>│                                 │</div>
+                <div>╰─────────────────────────────────╯</div>
               </div>
-              <h2 className="text-xl font-medium text-gray-200 mb-2">AI Code Assistant</h2>
-              <p className="text-gray-500 text-sm max-w-md mb-4">
-                Enter a task or question. The system determines the appropriate mode automatically.
-              </p>
-              <div className="flex items-center gap-3 text-xs text-gray-600">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                  <span>Plan</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                  <span>Code</span>
-                </div>
+              <div className="flex items-center gap-3 text-xs text-gray-600 font-mono">
+                <span className="text-blue-400">plan</span>
                 <span>→</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-purple-500"></div>
-                  <span>Review</span>
-                </div>
+                <span className="text-green-400">code</span>
+                <span>→</span>
+                <span className="text-purple-400">review</span>
+                <span>→</span>
+                <span className="text-yellow-400">persist</span>
               </div>
               <button
                 onClick={() => setShowWorkspaceDialog(true)}
-                className="mt-3 text-xs text-gray-600 hover:text-gray-400 font-mono"
+                className="mt-4 text-xs text-gray-600 hover:text-gray-400 font-mono px-2 py-1 rounded border border-gray-800 hover:border-gray-700"
               >
-                📁 {workspace}
+                $ cd {workspace}
               </button>
             </div>
           )}
 
-          {/* Conversation History - Compact, Dark */}
+          {/* Conversation History - Terminal Style */}
           {conversationHistory.length > 0 && (
-            <div className="space-y-3 mb-4">
+            <div className="space-y-2 mb-3">
               {conversationHistory.map((turn, turnIndex) => (
-                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="space-y-2">
+                <div key={`turn-${turnIndex}-${turn.timestamp}`} className="font-mono text-xs">
                   {turn.role === 'user' ? (
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded bg-blue-600 flex items-center justify-center flex-shrink-0 text-xs">
-                        U
-                      </div>
-                      <div className="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-sm text-gray-200">
-                        {turn.content}
-                      </div>
+                    <div className="text-blue-400">
+                      <span className="text-gray-600">$</span> {turn.content}
                     </div>
                   ) : (
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded bg-green-600 flex items-center justify-center flex-shrink-0 text-xs">
-                        AI
-                      </div>
-                      <div className="flex-1 bg-gray-800/50 rounded-lg px-3 py-2 border border-gray-700">
-                        <p className="text-xs text-green-400 mb-1">✓ Complete</p>
-                        <p className="text-sm text-gray-300">{turn.content}</p>
-                        {turn.artifacts && turn.artifacts.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-gray-700">
-                            <p className="text-xs text-gray-500 mb-1">Files:</p>
-                            <div className="flex flex-wrap gap-1">
-                              {turn.artifacts.map((artifact, i) => (
-                                <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 font-mono">
-                                  {artifact.filename}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                    <div className="border-l-2 border-gray-800 pl-2 text-gray-400">
+                      <div className="text-green-400 text-[10px]">✓ completed</div>
+                      <div className="whitespace-pre-wrap">{turn.content}</div>
+                      {turn.artifacts && turn.artifacts.length > 0 && (
+                        <div className="mt-1 text-gray-600">
+                          files: {turn.artifacts.map(a => a.filename).join(', ')}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1179,406 +1142,24 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
             <WorkflowGraph workflowInfo={currentWorkflowInfo} isRunning={isRunning} />
           )}
 
-          {/* Live Output in Conversation Area - Real-time agent outputs */}
-          {isRunning && liveOutputs.size > 0 && (
-            <div className="mb-6 bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-lg">
-              <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
-                  <span className="text-sm font-semibold text-white">Live Output</span>
-                  <span className="text-xs text-gray-400">({liveOutputs.size} agents)</span>
-                </div>
-                <span className="text-xs text-gray-500">{formatTime(elapsedTime)}</span>
-              </div>
-              <div className="max-h-96 overflow-y-auto divide-y divide-gray-700">
-                {/* Show all active agent outputs sorted by timestamp (most recent first) */}
-                {Array.from(liveOutputs.values())
-                  .sort((a, b) => b.timestamp - a.timestamp)
-                  .slice(0, 5)  // Show last 5 agents
-                  .map((output) => (
-                    <div key={output.agentName} className="p-3">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          output.status === 'completed' ? 'bg-green-600/30 text-green-400' :
-                          output.status === 'running' || output.status === 'streaming' ? 'bg-blue-600/30 text-blue-400' :
-                          output.status === 'error' ? 'bg-red-600/30 text-red-400' :
-                          'bg-gray-600/30 text-gray-400'
-                        }`}>
-                          {output.status === 'running' || output.status === 'streaming' ? (
-                            <div className="w-2 h-2 border border-current border-t-transparent rounded-full animate-spin mr-1" />
-                          ) : output.status === 'completed' ? (
-                            <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                            </svg>
-                          ) : null}
-                          {output.agentTitle}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(output.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <pre className="text-xs font-mono text-gray-300 whitespace-pre-wrap bg-gray-900/50 p-2 rounded max-h-32 overflow-y-auto">
-                        {output.content.slice(0, 500)}
-                        {output.content.length > 500 && '...'}
-                        {(output.status === 'running' || output.status === 'streaming') && (
-                          <span className="inline-block w-1.5 h-4 bg-green-400 animate-pulse ml-0.5 align-bottom" />
-                        )}
-                      </pre>
-                    </div>
-                  ))}
-              </div>
-            </div>
+          {/* Terminal Output - Main Display */}
+          {(isRunning || updates.length > 0) && (
+            <TerminalOutput
+              updates={updates}
+              isRunning={isRunning}
+              liveOutputs={liveOutputs}
+            />
           )}
 
-          {/* Execution Mode & SharedContext Button */}
-          {(executionMode || sharedContext) && (
-            <div className="flex items-center justify-between mb-4 p-3 bg-white rounded-xl border border-[#E5E5E5] shadow-sm">
-              <div className="flex items-center gap-3">
-                {executionMode && (
-                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${
-                    executionMode === 'parallel'
-                      ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                      : 'bg-gray-100 text-gray-700 border border-gray-200'
-                  }`}>
-                    {executionMode === 'parallel' ? (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-                        </svg>
-                        Parallel Execution
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
-                        </svg>
-                        Sequential Execution
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {sharedContext && sharedContext.entries.length > 0 && (
-                <button
-                  onClick={() => setShowSharedContext(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                  </svg>
-                  View Shared Context ({sharedContext.entries.length})
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Current Workflow Updates - Unified Message Box */}
-          {updates.length > 0 && (
-            <div className="bg-white rounded-xl border border-[#E5E5E5] shadow-sm overflow-hidden">
-              {/* Header showing overall progress */}
-              <div className="px-4 py-3 bg-gradient-to-r from-[#DA775610] to-[#16A34A10] border-b border-[#E5E5E5]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      isRunning
-                        ? 'bg-blue-500 animate-pulse'
-                        : updates.some(u => u.status === 'error')
-                          ? 'bg-red-500'
-                          : 'bg-green-500'
-                    }`}>
-                      {isRunning ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : updates.some(u => u.status === 'error') ? (
-                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-[#1A1A1A]">
-                        {isRunning ? 'Workflow In Progress' : 'Workflow Completed'}
-                        {projectName && (
-                          <span className="ml-2 text-sm font-normal text-[#DA7756]">
-                            📁 {projectName}
-                          </span>
-                        )}
-                      </h3>
-                      <p className="text-sm text-[#666666]">
-                        {updates.length} agent{updates.length > 1 ? 's' : ''} • {
-                          (() => {
-                            const allArtifacts = updates.flatMap(u => u.artifacts || []);
-                            const uniqueFiles = new Set(allArtifacts.map(a => a.filename));
-                            return uniqueFiles.size;
-                          })()
-                        } file{(() => {
-                          const allArtifacts = updates.flatMap(u => u.artifacts || []);
-                          const uniqueFiles = new Set(allArtifacts.map(a => a.filename));
-                          return uniqueFiles.size;
-                        })() !== 1 ? 's' : ''} generated
-                      </p>
-                    </div>
-                  </div>
-                  {/* Show SharedContext indicator if available */}
-                  {updates.some(u => u.shared_context_refs) && (
-                    <div className="flex items-center gap-2 text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                      </svg>
-                      Using Shared Context
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Agent Updates as Sections */}
-              <div className="divide-y divide-[#E5E5E5]">
-                {updates.map((update, index) => (
-                  <WorkflowStep key={`${update.agent}-${index}`} update={update} />
-                ))}
-              </div>
-
-              {/* Project Structure Summary & File Operations */}
-              {(() => {
-                const allArtifacts = updates.flatMap(u => u.artifacts || []);
-                if (allArtifacts.length === 0) return null;
-
-                // Remove duplicate files (keep latest version)
-                const uniqueArtifacts = new Map<string, { artifact: Artifact; agent: string }>();
-                updates.forEach(update => {
-                  if (update.artifacts) {
-                    update.artifacts.forEach(artifact => {
-                      // Use filename as key to deduplicate
-                      uniqueArtifacts.set(artifact.filename, {
-                        artifact,
-                        agent: update.agent
-                      });
-                    });
-                  }
-                });
-
-                // Build hierarchical file tree structure
-                interface TreeNode {
-                  type: 'file' | 'directory';
-                  name: string;
-                  path: string;
-                  artifact?: Artifact;
-                  agent?: string;
-                  children?: Map<string, TreeNode>;
-                }
-
-                const rootTree = new Map<string, TreeNode>();
-
-                // Build tree from unique artifacts
-                uniqueArtifacts.forEach(({ artifact, agent }, filepath) => {
-                  const parts = filepath.split('/');
-                  let currentLevel = rootTree;
-
-                  parts.forEach((part, index) => {
-                    const isLastPart = index === parts.length - 1;
-                    const currentPath = parts.slice(0, index + 1).join('/');
-
-                    if (!currentLevel.has(part)) {
-                      currentLevel.set(part, {
-                        type: isLastPart ? 'file' : 'directory',
-                        name: part,
-                        path: currentPath,
-                        ...(isLastPart ? { artifact, agent } : { children: new Map() })
-                      });
-                    }
-
-                    if (!isLastPart) {
-                      const node = currentLevel.get(part)!;
-                      if (!node.children) node.children = new Map();
-                      currentLevel = node.children;
-                    }
-                  });
-                });
-
-                // Get file icon based on extension
-                const getFileIcon = (filename: string) => {
-                  const ext = filename.split('.').pop()?.toLowerCase();
-                  switch (ext) {
-                    case 'py': return '🐍';
-                    case 'js': case 'ts': case 'jsx': case 'tsx': return '📜';
-                    case 'json': return '⚙️';
-                    case 'md': case 'txt': return '📝';
-                    case 'yml': case 'yaml': return '🔧';
-                    case 'html': case 'css': return '🎨';
-                    default: return '📄';
-                  }
-                };
-
-                // Count total directories and files
-                const countNodes = (tree: Map<string, TreeNode>): { dirs: number; files: number } => {
-                  let dirs = 0;
-                  let files = 0;
-                  tree.forEach(node => {
-                    if (node.type === 'directory') {
-                      dirs++;
-                      if (node.children) {
-                        const childCounts = countNodes(node.children);
-                        dirs += childCounts.dirs;
-                        files += childCounts.files;
-                      }
-                    } else {
-                      files++;
-                    }
-                  });
-                  return { dirs, files };
-                };
-
-                const nodeCounts = countNodes(rootTree);
-
-                // Recursive tree renderer
-                const renderTree = (tree: Map<string, TreeNode>, depth: number = 0, isLast: boolean[] = []): JSX.Element[] => {
-                  const entries = Array.from(tree.entries()).sort(([, a], [, b]) => {
-                    // Directories first, then files
-                    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-                    return a.name.localeCompare(b.name);
-                  });
-
-                  return entries.map(([, node], index) => {
-                    const isLastNode = index === entries.length - 1;
-                    const newIsLast = [...isLast, isLastNode];
-
-                    return (
-                      <div key={node.path}>
-                        <div className="flex items-start gap-2 hover:bg-[#F5F4F2] px-1 py-0.5 rounded transition-colors group">
-                          {/* Indentation guides */}
-                          <div className="flex items-center flex-shrink-0">
-                            {isLast.map((last, i) => (
-                              <span key={i} className="w-4 text-[#999999]">
-                                {!last && i < isLast.length ? '│ ' : '  '}
-                              </span>
-                            ))}
-                            <span className="text-[#999999]">{isLastNode ? '└─' : '├─'}</span>
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            {node.type === 'directory' ? (
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <svg className="w-4 h-4 text-[#DA7756]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                                  </svg>
-                                  <span className="text-sm font-semibold text-[#DA7756]">{node.name}/</span>
-                                </div>
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span>{getFileIcon(node.name)}</span>
-                                  <span className="text-sm font-medium text-[#1A1A1A]">{node.name}</span>
-                                  {node.artifact && (
-                                    <>
-                                      <span className="text-[10px] text-[#999999] bg-[#F5F4F2] px-1.5 py-0.5 rounded">
-                                        {node.artifact.language}
-                                      </span>
-                                      {node.artifact.saved && (
-                                        <span className="text-[10px] text-green-700 bg-green-100 px-1.5 py-0.5 rounded border border-green-200">
-                                          ✓ Saved
-                                        </span>
-                                      )}
-                                      {node.agent && (
-                                        <span className="text-[10px] text-[#16A34A] bg-[#F0FDF4] px-1.5 py-0.5 rounded border border-[#BBF7D0]">
-                                          by {node.agent}
-                                        </span>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
-                                {node.artifact?.description && (
-                                  <div className="mt-1 text-[11px] text-[#666666] italic ml-5">
-                                    💬 {node.artifact.description}
-                                  </div>
-                                )}
-                                {node.artifact?.saved_path && (
-                                  <div className="mt-1 text-[10px] text-green-600 font-mono ml-5">
-                                    📁 {node.artifact.saved_path}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {/* Render children recursively */}
-                        {node.children && node.children.size > 0 && (
-                          <div>{renderTree(node.children, depth + 1, newIsLast)}</div>
-                        )}
-                      </div>
-                    );
-                  });
-                };
-
-                return (
-                  <div className="px-4 py-3 bg-[#F5F4F2] border-t border-[#E5E5E5]">
-                    <button
-                      onClick={() => {
-                        const treeSection = document.getElementById('project-tree-section');
-                        if (treeSection) {
-                          treeSection.classList.toggle('hidden');
-                        }
-                      }}
-                      className="flex items-center gap-2 text-sm font-medium text-[#666666] hover:text-[#1A1A1A] w-full transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
-                      </svg>
-                      <span>📁 Filesystem Structure</span>
-                      <span className="text-xs text-[#999999]">({uniqueArtifacts.size} unique files)</span>
-                      <svg id="tree-chevron" className="w-4 h-4 ml-auto transition-transform" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                      </svg>
-                    </button>
-                    <div id="project-tree-section" className="mt-3 hidden">
-                      <div className="bg-white rounded-lg p-4 border border-[#E5E5E5]">
-                        {/* File Operations Summary */}
-                        <div className="mb-4 pb-3 border-b border-[#E5E5E5]">
-                          <h4 className="text-xs font-semibold text-[#666666] mb-2">📋 Summary</h4>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <div className="bg-[#F0FDF4] border border-[#BBF7D0] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#16A34A]">{nodeCounts.files}</div>
-                              <div className="text-[#166534]">Files</div>
-                            </div>
-                            <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#D97706]">{nodeCounts.dirs}</div>
-                              <div className="text-[#92400E]">Directories</div>
-                            </div>
-                            <div className="bg-[#EFF6FF] border border-[#BFDBFE] rounded p-2 text-center">
-                              <div className="text-lg font-bold text-[#2563EB]">{Array.from(uniqueArtifacts.values()).filter(({ artifact }) => artifact.saved).length}</div>
-                              <div className="text-[#1E3A8A]">Saved</div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Hierarchical File Tree */}
-                        <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-[#666666] flex items-center gap-2">
-                            <span>🌳 Project Structure</span>
-                            <span className="text-[10px] font-normal text-[#999999]">(hierarchical view, no duplicates)</span>
-                          </h4>
-                          <div className="font-mono text-xs bg-gray-50 rounded-lg p-3 border border-gray-200">
-                            {renderTree(rootTree)}
-                          </div>
-                        </div>
-
-                        {/* Help text */}
-                        <div className="mt-4 pt-3 border-t border-[#E5E5E5] text-xs text-[#999999]">
-                          💡 All files have been created in your workspace. Expand individual file cards above to view, save, or execute code.
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
+          {/* SharedContext Button - Dark Theme */}
+          {sharedContext && sharedContext.entries.length > 0 && (
+            <div className="mt-2">
+              <button
+                onClick={() => setShowSharedContext(true)}
+                className="flex items-center gap-2 px-2 py-1 text-xs font-mono text-purple-400 hover:text-purple-300 border border-gray-800 rounded hover:border-gray-700 transition-colors"
+              >
+                [context: {sharedContext.entries.length} entries]
+              </button>
             </div>
           )}
 
