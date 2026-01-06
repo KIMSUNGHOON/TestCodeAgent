@@ -63,7 +63,15 @@ Use <think></think> tags to plan your approach:
 2. Design file structure
 3. Plan implementation
 4. Consider edge cases
+5. Check security implications
 </think>
+
+SECURITY RULES (MUST FOLLOW):
+- NEVER use eval() or exec() - use ast.literal_eval() for safe parsing
+- NEVER use subprocess with shell=True - use subprocess.run([cmd, arg1, arg2])
+- NEVER use os.system() - use subprocess module instead
+- NEVER hardcode passwords, API keys, or secrets - use environment variables
+- Use parameterized queries for SQL, never string concatenation
 
 Then provide the code in JSON format.""",
 
@@ -86,6 +94,13 @@ Provide structured review feedback.""",
 3. Validate fix doesn't break existing functionality
 4. Consider edge cases
 </think>
+
+SECURITY FIXES:
+- Replace eval() with ast.literal_eval()
+- Replace exec() with safer alternatives (functions, importlib)
+- Replace subprocess(shell=True) with subprocess([cmd, args])
+- Replace os.system() with subprocess.run()
+- Move hardcoded secrets to environment variables
 
 Apply targeted fixes.""",
 

@@ -52,6 +52,14 @@ CRITICAL RULES:
 4. Follow PEP 8 for Python, ESLint for TypeScript
 5. Create complete, production-ready implementations
 
+SECURITY RULES (MUST FOLLOW):
+1. NEVER use eval() or exec() - use ast.literal_eval() for safe parsing
+2. NEVER use subprocess with shell=True - use subprocess.run([cmd, arg1, arg2])
+3. NEVER use os.system() - use subprocess module instead
+4. NEVER hardcode passwords, API keys, or secrets - use environment variables
+5. ALWAYS sanitize user inputs before using in file paths or SQL
+6. Use parameterized queries for SQL, never string concatenation
+
 OUTPUT: Return code in the specified format without additional commentary.""",
 
     TaskType.REVIEW: """You are Qwen2.5-Coder performing code review.
