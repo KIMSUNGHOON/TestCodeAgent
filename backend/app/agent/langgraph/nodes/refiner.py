@@ -77,8 +77,25 @@ def _detect_language(file_path: str) -> str:
     return language_map.get(ext, "text")
 
 
-# DeepSeek-R1 style refinement prompt with <think> tags
-REFINER_ANALYSIS_PROMPT = """<think>
+# Model-aware refinement prompts
+def get_refiner_analysis_prompt(model_type: str, issues: list, suggestions: list, quality_score: float) -> str:
+    """Get model-specific analysis prompt for refinement.
+
+    Args:
+        model_type: Type of model ("deepseek", "qwen", "gpt-oss", "generic")
+        issues: List of issues to fix
+        suggestions: List of suggestions
+        quality_score: Current code quality score (0.0-1.0)
+
+    Returns:
+        Formatted prompt appropriate for the model type
+    """
+    issues_text = "\n".join(f"  - {issue}" for issue in issues)
+    suggestions_text = "\n".join(f"  - {sug}" for sug in suggestions)
+
+    if model_type == "deepseek":
+        # DeepSeek-R1 uses <think> tags for reasoning
+        return f"""<think>
 1. Analyze the issues: What problems were found in the code?
 2. Identify root cause: Why do these issues exist?
 3. Plan fixes: What specific changes need to be made?
@@ -87,6 +104,85 @@ REFINER_ANALYSIS_PROMPT = """<think>
 </think>
 
 Based on the analysis above, generate the minimal code changes needed to fix the issues.
+
+Issues to fix:
+{issues_text}
+
+Suggestions:
+{suggestions_text}
+
+Current code quality score: {quality_score:.0%}
+Target score: 80%+
+
+For each issue, provide:
+1. File path
+2. Original code section
+3. Fixed code section
+4. Explanation of the fix
+"""
+    elif model_type in ("gpt-oss", "gpt"):
+        # GPT-OSS/GPT uses structured reasoning without special tags
+        return f"""Analyze the following code issues and generate targeted fixes.
+
+## Issues to Fix
+{issues_text}
+
+## Suggestions
+{suggestions_text}
+
+## Quality Metrics
+- Current Score: {quality_score:.0%}
+- Target Score: 80%+
+
+## Task
+For each issue:
+1. Identify the root cause
+2. Plan the minimal fix
+3. Generate the fixed code
+
+Return fixes in JSON format:
+```json
+{{
+  "fixes": [
+    {{
+      "file_path": "path/to/file",
+      "issue": "description",
+      "original": "original code",
+      "fixed": "fixed code",
+      "explanation": "why this fix works"
+    }}
+  ]
+}}
+```
+"""
+    else:
+        # Generic/Qwen - straightforward prompt
+        return f"""Fix the following code issues with minimal, targeted changes.
+
+Issues to fix:
+{issues_text}
+
+Suggestions:
+{suggestions_text}
+
+Current quality score: {quality_score:.0%} (target: 80%+)
+
+Requirements:
+1. Fix ONLY the specified issues
+2. Keep changes minimal - don't refactor unrelated code
+3. Maintain existing functionality
+4. Return complete fixed code for each file
+
+For each issue, provide:
+- File path
+- Original code section
+- Fixed code section
+- Brief explanation
+"""
+
+
+# Legacy prompt for backward compatibility (deprecated - use get_refiner_analysis_prompt)
+REFINER_ANALYSIS_PROMPT = """Analyze and fix the following code issues:
 
 Issues to fix:
 {issues}
@@ -169,14 +265,12 @@ def refiner_node(state: QualityGateState) -> Dict:
     logger.info(f"   Quality Score: {quality_score:.0%} (target: 70%+)")
     logger.info(f"   Refinement Iteration: {refinement_iteration}")
 
-    # Log DeepSeek-R1 style analysis prompt (for debugging and transparency)
-    if DEEPSEEK_PROMPTS_AVAILABLE:
-        analysis_prompt = REFINER_ANALYSIS_PROMPT.format(
-            issues="\n".join(f"  - {issue}" for issue in issues),
-            suggestions="\n".join(f"  - {sug}" for sug in suggestions),
-            quality_score=quality_score
-        )
-        logger.debug(f"🤔 DeepSeek-R1 Analysis Prompt:\n{analysis_prompt[:500]}...")
+    # Get model type for model-aware prompting
+    model_type = settings.get_coding_model_type if hasattr(settings, 'get_coding_model_type') else "generic"
+
+    # Log model-aware analysis prompt (for debugging and transparency)
+    analysis_prompt = get_refiner_analysis_prompt(model_type, issues, suggestions, quality_score)
+    logger.debug(f"🤔 Refiner Analysis Prompt (model: {model_type}):\n{analysis_prompt[:500]}...")
 
     # Simulate code refinement (in production, this would call LLM)
     # For now, we'll create example diffs
@@ -309,11 +403,12 @@ def refiner_node(state: QualityGateState) -> Dict:
     logger.info(f"   Fixed: {is_fixed}")
     logger.info(f"   Iteration: {refinement_iteration}")
 
-    # Log debug info with DeepSeek-R1 style reasoning (after all processing)
+    # Log debug info with model-aware reasoning (after all processing)
     debug_logs: List[DebugLog] = []
     if state.get("enable_debug"):
-        # DeepSeek-R1 style thinking log
-        thinking_content = f"""<think>
+        # Model-aware thinking log (only use <think> for DeepSeek)
+        if model_type == "deepseek":
+            thinking_content = f"""<think>
 1. Issues analyzed: {len(issues)} problems found
 2. Root causes identified: Code quality issues, missing implementations
 3. Fixes planned: {len(code_diffs)} targeted modifications
@@ -323,6 +418,15 @@ def refiner_node(state: QualityGateState) -> Dict:
 
 Refinement iteration {refinement_iteration}: Applied {len(updated_artifacts)} fixes.
 Quality score: {quality_score:.0%} → targeting 70%+"""
+        else:
+            thinking_content = f"""## Refinement Analysis
+
+**Issues Analyzed:** {len(issues)} problems found
+**Fixes Applied:** {len(code_diffs)} targeted modifications
+**Iteration:** {refinement_iteration}
+**Quality Score:** {quality_score:.0%} → targeting 70%+
+
+Applied {len(updated_artifacts)} fixes using {model_type} model."""
 
         debug_logs.append(DebugLog(
             timestamp=datetime.utcnow().isoformat(),

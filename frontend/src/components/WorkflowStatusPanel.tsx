@@ -281,11 +281,11 @@ const WorkflowStatusPanel = ({
                 <div className="bg-gray-800/30 rounded p-1">
                   {renderFileTree(fileTree)}
                 </div>
-                {/* ZIP 다운로드 버튼 */}
-                {!isRunning && sessionId && (
+                {/* ZIP 다운로드 버튼 - projectDir 사용 (session workspace가 아닌 실제 프로젝트 경로) */}
+                {!isRunning && projectDir && (
                   <div className="mt-2 flex gap-1.5">
                     <button
-                      onClick={() => apiClient.downloadSessionWorkspace(sessionId, 'zip')}
+                      onClick={() => apiClient.downloadWorkspace(projectDir, 'zip')}
                       className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-[10px] lg:text-xs rounded transition-colors"
                       title="ZIP으로 다운로드"
                     >
@@ -295,7 +295,7 @@ const WorkflowStatusPanel = ({
                       <span>ZIP</span>
                     </button>
                     <button
-                      onClick={() => apiClient.downloadSessionWorkspace(sessionId, 'tar')}
+                      onClick={() => apiClient.downloadWorkspace(projectDir, 'tar')}
                       className="flex items-center justify-center gap-1 px-2 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-[10px] lg:text-xs rounded transition-colors"
                       title="TAR로 다운로드"
                     >

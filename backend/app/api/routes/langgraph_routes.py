@@ -72,15 +72,59 @@ async def execute_workflow(request: WorkflowRequest):
     # Determine actual execution mode
     execution_mode = request.execution_mode
     if execution_mode == "auto":
-        # Simple heuristic: if request contains code-related keywords, use full pipeline
-        code_keywords = ["코드", "구현", "개발", "프로젝트", "앱", "애플리케이션", "함수", "클래스",
-                        "code", "implement", "develop", "create", "build", "app", "application",
-                        "function", "class", "api", "서비스", "service", "make", "만들"]
-        if any(kw in request.user_request.lower() for kw in code_keywords):
+        # Improved heuristic: Check for Q&A patterns first, then code generation
+        user_request_lower = request.user_request.lower()
+
+        # Q&A/Planning keywords - should use quick mode
+        qa_keywords = [
+            # Korean
+            "계획", "설계", "설명", "알려", "질문", "뭐야", "뭔가요", "어떻게", "왜",
+            "차이점", "비교", "추천", "장단점", "조언", "도움", "검토", "분석해",
+            "이해", "개념", "정의", "의미", "원리", "방법론", "아키텍처를 설명",
+            "?",  # Question mark indicates a question
+            # English
+            "explain", "what is", "how does", "why", "difference", "compare",
+            "recommend", "pros and cons", "advice", "help me understand",
+            "concept", "definition", "meaning", "principle", "methodology",
+            "design plan", "development plan", "architecture overview",
+            "can you", "could you", "would you", "tell me", "describe",
+        ]
+
+        # Code generation keywords - should use full mode
+        code_keywords = [
+            # Korean
+            "코드", "구현", "프로젝트", "앱", "애플리케이션", "함수", "클래스",
+            "서비스", "파일 생성", "작성해", "만들어줘", "개발해줘", "구현해줘",
+            "빌드", "배포", "테스트 코드",
+            # English
+            "code", "implement", "build", "create app", "create project",
+            "create function", "create class", "develop", "write code",
+            "generate", "scaffold", "bootstrap", "deploy", "test code",
+        ]
+
+        # Priority: Q&A keywords take precedence over code keywords
+        # If user asks "개발 계획을 만들어볼래요?" - "계획" takes priority
+        is_qa = any(kw in user_request_lower for kw in qa_keywords)
+        is_code = any(kw in user_request_lower for kw in code_keywords)
+
+        if is_qa and not is_code:
+            # Clear Q&A request
+            execution_mode = "quick"
+        elif is_qa and is_code:
+            # Mixed: check context - if asking about planning/explaining code, use quick
+            planning_context = ["계획", "설계", "설명", "plan", "design", "explain", "?"]
+            if any(kw in user_request_lower for kw in planning_context):
+                execution_mode = "quick"
+            else:
+                execution_mode = "full"
+        elif is_code:
+            # Clear code generation request
             execution_mode = "full"
         else:
+            # Default to quick for ambiguous requests
             execution_mode = "quick"
-        logger.info(f"   Auto-detected mode: {execution_mode}")
+
+        logger.info(f"   Auto-detected mode: {execution_mode} (Q&A: {is_qa}, Code: {is_code})")
 
     async def event_stream() -> AsyncGenerator[str, None]:
         """Stream workflow events to client"""
