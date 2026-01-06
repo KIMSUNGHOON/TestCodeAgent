@@ -15,7 +15,7 @@ def detect_model_type(model_name: str) -> str:
         model_name: Full model name (e.g., "deepseek-ai/DeepSeek-R1")
 
     Returns:
-        Model type string: "deepseek", "qwen", "gpt", "claude", or "generic"
+        Model type string: "deepseek", "qwen", "gpt-oss", "gpt", "claude", or "generic"
     """
     if not model_name:
         return "generic"
@@ -26,6 +26,8 @@ def detect_model_type(model_name: str) -> str:
         return "deepseek"
     elif "qwen" in name_lower:
         return "qwen"
+    elif "gpt-oss" in name_lower:
+        return "gpt-oss"  # GPT-OSS models (120B, 20B) - before generic "gpt" check
     elif "gpt" in name_lower or "openai" in name_lower:
         return "gpt"
     elif "claude" in name_lower or "anthropic" in name_lower:
@@ -48,7 +50,7 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-ai/DeepSeek-R1"
 
     # Model type override (optional - auto-detected from model name if not set)
-    # Options: "deepseek", "qwen", "gpt", "claude", "generic"
+    # Options: "deepseek", "qwen", "gpt-oss", "gpt", "claude", "generic"
     model_type: Optional[str] = None
 
     # Optional: Task-specific endpoints (override llm_endpoint if set)
@@ -58,6 +60,13 @@ class Settings(BaseSettings):
     # Optional: Task-specific models (override llm_model if set)
     reasoning_model: Optional[str] = None
     coding_model: Optional[str] = None
+
+    # Optional: Task-specific model type overrides (for different model types per task)
+    reasoning_model_type: Optional[str] = None
+    coding_model_type: Optional[str] = None
+
+    # GPT-OSS specific settings
+    gpt_oss_reasoning_effort: str = "low"  # low, medium, high - default is low per official docs
 
     @property
     def get_reasoning_endpoint(self) -> str:
@@ -82,15 +91,21 @@ class Settings(BaseSettings):
     @property
     def get_reasoning_model_type(self) -> str:
         """Get model type for reasoning tasks (auto-detected from model name)."""
+        # Priority: task-specific override > global override > auto-detect
+        if self.reasoning_model_type:
+            return self.reasoning_model_type
         if self.model_type:
-            return self.model_type  # Use override if explicitly set
+            return self.model_type
         return detect_model_type(self.get_reasoning_model)
 
     @property
     def get_coding_model_type(self) -> str:
         """Get model type for coding tasks (auto-detected from model name)."""
+        # Priority: task-specific override > global override > auto-detect
+        if self.coding_model_type:
+            return self.coding_model_type
         if self.model_type:
-            return self.model_type  # Use override if explicitly set
+            return self.model_type
         return detect_model_type(self.get_coding_model)
 
     # =========================

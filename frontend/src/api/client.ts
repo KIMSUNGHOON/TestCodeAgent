@@ -763,6 +763,111 @@ class ApiClient {
     const path = workflowId ? `/api/hitl/ws/${workflowId}` : '/api/hitl/ws';
     return new WebSocket(`${protocol}//${host}${path}`);
   }
+
+  // ==================== Session Management ====================
+
+  /**
+   * List all sessions with workspace information
+   */
+  async listAllSessions(): Promise<{
+    success: boolean;
+    total_sessions?: number;
+    sessions?: Array<{
+      session_id: string;
+      title: string;
+      workspace_path: string;
+      workspace_exists: boolean;
+      file_count: number;
+      framework: string;
+      mode: string;
+      created_at: string | null;
+      updated_at: string | null;
+      message_count: number;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get('/sessions/list');
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to list sessions'
+      };
+    }
+  }
+
+  /**
+   * Get all files in a session's workspace
+   */
+  async getSessionFiles(
+    sessionId: string,
+    includeContent: boolean = false
+  ): Promise<{
+    success: boolean;
+    session_id?: string;
+    workspace?: string;
+    total_files?: number;
+    total_size?: number;
+    files?: Array<{
+      filename: string;
+      path: string;
+      full_path: string;
+      size: number;
+      extension: string;
+      mime_type: string | null;
+      modified: number;
+      is_text: boolean;
+      content?: string;
+      error?: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get(`/sessions/${sessionId}/files`, {
+        params: { include_content: includeContent }
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to get session files'
+      };
+    }
+  }
+
+  /**
+   * Read a specific file from session's workspace
+   */
+  async readSessionFile(
+    sessionId: string,
+    filePath: string
+  ): Promise<{
+    success: boolean;
+    file_path?: string;
+    full_path?: string;
+    workspace?: string;
+    size?: number;
+    extension?: string;
+    mime_type?: string | null;
+    modified?: number;
+    encoding?: string | null;
+    binary?: boolean;
+    content?: string | null;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get(`/sessions/${sessionId}/file`, {
+        params: { file_path: filePath }
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to read file'
+      };
+    }
+  }
 }
 
 // Export singleton instance

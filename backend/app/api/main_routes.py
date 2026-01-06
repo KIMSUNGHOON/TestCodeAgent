@@ -1527,3 +1527,250 @@ async def execute_shell_command(request: dict):
 async def get_shell_history(session_id: str = "default"):
     """Get command history for a session (placeholder for future implementation)."""
     return {"success": True, "history": [], "message": "History tracking not yet implemented"}
+
+
+# ==================== Session Management Endpoints ====================
+
+
+@router.get("/sessions/list")
+async def list_all_sessions(db: Session = Depends(get_db)):
+    """List all sessions with their workspace information.
+
+    Returns comprehensive session info including:
+    - Session ID
+    - Title
+    - Workspace path
+    - Framework
+    - Last updated time
+    - Message count
+
+    Useful for multi-user dashboard and session management UI.
+    """
+    from app.db.repository import ConversationRepository
+    import os
+
+    try:
+        repo = ConversationRepository(db)
+        conversations = repo.list_conversations(limit=100)
+
+        sessions = []
+        for conv in conversations:
+            workspace_path = conv.workspace_path or "/home/user/workspace"
+
+            # Check if workspace exists and get file count
+            file_count = 0
+            workspace_exists = False
+            if workspace_path:
+                workspace_exists = os.path.exists(workspace_path)
+                if workspace_exists:
+                    try:
+                        file_count = sum(1 for _ in os.scandir(workspace_path) if _.is_file())
+                    except (PermissionError, OSError):
+                        pass
+
+            sessions.append({
+                "session_id": conv.session_id,
+                "title": conv.title,
+                "workspace_path": workspace_path,
+                "workspace_exists": workspace_exists,
+                "file_count": file_count,
+                "framework": conv.framework or "standard",
+                "mode": conv.mode,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+                "message_count": len(conv.messages) if conv.messages else 0
+            })
+
+        return {
+            "success": True,
+            "total_sessions": len(sessions),
+            "sessions": sessions
+        }
+
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/sessions/{session_id}/files")
+async def get_session_files(
+    session_id: str,
+    include_content: bool = False,
+    max_file_size: int = 100000  # Max 100KB per file for content
+):
+    """Get all files in a session's workspace with optional content.
+
+    Args:
+        session_id: Session identifier
+        include_content: If True, include file contents (for small files)
+        max_file_size: Maximum file size to include content for (bytes)
+
+    Returns:
+        List of files with metadata and optional content
+    """
+    import os
+    import mimetypes
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        if not os.path.exists(workspace):
+            return {
+                "success": False,
+                "error": f"Workspace does not exist: {workspace}"
+            }
+
+        files = []
+        total_size = 0
+
+        # Extensions to include content for
+        text_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.css', '.html',
+                          '.json', '.yaml', '.yml', '.md', '.txt', '.sh', '.sql',
+                          '.xml', '.csv', '.env', '.gitignore', '.dockerfile'}
+
+        for root, dirs, filenames in os.walk(workspace):
+            # Skip hidden and common ignore directories
+            dirs[:] = [d for d in dirs if not d.startswith('.') and
+                       d not in ['node_modules', '__pycache__', 'venv', '.git', 'dist', 'build']]
+
+            for filename in filenames:
+                if filename.startswith('.'):
+                    continue
+
+                file_path = os.path.join(root, filename)
+                rel_path = os.path.relpath(file_path, workspace)
+
+                try:
+                    stat = os.stat(file_path)
+                    file_size = stat.st_size
+                    total_size += file_size
+
+                    _, ext = os.path.splitext(filename)
+                    mime_type, _ = mimetypes.guess_type(file_path)
+
+                    file_info = {
+                        "filename": filename,
+                        "path": rel_path,
+                        "full_path": file_path,
+                        "size": file_size,
+                        "extension": ext,
+                        "mime_type": mime_type,
+                        "modified": stat.st_mtime,
+                        "is_text": ext.lower() in text_extensions
+                    }
+
+                    # Optionally include content for small text files
+                    if include_content and ext.lower() in text_extensions and file_size <= max_file_size:
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                file_info["content"] = f.read()
+                        except (UnicodeDecodeError, IOError):
+                            file_info["content"] = None
+                            file_info["error"] = "Could not read file content"
+
+                    files.append(file_info)
+
+                except (PermissionError, OSError) as e:
+                    files.append({
+                        "filename": filename,
+                        "path": rel_path,
+                        "error": str(e)
+                    })
+
+        # Sort by path
+        files.sort(key=lambda x: x.get("path", ""))
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "workspace": workspace,
+            "total_files": len(files),
+            "total_size": total_size,
+            "files": files
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting session files: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/sessions/{session_id}/file")
+async def read_session_file(
+    session_id: str,
+    file_path: str
+):
+    """Read a specific file from session's workspace.
+
+    Args:
+        session_id: Session identifier
+        file_path: Relative path to file within workspace
+
+    Returns:
+        File content and metadata
+    """
+    import os
+    import mimetypes
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        # Security: Validate path is within workspace
+        full_path = os.path.normpath(os.path.join(workspace, file_path))
+        if not full_path.startswith(os.path.normpath(workspace)):
+            return {
+                "success": False,
+                "error": "Access denied: Path is outside workspace"
+            }
+
+        if not os.path.exists(full_path):
+            return {
+                "success": False,
+                "error": f"File not found: {file_path}"
+            }
+
+        if not os.path.isfile(full_path):
+            return {
+                "success": False,
+                "error": "Path is not a file"
+            }
+
+        stat = os.stat(full_path)
+        _, ext = os.path.splitext(file_path)
+        mime_type, _ = mimetypes.guess_type(full_path)
+
+        # Read content for text files
+        content = None
+        encoding = None
+        binary = False
+
+        text_extensions = {'.py', '.js', '.ts', '.tsx', '.jsx', '.css', '.html',
+                          '.json', '.yaml', '.yml', '.md', '.txt', '.sh', '.sql',
+                          '.xml', '.csv', '.env', '.gitignore', '.dockerfile', '.toml'}
+
+        if ext.lower() in text_extensions or (mime_type and mime_type.startswith('text/')):
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                encoding = 'utf-8'
+            except UnicodeDecodeError:
+                binary = True
+        else:
+            binary = True
+
+        return {
+            "success": True,
+            "file_path": file_path,
+            "full_path": full_path,
+            "workspace": workspace,
+            "size": stat.st_size,
+            "extension": ext,
+            "mime_type": mime_type,
+            "modified": stat.st_mtime,
+            "encoding": encoding,
+            "binary": binary,
+            "content": content
+        }
+
+    except Exception as e:
+        logger.error(f"Error reading session file: {e}")
+        return {"success": False, "error": str(e)}

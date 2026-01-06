@@ -42,7 +42,26 @@ Base = declarative_base()
 
 
 def get_db():
-    """Get database session."""
+    """Get database session (generator for FastAPI dependency injection)."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+from contextlib import contextmanager
+
+@contextmanager
+def get_db_context():
+    """Get database session as a context manager.
+
+    Use this for non-FastAPI code that needs database access.
+    Example:
+        with get_db_context() as db:
+            repo = ConversationRepository(db)
+            ...
+    """
     db = SessionLocal()
     try:
         yield db

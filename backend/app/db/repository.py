@@ -75,7 +75,9 @@ class ConversationRepository:
         self,
         session_id: str,
         title: Optional[str] = None,
-        workflow_state: Optional[Dict[str, Any]] = None
+        workflow_state: Optional[Dict[str, Any]] = None,
+        workspace_path: Optional[str] = None,
+        framework: Optional[str] = None
     ) -> Optional[Conversation]:
         """Update conversation."""
         conversation = self.get_conversation(session_id)
@@ -84,10 +86,48 @@ class ConversationRepository:
                 conversation.title = title
             if workflow_state is not None:
                 conversation.workflow_state = workflow_state
+            if workspace_path is not None:
+                conversation.workspace_path = workspace_path
+            if framework is not None:
+                conversation.framework = framework
             conversation.updated_at = datetime.utcnow()
             self.db.commit()
             self.db.refresh(conversation)
         return conversation
+
+    def update_session_config(
+        self,
+        session_id: str,
+        workspace_path: Optional[str] = None,
+        framework: Optional[str] = None
+    ) -> Optional[Conversation]:
+        """Update session configuration (workspace and framework).
+
+        Creates conversation if it doesn't exist.
+        Used by SessionStore for persistent session state.
+        """
+        conversation = self.get_or_create_conversation(session_id)
+        if workspace_path is not None:
+            conversation.workspace_path = workspace_path
+        if framework is not None:
+            conversation.framework = framework
+        conversation.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(conversation)
+        return conversation
+
+    def get_session_config(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get session configuration (workspace and framework).
+
+        Returns None if session doesn't exist.
+        """
+        conversation = self.get_conversation(session_id)
+        if conversation:
+            return {
+                "workspace_path": conversation.workspace_path,
+                "framework": conversation.framework or "standard"
+            }
+        return None
 
     def delete_conversation(self, session_id: str) -> bool:
         """Delete conversation and all related data."""

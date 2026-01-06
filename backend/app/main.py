@@ -47,6 +47,15 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing database...")
         init_db()
         logger.info("Database initialized successfully")
+
+        # Initialize SessionStore with database persistence for multi-user support
+        try:
+            from app.db.database import get_db_context
+            from app.core.session_store import init_session_store_with_db
+            init_session_store_with_db(get_db_context)
+            logger.info("SessionStore initialized with database persistence")
+        except ImportError as e:
+            logger.warning(f"SessionStore database persistence not available: {e}")
     else:
         logger.warning("Database initialization skipped (not available)")
 

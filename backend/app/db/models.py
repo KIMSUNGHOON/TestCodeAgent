@@ -18,6 +18,10 @@ class Conversation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Session configuration (persisted for multi-user support)
+    workspace_path = Column(String(500), nullable=True)  # User's workspace directory
+    framework = Column(String(20), default="standard")  # "standard" or "deepagents"
+
     # Workflow state (if mode == "workflow")
     workflow_state = Column(JSON, nullable=True)  # Store checklist, artifacts, etc.
 
@@ -36,6 +40,8 @@ class Conversation(Base):
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "message_count": len(self.messages) if self.messages else 0,
             "workflow_state": self.workflow_state,
+            "workspace_path": self.workspace_path,
+            "framework": self.framework,
         }
 
 
