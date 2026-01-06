@@ -1,142 +1,111 @@
 # Coding Agent - Full Stack AI Assistant
 
-A full-stack coding agent powered by **dual agent frameworks** (Microsoft Agent Framework + LangChain/LangGraph) and vLLM, featuring a Claude.ai inspired React frontend and FastAPI backend.
+Claude Code / OpenAI Codex 방식의 **Unified Workflow Architecture**를 구현한 AI 코딩 어시스턴트입니다.
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────┐
-│   React Frontend    │ (Port 3000/80)
-│  - Claude.ai Style  │
-│  - Chat & Workflow  │
-└─────────┬───────────┘
-          │ REST API
-          ▼
-┌─────────────────────┐
-│   FastAPI Server    │ (Port 8000)
-│    - API Gateway    │
-│    - Agent Factory  │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────────────────────────┐
-│         Agent Framework Layer           │
-│  ┌─────────────┐  ┌─────────────────┐   │
-│  │  Microsoft  │  │    LangChain    │   │
-│  │   Agent     │  │   + LangGraph   │   │
-│  │  Framework  │  │                 │   │
-│  └──────┬──────┘  └────────┬────────┘   │
-│         │                  │            │
-│         └────────┬─────────┘            │
-│                  ▼                      │
-│  ┌─────────────────────────────────┐    │
-│  │    Tool System (11 Tools)       │    │
-│  │  - File: read, write, search    │    │
-│  │  - Code: execute, lint, test    │    │
-│  │  - Git: status, log, diff       │    │
-│  └─────────────────────────────────┘    │
-│                  │                      │
-│  ┌─────────────────────────────────┐    │
-│  │    Specialized Agents           │    │
-│  │  - Research Agent (DeepSeek-R1) │    │
-│  │  - Testing Agent (Qwen3-Coder)  │    │
-│  └─────────────────────────────────┘    │
-└─────────────────────────────────────────┘
-          │
-          ▼
-┌───────────┐  ┌───────────┐
-│ vLLM #1   │  │ vLLM #2   │
-│ DeepSeek  │  │ Qwen3     │
-│ R1        │  │ Coder     │
-│ (Port     │  │ (Port     │
-│  8001)    │  │  8002)    │
-└───────────┘  └───────────┘
+User Prompt
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unified Chat Endpoint                         │
+│                    POST /chat/unified                            │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    UnifiedAgentManager                           │
+│  - 세션 컨텍스트 관리                                              │
+│  - Supervisor 분석 요청                                           │
+│  - 응답 타입별 라우팅                                             │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SupervisorAgent                               │
+│  - 요청 분석 (Reasoning LLM)                                     │
+│  - response_type 결정                                            │
+│  - 복잡도 평가                                                    │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ├─► QUICK_QA ─────────► Direct LLM Response
+    ├─► PLANNING ─────────► PlanningHandler (계획 생성 + 파일 저장)
+    ├─► CODE_GENERATION ──► CodeGenerationHandler (워크플로우 실행)
+    ├─► CODE_REVIEW ──────► CodeReviewHandler
+    └─► DEBUGGING ────────► DebuggingHandler
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    ResponseAggregator                            │
+│  - UnifiedResponse 생성                                          │
+│  - Next Actions 제안                                             │
+│  - 컨텍스트 DB 저장                                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 📋 Features
 
-### Agent Frameworks
-- 🔀 **Dual Framework Support**: Choose between Microsoft Agent Framework or LangChain/LangGraph
-- 🤖 **Specialized Agents**: Research Agent (codebase exploration) and Testing Agent (test generation)
-- 🛠️ **Tool System**: 11 integrated tools for file operations, code execution, and git commands
-- 📊 **Agent Registry**: Dynamic agent spawning and management
+### Unified Workflow Architecture
+- **단일 진입점**: 모든 요청이 Supervisor를 통과
+- **지능적 라우팅**: 요청 유형에 따른 자동 경로 결정 (QUICK_QA, PLANNING, CODE_GENERATION 등)
+- **통합 응답 포맷**: 모든 경로에서 동일한 응답 구조
+- **컨텍스트 영속성**: 대화 및 작업 컨텍스트 DB 저장
+- **Next Actions UI**: 응답 타입별 맞춤형 다음 행동 제안
 
-### AI Models & Prompts
-- 🧠 **Dual Model Support**: DeepSeek-R1 for reasoning, Qwen3-Coder for code generation
-- 📝 **Optimized Prompts**: DeepSeek R1 style (`<think>` tags) and Qwen3 style (THOUGHTS/PLAN markers)
-- 🌊 **Streaming Responses**: Real-time token streaming support
+### LLM Provider Abstraction
+- **다중 모델 지원**: DeepSeek-R1, Qwen3-Coder, GPT-OSS
+- **모델별 어댑터**: 자동 프롬프트 최적화
+- **한국어 지원**: 동사 어간 기반 패턴 매칭
 
 ### User Interface
-- 🎨 **Unified AI Assistant**: Single interface with automatic chat/workflow detection
-- 💬 **Intelligent Routing**: Automatically chooses chat or workflow based on request type
-- 🔄 **Multi-Agent Workflow**: Planning → Coding (Parallel) → Review pipeline
-- 📱 **Responsive Design**: Works on desktop and mobile
-- 📝 **Streaming Code Preview**: Real-time code generation with 6-line previews
-- 💾 **Conversation Management**: Auto-save with user preferences, conversation history
-- 📁 **Project Setup**: Guided project name and workspace configuration
-
-### Infrastructure
-- 🐳 **Docker Support**: Easy deployment with Docker Compose
-- 🐍 **Conda Support**: Alternative setup using Conda/Miniconda environments
-- 🔄 **Session Management**: Persistent conversation history
+- **Claude.ai 스타일**: 깔끔한 대화형 인터페이스
+- **실시간 스트리밍**: 코드 생성 과정 실시간 표시
+- **계획 파일 뷰어**: 복잡한 작업 계획 미리보기
+- **반응형 디자인**: 데스크톱/모바일 지원
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **vLLM servers running** (required before starting the app):
+1. **vLLM 서버** (앱 시작 전 실행 필요):
    ```bash
-   # Terminal 1: Start DeepSeek-R1 for reasoning
+   # Terminal 1: Reasoning Model
    vllm serve deepseek-ai/DeepSeek-R1 --port 8001
 
-   # Terminal 2: Start Qwen3-Coder for coding
+   # Terminal 2: Coding Model
    vllm serve Qwen/Qwen3-8B-Coder --port 8002
    ```
 
-2. **Python 3.12** and **Node.js 20+** installed (or Conda/Miniconda)
+2. **Python 3.12** and **Node.js 20+**
 
 ### Development Setup
 
-#### Environment Setup
-
 ```bash
-# Copy and configure environment in project root
+# 1. 환경 설정
 cp .env.example .env
-# Edit .env to configure your LLM endpoints
-```
+# .env 파일에서 LLM 엔드포인트 설정
 
-#### Backend
-
-```bash
+# 2. Backend
 cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Additional dependencies for full functionality
-pip install pydantic-settings aiofiles langchain langchain-openai langgraph
-
-# Run the server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-#### Frontend
-
-```bash
+# 3. Frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-The frontend will be available at http://localhost:5173
+Frontend: http://localhost:5173
+
+### Mock Mode (vLLM 없이 테스트)
+
+```bash
+./RUN_MOCK.sh  # 또는 Windows: RUN_MOCK.bat
+```
 
 ## 📁 Project Structure
 
@@ -144,152 +113,106 @@ The frontend will be available at http://localhost:5173
 TestCodeAgent/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                    # FastAPI entry point
-│   │   ├── core/
-│   │   │   └── config.py              # Configuration (agent_framework setting)
-│   │   ├── api/
-│   │   │   ├── routes.py              # API endpoints
-│   │   │   └── models.py              # Pydantic models
+│   │   ├── main.py                         # FastAPI entry point
 │   │   ├── agent/
-│   │   │   ├── factory.py             # Framework selection factory
-│   │   │   ├── registry.py            # Agent registry & spawner
-│   │   │   ├── base/
-│   │   │   │   └── interface.py       # Abstract interfaces
-│   │   │   ├── microsoft/             # Microsoft Agent Framework
-│   │   │   │   ├── agent_manager.py   # Chat agent management
-│   │   │   │   └── workflow_manager.py # Multi-agent workflow
-│   │   │   ├── langchain/             # LangChain/LangGraph
-│   │   │   │   ├── agent_manager.py   # LangChain agent
-│   │   │   │   ├── workflow_manager.py # LangGraph workflow
-│   │   │   │   ├── tool_adapter.py    # Native→LangChain tool bridge
-│   │   │   │   └── specialized/       # LangChain specialized agents
-│   │   │   └── specialized/           # Microsoft specialized agents
-│   │   │       ├── research_agent.py  # Codebase exploration
-│   │   │       └── testing_agent.py   # Test generation
-│   │   ├── tools/                     # Tool system
-│   │   │   ├── base.py                # BaseTool interface
-│   │   │   ├── registry.py            # ToolRegistry
-│   │   │   ├── executor.py            # ToolExecutor
-│   │   │   ├── file_tools.py          # File operations
-│   │   │   ├── code_tools.py          # Code execution
-│   │   │   └── git_tools.py           # Git commands
-│   │   └── services/
-│   │       └── vllm_client.py         # vLLM client & router
-│   ├── requirements.txt
-│   └── Dockerfile
+│   │   │   ├── unified_agent_manager.py    # 통합 에이전트 매니저
+│   │   │   └── handlers/                   # 응답 타입별 핸들러
+│   │   └── api/
+│   │       └── main_routes.py              # /chat/unified 엔드포인트
+│   ├── core/
+│   │   ├── supervisor.py                   # SupervisorAgent
+│   │   ├── response_aggregator.py          # UnifiedResponse
+│   │   └── context_store.py                # 컨텍스트 저장소
+│   └── shared/
+│       └── llm/
+│           ├── base.py                     # LLMProvider 인터페이스
+│           └── adapters/                   # 모델별 어댑터
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ChatInterface.tsx      # Claude.ai style chat
-│   │   │   ├── ChatMessage.tsx        # Message bubbles
-│   │   │   ├── WorkflowInterface.tsx  # Multi-agent workflow
-│   │   │   ├── WorkflowStep.tsx       # Workflow step cards
-│   │   │   ├── ConversationList.tsx   # Sidebar
-│   │   │   └── AgentStatus.tsx        # Status panel
-│   │   ├── api/
-│   │   │   └── client.ts              # API client
-│   │   ├── App.tsx                    # Main app
-│   │   └── index.css                  # Claude.ai color palette
-│   └── package.json
-├── shared/                       # Shared modules across backend
-│   ├── llm/                      # LLM Provider abstraction
-│   │   ├── base.py               # BaseLLMProvider, LLMConfig, TaskType
-│   │   ├── adapters/
-│   │   │   ├── deepseek_adapter.py   # DeepSeek-R1 with <think> tags
-│   │   │   ├── qwen_adapter.py       # Qwen coding optimization
-│   │   │   └── generic_adapter.py    # GPT, Claude, Llama, Mistral
-│   │   └── __init__.py
-│   └── prompts/
-│       └── generic.py            # Model-agnostic prompts
-├── docs/                         # Technical documentation
-│   ├── LLM_MODEL_CHANGE_PLAN.md
-│   ├── MOCK_MODE.md
-│   ├── REFINEMENT_CYCLE_GUIDE.md
-│   ├── MULTI_USER_ANALYSIS.md
-│   ├── OPTIMIZATION_RECOMMENDATIONS.md
-│   └── archive/                  # Historical documents
-├── docker-compose.yml
-├── CHANGELOG.md
-├── INSTALL_CONDA.md
-└── README.md
+│   └── src/
+│       ├── components/
+│       │   ├── WorkflowInterface.tsx       # Unified 모드 UI
+│       │   ├── NextActionsPanel.tsx        # 다음 행동 버튼
+│       │   └── PlanFileViewer.tsx          # 계획 파일 뷰어
+│       └── api/
+│           └── client.ts                   # API 클라이언트
+└── docs/                                   # 기술 문서
 ```
 
-## 🔀 Agent Framework Selection
+## 🎯 API Endpoints
 
-Configure which framework to use in `backend/app/core/config.py`:
-
-```python
-agent_framework: Literal["microsoft", "langchain"] = "microsoft"
+### Unified Chat (Non-streaming)
+```
+POST /chat/unified
 ```
 
-Or set via environment variable:
-```bash
-export AGENT_FRAMEWORK=langchain
+```json
+// Request
+{
+  "message": "Python으로 계산기 만들어줘",
+  "session_id": "session-123",
+  "workspace": "/home/user/workspace"
+}
+
+// Response
+{
+  "response_type": "code_generation",
+  "content": "## 코드 생성 완료\n\n...",
+  "artifacts": [...],
+  "next_actions": ["테스트 실행", "코드 리뷰 요청"],
+  "session_id": "session-123",
+  "success": true
+}
 ```
 
-### Microsoft Agent Framework
-- **ChatAgent**: Conversation management with system prompts
-- **WorkflowBuilder**: Sequential multi-agent pipelines
-- Best for: Structured workflows, enterprise use cases
-
-### LangChain/LangGraph
-- **LangGraph StateGraph**: Flexible agent graphs with conditional routing
-- **ReAct Pattern**: Reasoning + Acting with tool use
-- Best for: Complex tool-use scenarios, research tasks
-
-## 🛠️ Tool System
-
-The agent has access to 11 integrated tools:
-
-| Category | Tool | Description |
-|----------|------|-------------|
-| **File** | `read_file` | Read file contents |
-| | `write_file` | Write/create files |
-| | `search_files` | Glob pattern search |
-| | `list_directory` | List directory contents |
-| **Code** | `execute_python` | Run Python code safely |
-| | `run_tests` | Execute pytest tests |
-| | `lint_code` | Check with flake8 |
-| **Git** | `git_status` | Repository status |
-| | `git_log` | Commit history |
-| | `git_diff` | Show changes |
-| | `git_show` | Show commit details |
-
-## 📝 Prompt Engineering
-
-### DeepSeek R1 Style (Reasoning Models)
-Used for: Research Agent, Planning Agent
-
+### Unified Chat (Streaming)
 ```
-<think>
-Break down the request into steps.
-Consider dependencies.
-</think>
-
-<output_format>
-Structured output here
-</output_format>
+POST /chat/unified/stream
 ```
 
-### Qwen3 Style (Coding Models)
-Used for: Testing Agent, Coding Agent, Review Agent
+## 🔧 Configuration
 
-```
-<tools>
-tool_name: description (params)
-</tools>
+### Environment Variables
 
-<response_format>
-THOUGHTS: [analysis]
-PLAN:
-1. [step]
-ACTION: [tool]
-</response_format>
+```env
+# Primary LLM
+LLM_ENDPOINT=http://localhost:8001/v1
+LLM_MODEL=deepseek-ai/DeepSeek-R1
+MODEL_TYPE=deepseek  # deepseek, qwen, gpt-oss, generic
+
+# Optional: Task-specific endpoints
+VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
+VLLM_CODING_ENDPOINT=http://localhost:8002/v1
+REASONING_MODEL=deepseek-ai/DeepSeek-R1
+CODING_MODEL=Qwen/Qwen3-8B-Coder
+
+# Server
+API_HOST=0.0.0.0
+API_PORT=8000
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
+
+## 📚 Documentation
+
+| 문서 | 설명 |
+|------|------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 아키텍처 상세 |
+| [MOCK_MODE.md](docs/MOCK_MODE.md) | Mock 모드 테스트 가이드 |
+| [MULTI_USER_ANALYSIS.md](docs/MULTI_USER_ANALYSIS.md) | 다중 사용자 동시 접속 분석 |
+| [OPTIMIZATION_RECOMMENDATIONS.md](docs/OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU 최적화 권장사항 |
+| [REFINEMENT_CYCLE_GUIDE.md](docs/REFINEMENT_CYCLE_GUIDE.md) | 코드 개선 워크플로우 가이드 |
+| [INSTALL_CONDA.md](INSTALL_CONDA.md) | Conda 환경 설치 가이드 |
+
+### Archive (완료된 작업 문서)
+| 문서 | 설명 |
+|------|------|
+| [LLM_MODEL_CHANGE_PLAN.md](docs/archive/LLM_MODEL_CHANGE_PLAN.md) | LLM 추상화 계층 구현 완료 |
+| [AGENT_COMPATIBILITY_AUDIT.md](docs/archive/AGENT_COMPATIBILITY_AUDIT.md) | 프롬프트 호환성 감사 완료 |
+| [IMPROVEMENT_PLAN.md](docs/archive/IMPROVEMENT_PLAN.md) | 시스템 개선 Phase 1&2 완료 |
+| [AGENT_EXPANSION_PROPOSAL.md](docs/archive/AGENT_EXPANSION_PROPOSAL.md) | 에이전트 확장 제안서 |
 
 ## 🎨 UI Design
 
-The frontend uses a Claude.ai inspired design:
+Claude.ai 스타일 디자인:
 
 | Element | Color |
 |---------|-------|
@@ -297,321 +220,14 @@ The frontend uses a Claude.ai inspired design:
 | Accent | `#DA7756` (terracotta) |
 | Text Primary | `#1A1A1A` |
 | Text Secondary | `#666666` |
-| Border | `#E5E5E5` |
 
-## 🎯 API Endpoints
+## 🛠️ Supported LLM Models
 
-### Chat
-- `POST /api/chat` - Send message (non-streaming)
-- `POST /api/chat/stream` - Send message (streaming)
-
-### Workflow
-- `POST /api/workflow/execute` - Execute multi-agent workflow
-
-### Agent Management
-- `GET /api/agent/status/{session_id}` - Get agent status
-- `POST /api/agent/clear/{session_id}` - Clear history
-- `DELETE /api/agent/session/{session_id}` - Delete session
-
-### Tools
-- `POST /api/tools/execute` - Execute a tool directly
-- `GET /api/tools/list` - List available tools
-
-## 🔧 Configuration
-
-### Environment Variables
-
-```env
-# vLLM Endpoints
-VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
-VLLM_CODING_ENDPOINT=http://localhost:8002/v1
-
-# Model names
-REASONING_MODEL=deepseek-ai/DeepSeek-R1
-CODING_MODEL=Qwen/Qwen3-8B-Coder
-
-# Agent Framework: "microsoft" or "langchain"
-AGENT_FRAMEWORK=microsoft
-
-# API Configuration
-API_HOST=0.0.0.0
-API_PORT=8000
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-```
-
-## 🐛 Troubleshooting
-
-### Missing Dependencies
-```bash
-# Backend
-pip install pydantic-settings aiofiles langchain langchain-openai langgraph
-
-# Frontend
-npm install
-```
-
-### vLLM Connection Issues
-```bash
-# Verify vLLM servers
-curl http://localhost:8001/v1/models
-curl http://localhost:8002/v1/models
-```
-
-### Import Errors
-Ensure all dependencies are installed and the virtual environment is activated.
-
-## 🚀 Recent Improvements
-
-### v2.0 - Unified AI Assistant (December 2025)
-
-**Major UX Overhaul:**
-- ✅ **Unified Interface**: Removed separate Chat/Workflow modes - single interface with intelligent routing
-- ✅ **Context-Aware Routing**: Supervisor automatically detects if request needs workflow or simple chat
-- ✅ **Streaming Code Preview**: Real-time code generation with 6-line previews during parallel execution
-- ✅ **Project Setup Wizard**: Two-step guided setup (Project Name → Workspace Path)
-- ✅ **Conversation Management**: User-configurable auto-save with localStorage persistence
-
-**Backend Improvements:**
-- 🔧 **Fixed Task Type Parsing**: Improved regex-based TASK_TYPE extraction from supervisor
-- 🔧 **Default to Code Generation**: Changed fallback from "general" to "code_generation" for better UX
-- 🔧 **Progress Callbacks**: Added streaming progress for code generation tasks
-- 🔧 **Async Queue System**: Real-time code preview delivery via asyncio.Queue
-
-**Frontend Improvements:**
-- 🎨 **Code Preview Component**: New `code_preview` type in WorkflowStep with syntax highlighting
-- 🎨 **Two-Step Project Dialog**: Guided project name and workspace path configuration
-- 🎨 **Save Confirmation Dialog**: Three options (Save Once / Always Save / Don't Save)
-- 🎨 **Auto-Refresh Conversations**: Conversation list refreshes every 5 seconds
-- 🎨 **Improved Type Safety**: Added `CodePreview` interface to TypeScript types
-
-**Context Awareness:**
-```python
-# Supervisor now checks context before routing
-<context_awareness>
-1. Is there EXISTING CODE in the context?
-2. Is the user asking HOW TO USE/RUN existing code?
-3. Is the user asking for EXPLANATIONS/DOCUMENTATION?
-→ Route to chat mode (general)
-→ Route to workflow (code_generation, bug_fix, etc.)
-</context_awareness>
-```
-
-### v2.1 - DeepAgents Integration (December 2025)
-
-**Dual Framework Architecture:**
-- 🔀 **Framework Selection**: Choose between Standard (LangChain) and DeepAgents workflow frameworks
-- 🎛️ **Per-Session Configuration**: Each session can use a different framework independently
-- 🔄 **Runtime Switching**: Change frameworks on-the-fly via UI dropdown selector
-
-**DeepAgents Middleware Stack:**
-```python
-# Hybrid DeepAgents with Parallel Execution
-DeepAgentWorkflowManager(
-    enable_subagents=True,      # SubAgentMiddleware: Isolated sub-agent contexts
-    enable_filesystem=True,     # FilesystemMiddleware: Persistent conversation state
-    enable_parallel=True,       # Parallel execution with SharedContext
-    max_parallel_agents=25      # H100 GPU optimization (25 concurrent agents)
-)
-```
-
-**Key Benefits:**
-
-1. **TodoListMiddleware** - Structured Task Tracking
-   - Automatic task creation from user requests
-   - Real-time progress updates in frontend
-   - Structured task state (pending, in_progress, completed)
-   - No manual checklist management needed
-
-2. **SubAgentMiddleware** - Isolated Execution Contexts
-   - Each sub-task runs in isolated context
-   - Prevents context pollution across tasks
-   - Cleaner state management
-   - Better error isolation
-
-3. **SummarizationMiddleware** - Automatic Context Management
-   - Auto-compresses conversation at 170k tokens
-   - No manual context truncation needed
-   - Preserves important information
-   - Prevents token limit overflow
-
-4. **FilesystemMiddleware** - Persistent Backend
-   - Conversations saved to `.deepagents/` directory
-   - Automatic state persistence
-   - Easy conversation recovery
-   - Filesystem-backed conversation history
-
-**Framework Comparison:**
-
-| Feature | Standard (LangChain) | DeepAgents |
-|---------|---------------------|------------|
-| **Task Tracking** | Manual checklist | TodoListMiddleware (automatic) |
-| **Context Management** | SharedContext (global) | SubAgentMiddleware (isolated) |
-| **Token Overflow** | Manual handling | Auto-summarization at 170k |
-| **Persistence** | Database (SQLite) | Filesystem + Database |
-| **Middleware** | Custom implementation | Built-in stack |
-| **Human-in-Loop** | Manual checkpoints | Built-in approval gates |
-
-**How to Use:**
-
-1. **Backend Setup:**
-   ```bash
-   # Install DeepAgents framework
-   pip install deepagents
-
-   # IMPORTANT: tavily-python is OPTIONAL
-   # Only install if you have external API access
-   # Skip in secure internal networks
-   # pip install tavily-python
-   ```
-
-   **Note for Internal Networks:**
-   - tavily-python provides web search capabilities
-   - Requires external API access (not available in secure networks)
-   - DeepAgents works without tavily (SubAgent & Filesystem middleware only)
-
-2. **Frontend - Select Framework:**
-   - Click the framework selector in the header (gear icon)
-   - Choose between "Standard" or "DeepAgents"
-   - Selection persists per session
-   - Switch anytime without losing conversation state
-
-3. **API Usage:**
-   ```python
-   # Select framework for session
-   POST /framework/select?session_id={id}&framework=deepagents
-
-   # Get current framework for session
-   GET /framework/session/{session_id}
-   ```
-
-**Implementation Details:**
-
-- **Backend:** `backend/app/agent/langchain/deepagent_workflow.py`
-- **Routes:** `backend/app/api/routes.py` (lines 239-284, 315-343, 420-431)
-- **Frontend UI:** `frontend/src/App.tsx` (framework selector dropdown)
-- **API Client:** `frontend/src/api/client.ts` (selectFramework, getSessionFramework methods)
-
-**Architecture Diagram:**
-```
-┌──────────────────────────────────────────────────────────────┐
-│                      Workflow Execution                      │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌─────────────────────┐      ┌──────────────────────────┐  │
-│  │   Standard Mode     │      │    DeepAgents Mode       │  │
-│  ├─────────────────────┤      ├──────────────────────────┤  │
-│  │ - Manual Context    │      │ - TodoListMiddleware     │  │
-│  │ - SharedContext     │      │ - SubAgentMiddleware     │  │
-│  │ - Manual Tracking   │      │ - SummarizationMW        │  │
-│  │ - Database Persist  │      │ - FilesystemMW           │  │
-│  └──────────┬──────────┘      └────────────┬─────────────┘  │
-│             │                              │                │
-│             └──────────┬───────────────────┘                │
-│                        ▼                                    │
-│              ┌──────────────────┐                           │
-│              │  Common Workflow  │                           │
-│              │  - Planning       │                           │
-│              │  - Coding         │                           │
-│              │  - Review         │                           │
-│              └──────────────────┘                           │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Migration Path:**
-
-Existing sessions using standard framework continue to work. New features:
-- Per-session framework selection
-- Gradual migration supported
-- Both frameworks can run concurrently
-- No breaking changes to existing API
-
-**Performance Considerations:**
-
-- **Standard:** Lower overhead, faster startup
-- **DeepAgents:** Higher overhead, better for complex multi-step tasks
-- **Recommendation:** Use Standard for simple tasks, DeepAgents for complex workflows
-
-### v2.2 - LLM Provider Abstraction Layer (January 2026)
-
-**Flexible Model Switching:**
-- 🔄 **Unified LLM Interface**: Switch between any LLM model with minimal configuration
-- 🎛️ **Model-Specific Adapters**: Optimized prompts for DeepSeek, Qwen, GPT, Claude, and generic models
-- 🧠 **Task-Aware Prompts**: Different prompt strategies for reasoning, coding, review, and refinement
-
-**LLM Provider Factory:**
-```python
-from shared.llm import LLMProviderFactory, TaskType
-
-# Create provider for any model type
-provider = LLMProviderFactory.create(
-    model_type="deepseek",  # or "qwen", "gpt", "claude", "generic"
-    endpoint="http://localhost:8001/v1",
-    model="deepseek-ai/DeepSeek-R1"
-)
-
-# Generate with task-specific configuration
-response = await provider.generate(
-    prompt="Implement user authentication",
-    task_type=TaskType.CODING  # REASONING, CODING, REVIEW, REFINE, GENERAL
-)
-```
-
-**Available Adapters:**
-
-| Adapter | Model Type | Special Features |
-|---------|-----------|------------------|
-| `DeepSeekAdapter` | deepseek | `<think>` tag parsing, reasoning optimization |
-| `QwenAdapter` | qwen | Coding-optimized, low temperature |
-| `GenericAdapter` | gpt, claude, llama, mistral | Universal OpenAI-compatible API |
-
-**Configuration:**
-```env
-# Unified model configuration
-MODEL_TYPE=deepseek          # deepseek, qwen, gpt, claude, generic
-LLM_ENDPOINT=http://localhost:8001/v1
-LLM_MODEL=deepseek-ai/DeepSeek-R1
-
-# Optional: Separate endpoints for different tasks
-VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
-VLLM_CODING_ENDPOINT=http://localhost:8002/v1
-```
-
-**Single Model Deployment:**
-```python
-# Use one model for all tasks (e.g., GPT-OSS-120B)
-settings.model_type = "generic"
-settings.llm_endpoint = "http://your-llm-server/v1"
-settings.llm_model = "gpt-oss-120b"
-```
-
-**Key Benefits:**
-- 🚀 **Easy Model Switching**: Change models without code modifications
-- 🎯 **Task-Optimized Prompts**: Each adapter uses optimal prompt format
-- 🔧 **Graceful Fallback**: Heuristic-based fallback when LLM unavailable
-- 📊 **Usage Tracking**: Token usage and response metadata
-
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [README.md](README.md) | Main project documentation |
-| [INSTALL_CONDA.md](INSTALL_CONDA.md) | Conda installation guide |
-| [CHANGELOG.md](CHANGELOG.md) | Version history and changes |
-| [docs/LLM_MODEL_CHANGE_PLAN.md](docs/LLM_MODEL_CHANGE_PLAN.md) | LLM abstraction implementation plan |
-| [docs/MOCK_MODE.md](docs/MOCK_MODE.md) | Mock mode testing guide |
-| [docs/REFINEMENT_CYCLE_GUIDE.md](docs/REFINEMENT_CYCLE_GUIDE.md) | Code refinement workflow guide |
-| [docs/MULTI_USER_ANALYSIS.md](docs/MULTI_USER_ANALYSIS.md) | Multi-user concurrency analysis |
-| [docs/OPTIMIZATION_RECOMMENDATIONS.md](docs/OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU optimization guide |
-
-## 📚 References
-
-- [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)
-- [LangChain Documentation](https://python.langchain.com)
-- [LangGraph Documentation](https://langchain-ai.github.io/langgraph)
-- [DeepAgents Framework](https://github.com/langchain-ai/deepagents)
-- [vLLM Documentation](https://docs.vllm.ai)
-- [FastAPI Documentation](https://fastapi.tiangolo.com)
-- [React Documentation](https://react.dev)
+| 모델 | 특징 | 프롬프트 형식 |
+|------|------|---------------|
+| DeepSeek-R1 | 추론 모델 | `<think></think>` 태그 |
+| Qwen3-Coder | 코딩 특화 | Standard prompts |
+| GPT-OSS | OpenAI Harmony | Structured reasoning |
 
 ## 📄 License
 
