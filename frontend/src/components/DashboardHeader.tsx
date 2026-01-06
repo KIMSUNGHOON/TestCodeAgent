@@ -68,10 +68,14 @@ const DashboardHeader = ({
 
   const completedCount = agents.filter(a => a.status === 'completed').length;
 
-  // Calculate total token usage
+  // Calculate total token usage from all agents
   const totalTokens = agents.reduce((sum, agent) => {
     return sum + (agent.tokenUsage?.totalTokens || 0);
   }, 0);
+
+  // Get coder-specific token usage for detailed display
+  const coderAgent = agents.find(a => a.name === 'coder');
+  const coderTokens = coderAgent?.tokenUsage;
 
   // Animated progress
   const [animatedProgress, setAnimatedProgress] = useState(0);
@@ -112,10 +116,16 @@ const DashboardHeader = ({
             {completedCount}/{agents.length} agents
           </span>
 
-          {/* Token Count */}
+          {/* Token Count - Show detailed breakdown if available */}
           {totalTokens > 0 && (
-            <span className="font-mono hidden md:inline">
+            <span className="font-mono hidden md:inline" title={coderTokens ? `Prompt: ${coderTokens.promptTokens.toLocaleString()}, Completion: ${coderTokens.completionTokens.toLocaleString()}` : ''}>
               {totalTokens.toLocaleString()} tokens
+            </span>
+          )}
+          {/* Show placeholder while running if no tokens yet */}
+          {totalTokens === 0 && isRunning && (
+            <span className="font-mono hidden md:inline text-gray-500">
+              -- tokens
             </span>
           )}
         </div>

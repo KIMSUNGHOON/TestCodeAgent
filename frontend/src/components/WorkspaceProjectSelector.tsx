@@ -1,8 +1,9 @@
 /**
  * Unified Workspace and Project Selector
  * Compact dropdown UI for selecting workspace and project
+ * With file upload functionality
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client';
 
 interface Project {
@@ -15,6 +16,7 @@ interface Project {
 interface WorkspaceProjectSelectorProps {
   currentWorkspace: string;
   currentProject?: string;
+  sessionId: string;
   onWorkspaceChange: (workspace: string) => void;
   onProjectSelect: (projectPath: string) => void;
 }
@@ -22,6 +24,7 @@ interface WorkspaceProjectSelectorProps {
 const WorkspaceProjectSelector = ({
   currentWorkspace,
   currentProject,
+  sessionId,
   onWorkspaceChange,
   onProjectSelect
 }: WorkspaceProjectSelectorProps) => {
@@ -30,6 +33,10 @@ const WorkspaceProjectSelector = ({
   const [loading, setLoading] = useState(false);
   const [workspaceInput, setWorkspaceInput] = useState(currentWorkspace);
   const [isEditingWorkspace, setIsEditingWorkspace] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // Load projects when dropdown opens
   useEffect(() => {
@@ -62,6 +69,71 @@ const WorkspaceProjectSelector = ({
   const handleProjectClick = (projectPath: string) => {
     onProjectSelect(projectPath);
     setShowDropdown(false);
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    setUploadMessage(null);
+
+    try {
+      if (files.length === 1) {
+        const result = await apiClient.uploadFile(files[0], sessionId);
+        if (result.success) {
+          setUploadMessage({ type: 'success', text: `Uploaded: ${result.filename}` });
+          loadProjects(); // Refresh project list
+        } else {
+          setUploadMessage({ type: 'error', text: result.error || 'Upload failed' });
+        }
+      } else {
+        const fileArray = Array.from(files);
+        const result = await apiClient.uploadMultipleFiles(fileArray, sessionId);
+        if (result.success) {
+          setUploadMessage({ type: 'success', text: `Uploaded ${result.successful} files` });
+          loadProjects();
+        } else {
+          setUploadMessage({ type: 'error', text: result.error || 'Upload failed' });
+        }
+      }
+    } catch (err) {
+      setUploadMessage({ type: 'error', text: 'Upload failed' });
+    } finally {
+      setUploading(false);
+      // Clear the input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle folder upload
+  const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    setUploadMessage(null);
+
+    try {
+      const fileArray = Array.from(files);
+      const result = await apiClient.uploadDirectoryStructure(fileArray, sessionId);
+      if (result.success) {
+        setUploadMessage({ type: 'success', text: `Uploaded ${result.successful} files (${result.directories_created} dirs)` });
+        loadProjects();
+      } else {
+        setUploadMessage({ type: 'error', text: result.error || 'Upload failed' });
+      }
+    } catch (err) {
+      setUploadMessage({ type: 'error', text: 'Upload failed' });
+    } finally {
+      setUploading(false);
+      if (folderInputRef.current) {
+        folderInputRef.current.value = '';
+      }
+    }
   };
 
   // Extract project name from current workspace
@@ -162,6 +234,68 @@ const WorkspaceProjectSelector = ({
                   {currentWorkspace}
                 </div>
               )}
+            </div>
+
+            {/* Upload Section */}
+            <div className="p-3 border-b border-[#E5E5E5]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-[#666666] uppercase">Upload Files</span>
+              </div>
+              <div className="flex gap-2">
+                {/* Hidden file inputs */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  /* @ts-ignore - webkitdirectory is non-standard */
+                  webkitdirectory=""
+                  onChange={handleFolderUpload}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#F5F5F5] hover:bg-[#E5E5E5] rounded border border-[#E5E5E5] disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                  </svg>
+                  Files
+                </button>
+                <button
+                  onClick={() => folderInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs bg-[#F5F5F5] hover:bg-[#E5E5E5] rounded border border-[#E5E5E5] disabled:opacity-50"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                  </svg>
+                  Folder
+                </button>
+              </div>
+              {uploading && (
+                <div className="mt-2 text-xs text-[#666666] flex items-center gap-1">
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Uploading...
+                </div>
+              )}
+              {uploadMessage && (
+                <div className={`mt-2 text-xs ${uploadMessage.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                  {uploadMessage.text}
+                </div>
+              )}
+              <div className="mt-2 text-xs text-[#999999]">
+                Upload from your local PC to workspace
+              </div>
             </div>
 
             {/* Projects Section */}

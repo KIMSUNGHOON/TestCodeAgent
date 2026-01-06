@@ -899,6 +899,156 @@ class ApiClient {
     const baseURL = this.client.defaults.baseURL || '/api';
     return `${baseURL}/sessions/${sessionId}/download?format=${format}`;
   }
+
+  // ==================== File Upload ====================
+
+  /**
+   * Upload a single file to the session's workspace
+   */
+  async uploadFile(
+    file: File,
+    sessionId: string,
+    subPath: string = ''
+  ): Promise<{
+    success: boolean;
+    filename?: string;
+    path?: string;
+    relative_path?: string;
+    size?: number;
+    workspace?: string;
+    error?: string;
+  }> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('session_id', sessionId);
+      if (subPath) {
+        formData.append('sub_path', subPath);
+      }
+
+      const response = await this.client.post('/workspace/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to upload file'
+      };
+    }
+  }
+
+  /**
+   * Upload multiple files to the session's workspace
+   */
+  async uploadMultipleFiles(
+    files: File[],
+    sessionId: string,
+    subPath: string = ''
+  ): Promise<{
+    success: boolean;
+    total_files?: number;
+    successful?: number;
+    failed?: number;
+    total_size?: number;
+    workspace?: string;
+    target_dir?: string;
+    files?: Array<{
+      success: boolean;
+      filename?: string;
+      original_filename?: string;
+      path?: string;
+      relative_path?: string;
+      size?: number;
+      error?: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const formData = new FormData();
+      files.forEach(file => {
+        formData.append('files', file);
+      });
+      formData.append('session_id', sessionId);
+      if (subPath) {
+        formData.append('sub_path', subPath);
+      }
+
+      const response = await this.client.post('/workspace/upload-multiple', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to upload files'
+      };
+    }
+  }
+
+  /**
+   * Upload files maintaining directory structure
+   * Useful for uploading entire directories from the browser
+   */
+  async uploadDirectoryStructure(
+    files: File[],
+    sessionId: string,
+    basePath: string = ''
+  ): Promise<{
+    success: boolean;
+    total_files?: number;
+    successful?: number;
+    failed?: number;
+    total_size?: number;
+    directories_created?: number;
+    workspace?: string;
+    target_base?: string;
+    files?: Array<{
+      success: boolean;
+      original_path?: string;
+      saved_path?: string;
+      relative_path?: string;
+      size?: number;
+      error?: string;
+    }>;
+    error?: string;
+  }> {
+    try {
+      const formData = new FormData();
+
+      // For directory upload, we need to preserve relative paths
+      // When using webkitRelativePath, it includes the directory structure
+      files.forEach(file => {
+        // Use webkitRelativePath if available (from directory picker)
+        // Otherwise just use the filename
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        // Create a new file with the relative path as the filename
+        const fileWithPath = new File([file], relativePath, { type: file.type });
+        formData.append('files', fileWithPath);
+      });
+
+      formData.append('session_id', sessionId);
+      if (basePath) {
+        formData.append('base_path', basePath);
+      }
+
+      const response = await this.client.post('/workspace/upload-directory', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to upload directory'
+      };
+    }
+  }
 }
 
 // Export singleton instance

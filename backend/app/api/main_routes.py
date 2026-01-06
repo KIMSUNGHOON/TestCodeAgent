@@ -3,8 +3,9 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
+from typing import List
 from sqlalchemy.orm import Session
 
 from app.api.models import (
@@ -1879,6 +1880,290 @@ async def download_session_workspace(
     except Exception as e:
         logger.error(f"Error creating archive: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== File Upload Endpoints ====================
+
+
+@router.post("/workspace/upload")
+async def upload_file_to_workspace(
+    file: UploadFile = File(...),
+    session_id: str = Form("default"),
+    sub_path: str = Form("")
+):
+    """Upload a single file to the session's workspace.
+
+    Args:
+        file: The file to upload
+        session_id: Session identifier
+        sub_path: Optional subdirectory within workspace
+
+    Returns:
+        Upload result with file path
+    """
+    import os
+    import aiofiles
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        # Construct target path
+        if sub_path:
+            target_dir = os.path.join(workspace, sub_path)
+        else:
+            target_dir = workspace
+
+        # Validate target path is within workspace
+        target_dir = os.path.normpath(target_dir)
+        if not target_dir.startswith(os.path.normpath(workspace)):
+            return {
+                "success": False,
+                "error": "Invalid target path: outside workspace"
+            }
+
+        # Create directory if needed
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Sanitize filename
+        safe_filename = os.path.basename(file.filename) if file.filename else "uploaded_file"
+        # Remove potentially dangerous characters
+        safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in '._-')
+        if not safe_filename:
+            safe_filename = "uploaded_file"
+
+        file_path = os.path.join(target_dir, safe_filename)
+
+        # Write file
+        content = await file.read()
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content)
+
+        logger.info(f"Uploaded file: {file_path} ({len(content)} bytes)")
+
+        return {
+            "success": True,
+            "filename": safe_filename,
+            "path": file_path,
+            "relative_path": os.path.relpath(file_path, workspace),
+            "size": len(content),
+            "workspace": workspace
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading file: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/workspace/upload-multiple")
+async def upload_multiple_files(
+    files: List[UploadFile] = File(...),
+    session_id: str = Form("default"),
+    sub_path: str = Form("")
+):
+    """Upload multiple files to the session's workspace.
+
+    Args:
+        files: List of files to upload
+        session_id: Session identifier
+        sub_path: Optional subdirectory within workspace
+
+    Returns:
+        Upload results for all files
+    """
+    import os
+    import aiofiles
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        # Construct target path
+        if sub_path:
+            target_dir = os.path.join(workspace, sub_path)
+        else:
+            target_dir = workspace
+
+        # Validate target path
+        target_dir = os.path.normpath(target_dir)
+        if not target_dir.startswith(os.path.normpath(workspace)):
+            return {
+                "success": False,
+                "error": "Invalid target path: outside workspace"
+            }
+
+        os.makedirs(target_dir, exist_ok=True)
+
+        results = []
+        total_size = 0
+
+        for file in files:
+            try:
+                # Sanitize filename
+                safe_filename = os.path.basename(file.filename) if file.filename else f"file_{len(results)}"
+                safe_filename = "".join(c for c in safe_filename if c.isalnum() or c in '._-')
+                if not safe_filename:
+                    safe_filename = f"file_{len(results)}"
+
+                file_path = os.path.join(target_dir, safe_filename)
+
+                # Write file
+                content = await file.read()
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(content)
+
+                total_size += len(content)
+
+                results.append({
+                    "success": True,
+                    "filename": safe_filename,
+                    "original_filename": file.filename,
+                    "path": file_path,
+                    "relative_path": os.path.relpath(file_path, workspace),
+                    "size": len(content)
+                })
+
+                logger.info(f"Uploaded file: {file_path}")
+
+            except Exception as e:
+                results.append({
+                    "success": False,
+                    "filename": file.filename,
+                    "error": str(e)
+                })
+
+        successful = sum(1 for r in results if r.get("success"))
+
+        return {
+            "success": successful == len(files),
+            "total_files": len(files),
+            "successful": successful,
+            "failed": len(files) - successful,
+            "total_size": total_size,
+            "workspace": workspace,
+            "target_dir": target_dir,
+            "files": results
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading files: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.post("/workspace/upload-directory")
+async def upload_directory_structure(
+    files: List[UploadFile] = File(...),
+    session_id: str = Form("default"),
+    base_path: str = Form("")
+):
+    """Upload files maintaining their directory structure.
+
+    Frontend should send files with their relative paths in the filename.
+    For example: "src/components/App.tsx"
+
+    Args:
+        files: List of files with relative path prefixes
+        session_id: Session identifier
+        base_path: Base path within workspace to put files
+
+    Returns:
+        Upload results with directory structure preserved
+    """
+    import os
+    import aiofiles
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        # Base target directory
+        if base_path:
+            target_base = os.path.join(workspace, base_path)
+        else:
+            target_base = workspace
+
+        target_base = os.path.normpath(target_base)
+        if not target_base.startswith(os.path.normpath(workspace)):
+            return {
+                "success": False,
+                "error": "Invalid base path: outside workspace"
+            }
+
+        results = []
+        directories_created = set()
+        total_size = 0
+
+        for file in files:
+            try:
+                # Use original filename which may include path separators
+                original_path = file.filename or f"file_{len(results)}"
+
+                # Normalize path separators and sanitize
+                normalized_path = original_path.replace('\\', '/')
+
+                # Prevent path traversal
+                if '..' in normalized_path:
+                    results.append({
+                        "success": False,
+                        "filename": original_path,
+                        "error": "Path traversal not allowed"
+                    })
+                    continue
+
+                # Construct full path
+                file_path = os.path.normpath(os.path.join(target_base, normalized_path))
+
+                # Security check
+                if not file_path.startswith(os.path.normpath(target_base)):
+                    results.append({
+                        "success": False,
+                        "filename": original_path,
+                        "error": "Path outside target directory"
+                    })
+                    continue
+
+                # Create parent directories
+                parent_dir = os.path.dirname(file_path)
+                if parent_dir not in directories_created:
+                    os.makedirs(parent_dir, exist_ok=True)
+                    directories_created.add(parent_dir)
+
+                # Write file
+                content = await file.read()
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(content)
+
+                total_size += len(content)
+
+                results.append({
+                    "success": True,
+                    "original_path": original_path,
+                    "saved_path": file_path,
+                    "relative_path": os.path.relpath(file_path, workspace),
+                    "size": len(content)
+                })
+
+            except Exception as e:
+                results.append({
+                    "success": False,
+                    "filename": file.filename,
+                    "error": str(e)
+                })
+
+        successful = sum(1 for r in results if r.get("success"))
+
+        return {
+            "success": successful == len(files),
+            "total_files": len(files),
+            "successful": successful,
+            "failed": len(files) - successful,
+            "total_size": total_size,
+            "directories_created": len(directories_created),
+            "workspace": workspace,
+            "target_base": target_base,
+            "files": results
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading directory structure: {e}")
+        return {"success": False, "error": str(e)}
 
 
 @router.get("/workspace/download")

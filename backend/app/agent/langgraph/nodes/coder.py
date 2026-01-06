@@ -305,11 +305,16 @@ def _generate_code_with_vllm(
         for attempt in range(max_retries):
             try:
                 with httpx.Client(timeout=timeout_seconds) as client:
+                    # Use /chat/completions API for better token usage tracking
+                    # vLLM /completions API may not return usage info by default
                     response = client.post(
-                        f"{coding_endpoint}/completions",
+                        f"{coding_endpoint}/chat/completions",
                         json={
                             "model": coding_model,
-                            "prompt": prompt,
+                            "messages": [
+                                {"role": "system", "content": "You are an expert software engineer. Generate production-ready code."},
+                                {"role": "user", "content": prompt}
+                            ],
                             "max_tokens": model_config.get("max_tokens", 4096),
                             "temperature": model_config.get("temperature", 0.2),
                             "stop": model_config.get("stop", ["</s>", "Human:", "User:"])
@@ -318,9 +323,11 @@ def _generate_code_with_vllm(
 
                     if response.status_code == 200:
                         result = response.json()
-                        generated_text = result["choices"][0]["text"]
+                        # Chat completions returns content in message
+                        generated_text = result["choices"][0]["message"]["content"]
 
                         # Extract token usage from vLLM response
+                        # /chat/completions API includes usage by default
                         usage = result.get("usage", {})
                         token_usage = {
                             "prompt_tokens": usage.get("prompt_tokens", 0),
