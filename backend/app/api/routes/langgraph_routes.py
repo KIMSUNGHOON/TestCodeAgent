@@ -11,9 +11,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import json
 
-# Import both workflows for flexibility
+# Import all workflows for flexibility
 from app.agent.langgraph.unified_workflow import unified_workflow
 from app.agent.langgraph.enhanced_workflow import enhanced_workflow
+from app.agent.langgraph.dynamic_workflow import dynamic_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class WorkflowRequest(BaseModel):
     execution_mode: str = "auto"  # "auto", "quick" (Q&A only), "full" (full pipeline)
     enable_debug: bool = True
     use_enhanced: bool = True  # Use enhanced workflow by default
+    use_dynamic: bool = True  # Use dynamic workflow (Supervisor-led agent spawning)
     system_prompt: str = ""  # Optional custom system prompt for context
 
 
@@ -68,6 +70,7 @@ async def execute_workflow(request: WorkflowRequest):
     logger.info(f"   Workspace: {request.workspace_root}")
     logger.info(f"   Execution Mode: {request.execution_mode}")
     logger.info(f"   Enhanced Mode: {request.use_enhanced}")
+    logger.info(f"   Dynamic Mode: {request.use_dynamic}")
 
     # Determine actual execution mode using Supervisor analysis (not keyword matching)
     execution_mode = request.execution_mode
@@ -120,8 +123,24 @@ async def execute_workflow(request: WorkflowRequest):
                     event_data = json.dumps(enriched_update, default=str)
                     yield f"data: {event_data}\n\n"
             else:
-                # Full pipeline mode
-                workflow = enhanced_workflow if request.use_enhanced else unified_workflow
+                # Full pipeline mode - select workflow based on configuration
+                # Priority: dynamic > enhanced > unified
+                if request.use_dynamic:
+                    # Dynamic workflow with Supervisor-led agent spawning
+                    # This workflow only spawns agents that are needed based on Supervisor analysis
+                    workflow = dynamic_workflow
+                    workflow_type = "dynamic"
+                    logger.info("🔀 Using DYNAMIC workflow (Supervisor-led agent spawning)")
+                elif request.use_enhanced:
+                    # Enhanced workflow with all agents (static pipeline)
+                    workflow = enhanced_workflow
+                    workflow_type = "enhanced"
+                    logger.info("📊 Using ENHANCED workflow (static full pipeline)")
+                else:
+                    # Unified workflow (legacy)
+                    workflow = unified_workflow
+                    workflow_type = "unified"
+                    logger.info("📏 Using UNIFIED workflow (legacy)")
 
                 async for update in workflow.execute(
                     user_request=request.user_request,
@@ -132,7 +151,7 @@ async def execute_workflow(request: WorkflowRequest):
                 ):
                     enriched_update = {
                         **update,
-                        "workflow_type": "enhanced" if request.use_enhanced else "unified",
+                        "workflow_type": workflow_type,
                         "execution_mode": execution_mode,
                     }
                     event_data = json.dumps(enriched_update, default=str)
@@ -361,12 +380,14 @@ async def get_available_agents():
     Returns:
         Agent information for UI display
     """
-    from app.agent.langgraph.enhanced_workflow import AGENT_INFO
+    from app.agent.langgraph.dynamic_workflow import AGENT_INFO
 
     return {
         "agents": AGENT_INFO,
         "workflow_types": {
-            "enhanced": "Full workflow with Architect, parallel execution, and HITL",
-            "unified": "Standard sequential workflow"
-        }
+            "dynamic": "Supervisor-led dynamic workflow - only spawns required agents",
+            "enhanced": "Full static workflow with all agents",
+            "unified": "Legacy sequential workflow"
+        },
+        "default_workflow": "dynamic"
     }

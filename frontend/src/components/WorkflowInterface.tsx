@@ -678,6 +678,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
           workspace_root: workspace,
           task_type: 'general',
           execution_mode: executionMode,  // "auto", "quick", or "full"
+          use_dynamic: true,  // Use dynamic workflow (Supervisor-led agent spawning)
           system_prompt: systemPrompt,  // Custom system prompt
           enable_debug: true,  // Enable debug logging
         }),
