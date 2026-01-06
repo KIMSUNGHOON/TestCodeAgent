@@ -44,6 +44,15 @@ class TaskComplexity:
     CRITICAL = "critical"  # All gates, security, human approval
 
 
+class ResponseType:
+    """Response type - determines workflow routing"""
+    QUICK_QA = "quick_qa"  # Simple Q&A - supervisor responds directly
+    PLANNING = "planning"  # Planning/design - supervisor with detailed analysis
+    CODE_GENERATION = "code_generation"  # Full pipeline - all agents
+    CODE_REVIEW = "code_review"  # Review existing code
+    DEBUGGING = "debugging"  # Debug/fix issues
+
+
 class AgentCapability:
     """Agent capabilities"""
     PLANNING = "planning"
@@ -340,9 +349,11 @@ class SupervisorAgent:
         Returns:
             Analysis dict
         """
+        response_type = self._determine_response_type(request)
         return {
             "user_request": request,
             "timestamp": datetime.utcnow().isoformat(),
+            "response_type": response_type,  # NEW: determines workflow routing
             "complexity": self._assess_complexity(request),
             "task_type": self._determine_task_type(request),
             "required_agents": self._determine_required_agents(request),
@@ -354,6 +365,95 @@ class SupervisorAgent:
             "confidence_score": 0.7,  # Lower confidence for rule-based
             "api_used": False
         }
+
+    def _determine_response_type(self, request: str) -> str:
+        """Determine how to respond to this request
+
+        This is the KEY routing decision - determines if we need:
+        - quick_qa: Simple answer, no code generation
+        - planning: Detailed plan/design, no code yet
+        - code_generation: Full pipeline with all agents
+        - code_review: Review existing code
+        - debugging: Fix/debug issues
+
+        Args:
+            request: User request
+
+        Returns:
+            Response type string
+        """
+        request_lower = request.lower()
+
+        # 1. Q&A patterns - simple questions that don't need code
+        qa_patterns = [
+            # Korean
+            "뭐야", "뭔가요", "무엇", "알려줘", "설명해", "어떻게 동작",
+            "왜", "차이점", "비교", "장단점", "추천", "조언",
+            # English
+            "what is", "what are", "how does", "why", "explain",
+            "difference between", "compare", "pros and cons",
+            "recommend", "advice", "tell me about",
+        ]
+        if any(p in request_lower for p in qa_patterns) and not self._has_code_intent(request_lower):
+            return ResponseType.QUICK_QA
+
+        # 2. Planning/Design patterns - detailed analysis, no code yet
+        planning_patterns = [
+            # Korean
+            "계획", "설계", "아키텍처", "구조", "방법론", "전략",
+            "어떻게 만들", "어떻게 구현", "방향",
+            # English
+            "plan", "design", "architecture", "structure", "strategy",
+            "how should i", "how would you", "approach", "methodology",
+        ]
+        if any(p in request_lower for p in planning_patterns):
+            return ResponseType.PLANNING
+
+        # 3. Code Review patterns
+        review_patterns = [
+            # Korean
+            "리뷰", "검토", "분석해", "확인해", "문제 있", "개선",
+            # English
+            "review", "check", "analyze", "look at", "improve", "refactor",
+        ]
+        if any(p in request_lower for p in review_patterns) and "코드" in request_lower or "code" in request_lower:
+            return ResponseType.CODE_REVIEW
+
+        # 4. Debugging patterns
+        debug_patterns = [
+            # Korean
+            "오류", "에러", "버그", "수정", "안돼", "안됨", "왜 안",
+            "문제", "고쳐", "디버그",
+            # English
+            "error", "bug", "fix", "doesn't work", "not working", "debug",
+            "issue", "problem", "broken",
+        ]
+        if any(p in request_lower for p in debug_patterns):
+            return ResponseType.DEBUGGING
+
+        # 5. Code Generation - explicit code creation requests
+        code_patterns = [
+            # Korean
+            "만들어", "구현해", "작성해", "개발해", "코드",
+            "생성해", "추가해",
+            # English
+            "create", "implement", "write", "develop", "code",
+            "generate", "build", "make",
+        ]
+        if any(p in request_lower for p in code_patterns):
+            return ResponseType.CODE_GENERATION
+
+        # Default: If unclear, use planning to clarify
+        return ResponseType.PLANNING
+
+    def _has_code_intent(self, request_lower: str) -> bool:
+        """Check if request has intent to generate code"""
+        code_intent_words = [
+            "만들어", "구현", "작성", "개발", "코드 생성",
+            "create", "implement", "write", "develop", "generate code",
+            "build", "make a", "code for",
+        ]
+        return any(w in request_lower for w in code_intent_words)
 
     def _assess_complexity(self, request: str) -> str:
         """Assess task complexity

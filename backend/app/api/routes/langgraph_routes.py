@@ -69,62 +69,38 @@ async def execute_workflow(request: WorkflowRequest):
     logger.info(f"   Execution Mode: {request.execution_mode}")
     logger.info(f"   Enhanced Mode: {request.use_enhanced}")
 
-    # Determine actual execution mode
+    # Determine actual execution mode using Supervisor analysis (not keyword matching)
     execution_mode = request.execution_mode
+    response_type = None  # Will be set by Supervisor
+
     if execution_mode == "auto":
-        # Improved heuristic: Check for Q&A patterns first, then code generation
-        user_request_lower = request.user_request.lower()
+        # USE SUPERVISOR FOR ROUTING DECISION - This is the proper agentic approach
+        # The Supervisor analyzes the request and determines the response type
+        from core.supervisor import SupervisorAgent, ResponseType
 
-        # Q&A/Planning keywords - should use quick mode
-        qa_keywords = [
-            # Korean
-            "계획", "설계", "설명", "알려", "질문", "뭐야", "뭔가요", "어떻게", "왜",
-            "차이점", "비교", "추천", "장단점", "조언", "도움", "검토", "분석해",
-            "이해", "개념", "정의", "의미", "원리", "방법론", "아키텍처를 설명",
-            "?",  # Question mark indicates a question
-            # English
-            "explain", "what is", "how does", "why", "difference", "compare",
-            "recommend", "pros and cons", "advice", "help me understand",
-            "concept", "definition", "meaning", "principle", "methodology",
-            "design plan", "development plan", "architecture overview",
-            "can you", "could you", "would you", "tell me", "describe",
-        ]
+        supervisor = SupervisorAgent(use_api=False)  # Use rule-based for fast routing
+        analysis = supervisor.analyze_request(request.user_request)
 
-        # Code generation keywords - should use full mode
-        code_keywords = [
-            # Korean
-            "코드", "구현", "프로젝트", "앱", "애플리케이션", "함수", "클래스",
-            "서비스", "파일 생성", "작성해", "만들어줘", "개발해줘", "구현해줘",
-            "빌드", "배포", "테스트 코드",
-            # English
-            "code", "implement", "build", "create app", "create project",
-            "create function", "create class", "develop", "write code",
-            "generate", "scaffold", "bootstrap", "deploy", "test code",
-        ]
+        response_type = analysis.get('response_type', ResponseType.PLANNING)
 
-        # Priority: Q&A keywords take precedence over code keywords
-        # If user asks "개발 계획을 만들어볼래요?" - "계획" takes priority
-        is_qa = any(kw in user_request_lower for kw in qa_keywords)
-        is_code = any(kw in user_request_lower for kw in code_keywords)
-
-        if is_qa and not is_code:
-            # Clear Q&A request
+        # Map response_type to execution_mode
+        if response_type == ResponseType.QUICK_QA:
             execution_mode = "quick"
-        elif is_qa and is_code:
-            # Mixed: check context - if asking about planning/explaining code, use quick
-            planning_context = ["계획", "설계", "설명", "plan", "design", "explain", "?"]
-            if any(kw in user_request_lower for kw in planning_context):
-                execution_mode = "quick"
-            else:
-                execution_mode = "full"
-        elif is_code:
-            # Clear code generation request
+        elif response_type == ResponseType.PLANNING:
+            execution_mode = "quick"  # Planning also uses quick mode (Supervisor only)
+        elif response_type in [ResponseType.CODE_GENERATION, ResponseType.DEBUGGING]:
             execution_mode = "full"
+        elif response_type == ResponseType.CODE_REVIEW:
+            execution_mode = "full"  # Review needs reviewer agent
         else:
-            # Default to quick for ambiguous requests
-            execution_mode = "quick"
+            execution_mode = "quick"  # Default to quick for unknown
 
-        logger.info(f"   Auto-detected mode: {execution_mode} (Q&A: {is_qa}, Code: {is_code})")
+        logger.info(f"   🧠 Supervisor Analysis:")
+        logger.info(f"      Response Type: {response_type}")
+        logger.info(f"      Complexity: {analysis.get('complexity', 'unknown')}")
+        logger.info(f"      Task Type: {analysis.get('task_type', 'unknown')}")
+        logger.info(f"      Required Agents: {analysis.get('required_agents', [])}")
+        logger.info(f"      → Execution Mode: {execution_mode}")
 
     async def event_stream() -> AsyncGenerator[str, None]:
         """Stream workflow events to client"""
