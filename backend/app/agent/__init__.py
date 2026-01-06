@@ -80,6 +80,27 @@ agent_manager = _AgentManagerProxy()
 workflow_manager = _WorkflowManagerProxy()
 
 
+# Unified Agent Manager (new architecture)
+_unified_agent_manager = None
+
+
+def get_unified_agent_manager():
+    """Get or create UnifiedAgentManager instance.
+
+    This is the new recommended way to process requests.
+    It routes all requests through the Supervisor and handles
+    response type specific processing.
+
+    Returns:
+        UnifiedAgentManager: The unified agent manager instance
+    """
+    global _unified_agent_manager
+    if _unified_agent_manager is None:
+        from app.agent.unified_agent_manager import UnifiedAgentManager
+        _unified_agent_manager = UnifiedAgentManager()
+    return _unified_agent_manager
+
+
 __all__ = [
     # Factory functions (recommended)
     "get_agent_manager",
@@ -88,6 +109,8 @@ __all__ = [
     "create_agent",
     "create_workflow",
     "FrameworkType",
+    # Unified Agent Manager (new architecture)
+    "get_unified_agent_manager",
     # Base interfaces
     "BaseAgent",
     "BaseAgentManager",

@@ -1,0 +1,285 @@
+"""Code Generation Handler - 코드 생성 워크플로우 처리.
+
+이 핸들러는 전체 코드 생성 워크플로우를 실행합니다:
+Architect → Coder → Review → (Refine) → Artifacts
+"""
+import logging
+from datetime import datetime
+from typing import Dict, Any, List, Optional, AsyncGenerator
+
+from app.core.config import settings
+from app.agent.handlers.base import BaseHandler, HandlerResult, StreamUpdate
+from app.agent import get_workflow_manager
+
+logger = logging.getLogger(__name__)
+
+
+class CodeGenerationHandler(BaseHandler):
+    """코드 생성 워크플로우 핸들러
+
+    전체 코드 생성 파이프라인을 실행하고 결과를 수집합니다.
+    """
+
+    def __init__(self):
+        """CodeGenerationHandler 초기화"""
+        super().__init__()
+        self.workflow_manager = get_workflow_manager()
+        self.logger.info("CodeGenerationHandler initialized")
+
+    async def execute(
+        self,
+        user_message: str,
+        analysis: Dict[str, Any],
+        context: Any
+    ) -> HandlerResult:
+        """코드 생성 실행 (비스트리밍)
+
+        Args:
+            user_message: 사용자 요청
+            analysis: Supervisor 분석 결과
+            context: 대화 컨텍스트
+
+        Returns:
+            HandlerResult: 처리 결과 (생성된 코드 + 아티팩트)
+        """
+        try:
+            # 워크스페이스 확인
+            workspace = None
+            if context and hasattr(context, 'workspace'):
+                workspace = context.workspace
+
+            # 워크플로우 컨텍스트 구성
+            workflow_context = {
+                "workspace": workspace,
+                "analysis": analysis,
+                "session_id": context.session_id if context else "default"
+            }
+
+            # 워크플로우 가져오기
+            workflow = await self._get_workflow(context)
+
+            # 스트리밍 결과 수집
+            artifacts = []
+            updates = []
+            agents_used = set()
+
+            self.logger.info(f"Starting code generation: {user_message[:50]}...")
+
+            async for update in workflow.execute_stream(user_message, workflow_context):
+                updates.append(update)
+
+                # 에이전트 추적
+                if update.get("agent"):
+                    agents_used.add(update["agent"])
+
+                # 아티팩트 수집
+                if update.get("artifacts"):
+                    artifacts.extend(update["artifacts"])
+                elif update.get("type") == "artifact" and update.get("content"):
+                    # 단일 아티팩트 형식
+                    artifacts.append({
+                        "filename": update.get("filename", "code.py"),
+                        "language": update.get("language", "python"),
+                        "content": update.get("content"),
+                        "saved_path": update.get("saved_path")
+                    })
+
+            # 사용자 응답 생성
+            user_response = self._format_code_response(artifacts, updates)
+
+            # 메타데이터
+            metadata = {
+                "agents_used": list(agents_used),
+                "update_count": len(updates),
+                "artifact_count": len(artifacts),
+                "timestamp": datetime.now().isoformat()
+            }
+
+            self.logger.info(f"Code generation completed: {len(artifacts)} artifacts")
+
+            return HandlerResult(
+                content=user_response,
+                artifacts=artifacts,
+                metadata=metadata,
+                success=True
+            )
+
+        except Exception as e:
+            self.logger.error(f"Code generation error: {e}")
+            return HandlerResult(
+                content="",
+                success=False,
+                error=str(e)
+            )
+
+    async def execute_stream(
+        self,
+        user_message: str,
+        analysis: Dict[str, Any],
+        context: Any
+    ) -> AsyncGenerator[StreamUpdate, None]:
+        """코드 생성 스트리밍
+
+        Args:
+            user_message: 사용자 요청
+            analysis: Supervisor 분석 결과
+            context: 대화 컨텍스트
+
+        Yields:
+            StreamUpdate: 스트리밍 업데이트
+        """
+        yield StreamUpdate(
+            agent="CodeGenerationHandler",
+            update_type="progress",
+            status="running",
+            message="코드 생성 워크플로우를 시작합니다..."
+        )
+
+        try:
+            workspace = None
+            if context and hasattr(context, 'workspace'):
+                workspace = context.workspace
+
+            workflow_context = {
+                "workspace": workspace,
+                "analysis": analysis,
+                "session_id": context.session_id if context else "default"
+            }
+
+            workflow = await self._get_workflow(context)
+            artifacts = []
+
+            async for update in workflow.execute_stream(user_message, workflow_context):
+                # 워크플로우 업데이트를 StreamUpdate로 변환
+                agent = update.get("agent", "Workflow")
+                update_type = update.get("type", "progress")
+                status = update.get("status", "running")
+                message = update.get("message", "")
+
+                # 아티팩트 수집
+                if update.get("artifacts"):
+                    artifacts.extend(update["artifacts"])
+                elif update_type == "artifact":
+                    artifacts.append({
+                        "filename": update.get("filename", "code.py"),
+                        "language": update.get("language", "python"),
+                        "content": update.get("content"),
+                        "saved_path": update.get("saved_path")
+                    })
+
+                yield StreamUpdate(
+                    agent=agent,
+                    update_type=update_type,
+                    status=status,
+                    message=message,
+                    data=update
+                )
+
+            # 완료 업데이트
+            user_response = self._format_code_response(artifacts, [])
+
+            yield StreamUpdate(
+                agent="CodeGenerationHandler",
+                update_type="completed",
+                status="completed",
+                message="코드 생성이 완료되었습니다.",
+                data={
+                    "artifacts": artifacts,
+                    "full_content": user_response
+                }
+            )
+
+        except Exception as e:
+            self.logger.error(f"Code generation stream error: {e}")
+            yield StreamUpdate(
+                agent="CodeGenerationHandler",
+                update_type="error",
+                status="error",
+                message=str(e)
+            )
+
+    async def _get_workflow(self, context: Any):
+        """워크플로우 인스턴스 가져오기
+
+        Args:
+            context: 대화 컨텍스트
+
+        Returns:
+            워크플로우 인스턴스
+        """
+        session_id = context.session_id if context and hasattr(context, 'session_id') else "default"
+        workspace = context.workspace if context and hasattr(context, 'workspace') else None
+
+        return await self.workflow_manager.get_workflow(
+            session_id=session_id,
+            workspace=workspace
+        )
+
+    def _format_code_response(
+        self,
+        artifacts: List[Dict[str, Any]],
+        updates: List[Dict[str, Any]]
+    ) -> str:
+        """코드 생성 결과를 사용자 친화적 응답으로 변환
+
+        Args:
+            artifacts: 생성된 아티팩트 목록
+            updates: 워크플로우 업데이트 목록
+
+        Returns:
+            str: 포맷된 응답
+        """
+        if not artifacts:
+            # 아티팩트가 없는 경우
+            error_msg = self._extract_error_from_updates(updates)
+            if error_msg:
+                return f"코드 생성 중 문제가 발생했습니다:\n\n{error_msg}\n\n요청을 더 구체적으로 설명해주세요."
+            return "코드 생성을 완료하지 못했습니다. 요청을 더 구체적으로 설명해주세요."
+
+        # 파일 목록 생성
+        files_summary = "\n".join([
+            f"- `{a.get('filename', 'unknown')}` ({a.get('language', 'unknown')})"
+            for a in artifacts
+        ])
+
+        # 코드 내용 포맷
+        code_blocks = []
+        for artifact in artifacts[:3]:  # 처음 3개 파일만 표시
+            filename = artifact.get('filename', 'code')
+            language = artifact.get('language', 'text')
+            content = artifact.get('content', '')
+
+            # 너무 긴 코드는 잘라서 표시
+            if len(content) > 2000:
+                content = content[:2000] + "\n\n... (truncated)"
+
+            code_blocks.append(f"### {filename}\n\n```{language}\n{content}\n```")
+
+        if len(artifacts) > 3:
+            code_blocks.append(f"\n*... 그 외 {len(artifacts) - 3}개 파일*")
+
+        code_content = "\n\n".join(code_blocks)
+
+        return f"""## 코드 생성 완료
+
+다음 파일들이 생성되었습니다:
+{files_summary}
+
+{code_content}
+
+---
+추가 수정이나 테스트가 필요하면 말씀해주세요."""
+
+    def _extract_error_from_updates(self, updates: List[Dict[str, Any]]) -> Optional[str]:
+        """업데이트에서 에러 메시지 추출
+
+        Args:
+            updates: 워크플로우 업데이트 목록
+
+        Returns:
+            Optional[str]: 에러 메시지 또는 None
+        """
+        for update in reversed(updates):
+            if update.get("status") == "error" or update.get("type") == "error":
+                return update.get("message") or update.get("error")
+        return None

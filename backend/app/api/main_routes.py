@@ -15,9 +15,13 @@ from app.api.models import (
     ModelsResponse,
     ModelInfo,
     ErrorResponse,
-    ChatMessage
+    ChatMessage,
+    UnifiedChatResponse,
+    ArtifactInfo,
+    AnalysisSummary,
+    StreamUpdate
 )
-from app.agent import get_agent_manager, get_workflow_manager, get_framework_info
+from app.agent import get_agent_manager, get_workflow_manager, get_framework_info, get_unified_agent_manager
 from app.core.config import settings
 from app.core.session_store import get_session_store
 from app.db import get_db, ConversationRepository
@@ -110,6 +114,171 @@ async def chat_stream(request: ChatRequest):
 
     except Exception as e:
         logger.error(f"Error in chat stream endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Unified Chat Endpoints ====================
+# These endpoints use the new unified architecture that routes all
+# requests through the Supervisor for intelligent handling.
+
+
+@router.post("/chat/unified", response_model=UnifiedChatResponse)
+async def unified_chat(request: ChatRequest):
+    """Unified chat endpoint with Supervisor-based routing.
+
+    This is the new recommended endpoint that:
+    1. Analyzes requests using Supervisor (Reasoning LLM)
+    2. Routes to appropriate handler (QuickQA, Planning, CodeGeneration, etc.)
+    3. Returns structured response with artifacts and next actions
+
+    Args:
+        request: Chat request with message and session info
+
+    Returns:
+        Unified response with structured content, artifacts, and metadata
+    """
+    try:
+        # Get unified agent manager
+        unified_manager = get_unified_agent_manager()
+
+        # Process request
+        response = await unified_manager.process_request(
+            session_id=request.session_id,
+            user_message=request.message,
+            workspace=request.workspace,
+            stream=False
+        )
+
+        # Convert to API response model
+        return UnifiedChatResponse(
+            response_type=response.response_type,
+            content=response.content,
+            artifacts=[
+                ArtifactInfo(
+                    filename=a.get("filename", "unknown"),
+                    language=a.get("language", "text"),
+                    content=a.get("content"),
+                    saved_path=a.get("saved_path"),
+                    size=len(a.get("content", "")) if a.get("content") else None
+                )
+                for a in response.artifacts
+            ],
+            plan_file=response.plan_file,
+            analysis=AnalysisSummary(
+                complexity=response.analysis.get("complexity") if response.analysis else None,
+                task_type=response.analysis.get("task_type") if response.analysis else None,
+                required_agents=response.analysis.get("required_agents", []) if response.analysis else [],
+                confidence=response.analysis.get("confidence") if response.analysis else None,
+                workflow_strategy=response.analysis.get("workflow_strategy") if response.analysis else None
+            ) if response.analysis else None,
+            next_actions=response.next_actions or [],
+            session_id=request.session_id,
+            metadata=response.metadata,
+            success=response.success,
+            error=response.error
+        )
+
+    except Exception as e:
+        logger.error(f"Error in unified chat endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat/unified/stream")
+async def unified_chat_stream(request: ChatRequest):
+    """Unified streaming chat endpoint with Supervisor-based routing.
+
+    Streams progress updates as the request is processed through
+    Supervisor analysis and handler execution.
+
+    Args:
+        request: Chat request with message and session info
+
+    Returns:
+        Server-Sent Events stream with progress updates
+    """
+    try:
+        unified_manager = get_unified_agent_manager()
+
+        async def generate():
+            try:
+                async for update in unified_manager.process_request(
+                    session_id=request.session_id,
+                    user_message=request.message,
+                    workspace=request.workspace,
+                    stream=True
+                ):
+                    yield f"data: {json.dumps(update.to_dict())}\n\n"
+
+                yield "data: [DONE]\n\n"
+
+            except Exception as e:
+                logger.error(f"Error in unified stream: {e}")
+                error_data = {
+                    "agent": "System",
+                    "type": "error",
+                    "status": "error",
+                    "message": str(e)
+                }
+                yield f"data: {json.dumps(error_data)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream"
+        )
+
+    except Exception as e:
+        logger.error(f"Error in unified chat stream endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/chat/unified/context/{session_id}")
+async def get_unified_context(session_id: str):
+    """Get conversation context for a session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Context information including messages and artifacts
+    """
+    try:
+        unified_manager = get_unified_agent_manager()
+        context = await unified_manager.get_context(session_id)
+
+        return {
+            "session_id": session_id,
+            "message_count": len(context.messages),
+            "artifact_count": len(context.artifacts),
+            "workspace": context.workspace,
+            "last_analysis": context.last_analysis,
+            "created_at": context.created_at.isoformat(),
+            "updated_at": context.updated_at.isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting unified context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/chat/unified/context/{session_id}")
+async def clear_unified_context(session_id: str):
+    """Clear conversation context for a session.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Confirmation message
+    """
+    try:
+        unified_manager = get_unified_agent_manager()
+        await unified_manager.clear_context(session_id)
+
+        return {"message": f"Context cleared for session: {session_id}"}
+
+    except Exception as e:
+        logger.error(f"Error clearing unified context: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
