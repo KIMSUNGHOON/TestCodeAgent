@@ -646,7 +646,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
             role: 'assistant',
             content: finalContent,
             updates: [...allUpdates],
-            artifacts: collectArtifactsFromUpdates(allUpdates),
+            artifacts: extractArtifacts(allUpdates),
             timestamp: Date.now()
           }
         ]);
