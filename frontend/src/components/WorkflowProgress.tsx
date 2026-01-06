@@ -36,13 +36,29 @@ const AGENT_ICONS: Record<string, string> = {
   error: '❌',
 };
 
+/**
+ * Format time as hh:mm:ss or mm:ss or ss.sss
+ * - Under 1 second: "0.123s" (3 decimal places)
+ * - Under 60 seconds: "45s" or "45.5s"
+ * - Under 1 hour: "12:34" (mm:ss)
+ * - 1 hour+: "01:23:45" (hh:mm:ss)
+ */
 const formatTime = (seconds: number): string => {
-  if (seconds < 60) {
-    return `${Math.round(seconds)}s`;
+  if (seconds < 1) {
+    return `${seconds.toFixed(3)}s`;
   }
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.round(seconds % 60);
-  return `${mins}m ${secs}s`;
+  if (seconds < 60) {
+    return seconds % 1 === 0 ? `${seconds.toFixed(0)}s` : `${seconds.toFixed(1)}s`;
+  }
+
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
 export const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
