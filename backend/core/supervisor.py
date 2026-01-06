@@ -511,9 +511,18 @@ class SupervisorAgent:
 
         # 5. Code Generation - explicit code creation requests
         code_patterns = [
-            # Korean
-            "만들어", "구현해", "작성해", "개발해", "코드",
-            "생성해", "추가해",
+            # Korean - verb stems to match various conjugations
+            # 만들다: 만들어, 만들고, 만드는, 만들 -> use "만들" or "만드"
+            "만들", "만드",  # covers 만들어, 만들고, 만드는, etc.
+            "구현",  # covers 구현해, 구현하고, 구현할
+            "작성",  # covers 작성해, 작성하고, 작성할
+            "개발",  # covers 개발해, 개발하고, 개발할
+            "생성",  # covers 생성해, 생성하고, 생성할
+            "추가",  # covers 추가해, 추가하고, 추가할
+            "코드",
+            # Intent patterns
+            "싶습니다", "싶어요", "싶어", "원합니다", "원해요", "원해",
+            "해줘", "해주세요", "해 줘", "해 주세요",
             # English
             "create", "implement", "write", "develop", "code",
             "generate", "build", "make",
@@ -525,9 +534,18 @@ class SupervisorAgent:
         return ResponseType.PLANNING
 
     def _has_code_intent(self, request_lower: str) -> bool:
-        """Check if request has intent to generate code"""
+        """Check if request has intent to generate code
+
+        Uses verb stems to match various Korean conjugations.
+        """
         code_intent_words = [
-            "만들어", "구현", "작성", "개발", "코드 생성",
+            # Korean - verb stems
+            "만들", "만드", "구현", "작성", "개발", "코드",
+            "생성", "추가",
+            # Intent patterns
+            "싶습니다", "싶어요", "싶어", "원합니다", "원해요", "원해",
+            "해줘", "해주세요",
+            # English
             "create", "implement", "write", "develop", "generate code",
             "build", "make a", "code for",
         ]

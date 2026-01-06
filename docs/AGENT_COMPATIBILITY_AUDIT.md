@@ -1,10 +1,13 @@
 # Agent Prompt Engineering 호환성 감사 보고서
 
 **작성일**: 2026-01-06
-**버전**: 1.1 (Updated)
+**버전**: 1.2 (P2 Completed)
 **목적**: DeepSeek-R1, Qwen3, GPT-OSS 모델 간 에이전트 프롬프트 호환성 분석 및 개선 계획
 
-> ✅ **2026-01-06 업데이트**: P0-P1 모든 항목 수정 완료. 모든 에이전트 노드가 모델별 프롬프트를 지원합니다.
+> ✅ **2026-01-06 업데이트**: P0-P2 모든 항목 수정 완료.
+> - P0: Supervisor `_generate_reasoning()` 모델별 분기 완료
+> - P1: RCA Analyzer, Reviewer, Architect 노드 모델별 프롬프트 지원
+> - P2: 한국어 패턴 매칭 개선 (동사 어간 기반으로 변경)
 
 ---
 
@@ -419,21 +422,53 @@ Clear, concise prompts.
 
 ## 8. 결론
 
-### 8.1 현재 상태 요약
-- **양호**: Coder, Refiner, Supervisor - 모델별 프롬프트 분기 구현됨
-- **개선 필요**: Reviewer - 부분적 지원
-- **긴급 수정**: RCA Analyzer - DeepSeek 하드코딩, `<think>` 태그 강제 출력
-- **구현 필요**: Architect - LLM 통합 미완료
+### 8.1 현재 상태 요약 (2026-01-06 업데이트)
+- ✅ **완료**: Coder, Refiner, Supervisor, RCA Analyzer, Reviewer, Architect - 모델별 프롬프트 분기 구현
+- ✅ **완료**: 한국어 패턴 매칭 개선 - 동사 어간 기반으로 다양한 활용형 지원
+- ✅ **완료**: GPT-OSS 모델의 `<think>` 태그 미출력 처리
 
-### 8.2 권장 작업 순서
-1. **즉시**: RCA Analyzer 모델 호환성 수정
-2. **단기**: Architect LLM 통합
-3. **중기**: LLMProvider 표준화
+### 8.2 P2 한국어 패턴 매칭 개선 상세
+
+**수정 파일**: `backend/core/supervisor.py`
+
+**수정 내용**:
+- `_determine_response_type()`: 동사 어간 패턴으로 변경
+- `_has_code_intent()`: 동일하게 동사 어간 패턴 적용
+
+**변경 전** (활용형 기반):
+```python
+code_patterns = [
+    "만들어", "구현해", "작성해", ...  # 특정 활용형만 매칭
+]
+```
+
+**변경 후** (어간 기반):
+```python
+code_patterns = [
+    # Korean - verb stems to match various conjugations
+    "만들", "만드",  # covers 만들어, 만들고, 만드는, etc.
+    "구현",  # covers 구현해, 구현하고, 구현할
+    "작성",  # covers 작성해, 작성하고, 작성할
+    "개발",  # covers 개발해, 개발하고, 개발할
+    "생성",  # covers 생성해, 생성하고, 생성할
+    "추가",  # covers 추가해, 추가하고, 추가할
+    "코드",
+    # Intent patterns
+    "싶습니다", "싶어요", "싶어", "원합니다", "원해요", "원해",
+    "해줘", "해주세요", "해 줘", "해 주세요",
+    ...
+]
+```
+
+**이점**:
+- "python으로 계산기를 만들고 싶습니다" → CODE_GENERATION ✅
+- "간단한 웹서버를 구현하고 싶어요" → CODE_GENERATION ✅
+- "테스트 코드를 작성할 수 있나요" → CODE_GENERATION ✅
 
 ### 8.3 참고 문서
 - `shared/llm/base.py` - LLM Provider 인터페이스
 - `shared/prompts/*.py` - 모델별 프롬프트 템플릿
-- `backend/core/supervisor.py` - 모델 감지 패턴 참조
+- `backend/core/supervisor.py` - 모델 감지 및 응답 타입 결정 패턴
 
 ---
 
