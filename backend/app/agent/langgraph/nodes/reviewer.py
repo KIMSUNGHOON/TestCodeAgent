@@ -193,23 +193,12 @@ Review this code for:
     try:
         import httpx
 
-        prompt = f"""You are an expert code reviewer. Review the following code for quality and correctness.
-
-{review_prompt}
-
-Provide a detailed review in JSON format:
-{{
-    "approved": true/false,
-    "quality_score": 0.0-1.0,
-    "issues": ["issue1", "issue2"],
-    "suggestions": ["suggestion1", "suggestion2"],
-    "critique": "Overall assessment"
-}}
-
-Review:"""
+        # Get model-specific prompt
+        model_type = settings.get_reasoning_model_type
+        prompt = _get_review_prompt(model_type, review_prompt)
 
         # Log model info (model type auto-detected from model name)
-        logger.info(f"🤖 Reviewing with model: {review_model} (type: {settings.get_reasoning_model_type})")
+        logger.info(f"🤖 Reviewing with model: {review_model} (type: {model_type})")
 
         # Retry logic with exponential backoff
         max_retries = 3
@@ -262,6 +251,77 @@ Review:"""
     except Exception as e:
         logger.error(f"LLM review failed: {e}")
         return _fallback_code_reviewer(artifacts, user_request)
+
+
+def _get_review_prompt(model_type: str, review_context: str) -> str:
+    """Generate model-specific review prompt
+
+    Args:
+        model_type: Type of model (deepseek, gpt-oss, qwen, generic)
+        review_context: Code review context
+
+    Returns:
+        Formatted prompt for the model
+    """
+    json_format = """{{
+    "approved": true/false,
+    "quality_score": 0.0-1.0,
+    "issues": ["issue1", "issue2"],
+    "suggestions": ["suggestion1", "suggestion2"],
+    "critique": "Overall assessment"
+}}"""
+
+    if model_type == "deepseek":
+        # DeepSeek-R1: Use <think> tags for reasoning
+        return f"""You are an expert code reviewer. Review the following code for quality and correctness.
+
+<think>
+1. Analyze code correctness and logic
+2. Check for security vulnerabilities
+3. Evaluate performance considerations
+4. Assess code style and best practices
+</think>
+
+{review_context}
+
+Provide a detailed review in JSON format:
+{json_format}
+
+Review:"""
+
+    elif model_type in ("gpt-oss", "gpt"):
+        # GPT-OSS: Structured prompt without special tags
+        return f"""## Code Review Task
+
+You are an expert code reviewer. Review the following code for quality and correctness.
+
+### Review Criteria
+1. **Correctness** - Does it fulfill requirements?
+2. **Security** - Any vulnerabilities?
+3. **Performance** - Any inefficiencies?
+4. **Best Practices** - Does it follow conventions?
+
+### Code to Review
+{review_context}
+
+### Response Format
+Provide your review in JSON format:
+```json
+{json_format}
+```
+
+Review:"""
+
+    else:
+        # Generic/Qwen: Simple prompt
+        return f"""You are an expert code reviewer. Review the following code for quality and correctness.
+
+{review_context}
+
+Provide a detailed review in JSON format:
+{json_format}
+
+Review:"""
 
 
 def _fallback_code_reviewer(artifacts: List[Dict], user_request: str) -> Dict:

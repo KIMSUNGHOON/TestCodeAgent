@@ -8,15 +8,28 @@ This agent analyzes requirements and designs:
 - Technology stack decisions
 - Dependency graph
 
-Uses DeepSeek-R1 for reasoning about architecture decisions.
+Supports multiple LLM backends:
+- DeepSeek-R1: Uses <think></think> tags for reasoning
+- GPT-OSS: Structured prompts without special tags
+- Qwen: Standard prompting
 """
 
 import logging
 import time
+import json
+import re
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 from app.agent.langgraph.schemas.state import QualityGateState, DebugLog
+from app.core.config import settings
+
+# Import LLM provider for model-agnostic calls
+try:
+    from shared.llm import LLMProviderFactory, TaskType
+    LLM_PROVIDER_AVAILABLE = True
+except ImportError:
+    LLM_PROVIDER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -184,9 +197,18 @@ def architect_node(state: QualityGateState) -> Dict:
         required_agents=supervisor_analysis.get("required_agents", [])
     )
 
-    # For now, generate a rule-based architecture
-    # TODO: Integrate with DeepSeek-R1 for intelligent design
-    architecture = _generate_architecture(user_request, workspace_root, supervisor_analysis)
+    # Try LLM-based architecture design first
+    architecture = _generate_architecture_with_llm(
+        user_request,
+        workspace_root,
+        supervisor_analysis,
+        enable_debug
+    )
+
+    # Fallback to rule-based if LLM fails or returns invalid result
+    if not architecture or not architecture.get("files_to_create"):
+        logger.warning("⚠️ LLM architecture generation failed, using rule-based fallback")
+        architecture = _generate_architecture(user_request, workspace_root, supervisor_analysis)
 
     # Calculate execution time
     execution_time = time.time() - start_time
@@ -227,14 +249,268 @@ def architect_node(state: QualityGateState) -> Dict:
     }
 
 
+def _get_architect_prompt(model_type: str, user_request: str, workspace_root: str, supervisor_analysis: Dict) -> str:
+    """Generate model-specific architect prompt
+
+    Args:
+        model_type: Type of model (deepseek, gpt-oss, qwen, generic)
+        user_request: User's request
+        workspace_root: Workspace directory
+        supervisor_analysis: Analysis from supervisor
+
+    Returns:
+        Formatted prompt for the model
+    """
+    base_context = f"""USER REQUEST:
+{user_request}
+
+WORKSPACE: {workspace_root}
+
+SUPERVISOR ANALYSIS:
+- Task Type: {supervisor_analysis.get("task_type", "implementation")}
+- Complexity: {supervisor_analysis.get("complexity", "moderate")}
+- Required Agents: {supervisor_analysis.get("required_agents", [])}"""
+
+    json_schema = """{
+    "project_name": "project-name",
+    "description": "Brief description",
+    "tech_stack": {"language": "python", "framework": "fastapi"},
+    "files_to_create": [
+        {"path": "src/main.py", "purpose": "Entry point", "priority": 1}
+    ],
+    "implementation_phases": [
+        {"phase": 1, "name": "Setup", "files": ["main.py"], "description": "Project setup"}
+    ],
+    "estimated_complexity": "moderate",
+    "estimated_files": 5,
+    "requires_human_review": false
+}"""
+
+    if model_type == "deepseek":
+        # DeepSeek-R1: Use <think> tags for reasoning
+        return f"""You are an Expert Software Architect. Design a project structure for the following request.
+
+<think>
+1. Analyze what the user is trying to build
+2. Determine appropriate technology stack
+3. Plan file structure and modules
+4. Identify implementation phases
+5. Consider what can be parallelized
+</think>
+
+{base_context}
+
+Provide your architecture design in JSON format:
+```json
+{json_schema}
+```"""
+
+    elif model_type in ("gpt-oss", "gpt"):
+        # GPT-OSS: Structured prompt without special tags
+        return f"""## Software Architecture Design Task
+
+You are an Expert Software Architect with 20+ years of experience.
+
+### Context
+{base_context}
+
+### Design Process
+1. **Analyze Requirements** - What is the user building?
+2. **Technology Selection** - Choose appropriate stack
+3. **Structure Design** - Plan files and modules
+4. **Implementation Planning** - Define phases
+
+### Response Format
+Provide your architecture design in JSON:
+```json
+{json_schema}
+```
+
+Design:"""
+
+    else:
+        # Generic/Qwen: Simple prompt
+        return f"""You are an Expert Software Architect. Design a project structure for the following request.
+
+{base_context}
+
+Provide your architecture design in JSON format:
+```json
+{json_schema}
+```
+
+Architecture:"""
+
+
+def _generate_architecture_with_llm(
+    user_request: str,
+    workspace_root: str,
+    supervisor_analysis: Dict,
+    enable_debug: bool = False
+) -> Optional[Dict[str, Any]]:
+    """Generate architecture using LLM
+
+    Args:
+        user_request: User's request
+        workspace_root: Workspace directory
+        supervisor_analysis: Analysis from supervisor
+        enable_debug: Enable debug logging
+
+    Returns:
+        Architecture dict or None if LLM fails
+    """
+    # Get model configuration
+    endpoint = settings.get_reasoning_endpoint
+    model = settings.get_reasoning_model
+    model_type = settings.get_reasoning_model_type
+
+    if not endpoint:
+        logger.info("📝 LLM endpoint not configured, skipping LLM architecture")
+        return None
+
+    logger.info(f"🏗️ Generating architecture with LLM ({model_type})")
+
+    # Get model-specific prompt
+    prompt = _get_architect_prompt(model_type, user_request, workspace_root, supervisor_analysis)
+
+    # Try LLM provider first
+    if LLM_PROVIDER_AVAILABLE:
+        try:
+            provider = LLMProviderFactory.create(
+                model_type=model_type,
+                endpoint=endpoint,
+                model=model
+            )
+
+            response = provider.generate_sync(prompt, TaskType.REASONING)
+
+            if response.parsed_json:
+                logger.info(f"✅ LLM architecture via {model_type} adapter")
+                return _validate_architecture(response.parsed_json)
+
+            # Try to extract JSON from content
+            if response.content:
+                parsed = _extract_json_from_response(response.content)
+                if parsed:
+                    return _validate_architecture(parsed)
+
+        except Exception as e:
+            logger.warning(f"LLM provider failed: {e}, trying direct call")
+
+    # Fallback to direct HTTP call
+    try:
+        import httpx
+
+        with httpx.Client(timeout=120) as client:
+            response = client.post(
+                f"{endpoint}/chat/completions",
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": ARCHITECT_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 4096
+                }
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                content = result["choices"][0].get("message", {}).get("content", "")
+
+                if content:
+                    parsed = _extract_json_from_response(content)
+                    if parsed:
+                        logger.info("✅ LLM architecture via direct HTTP")
+                        return _validate_architecture(parsed)
+
+    except Exception as e:
+        logger.warning(f"Direct HTTP call failed: {e}")
+
+    return None
+
+
+def _extract_json_from_response(text: str) -> Optional[Dict]:
+    """Extract JSON from LLM response text"""
+    if not text:
+        return None
+
+    # Remove <think>...</think> tags if present
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
+    # Try to find JSON in code blocks
+    json_match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try to find raw JSON object
+    json_start = text.find("{")
+    json_end = text.rfind("}") + 1
+    if json_start != -1 and json_end > json_start:
+        try:
+            return json.loads(text[json_start:json_end])
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+def _validate_architecture(arch: Dict) -> Optional[Dict]:
+    """Validate and normalize architecture dict"""
+    if not arch:
+        return None
+
+    # Required fields
+    if not arch.get("files_to_create"):
+        return None
+
+    # Normalize files_to_create
+    files = arch.get("files_to_create", [])
+    normalized_files = []
+    for f in files:
+        if isinstance(f, dict) and f.get("path"):
+            normalized_files.append({
+                "path": f["path"],
+                "purpose": f.get("purpose", "Implementation"),
+                "priority": f.get("priority", 1)
+            })
+        elif isinstance(f, str):
+            normalized_files.append({
+                "path": f,
+                "purpose": "Implementation",
+                "priority": 1
+            })
+
+    if not normalized_files:
+        return None
+
+    arch["files_to_create"] = normalized_files
+    arch["estimated_files"] = len(normalized_files)
+
+    # Set defaults
+    arch.setdefault("project_name", "project")
+    arch.setdefault("description", "Generated project")
+    arch.setdefault("tech_stack", {"language": "python", "framework": "none"})
+    arch.setdefault("implementation_phases", [])
+    arch.setdefault("parallel_tasks", [])
+    arch.setdefault("estimated_complexity", "moderate")
+    arch.setdefault("requires_human_review", False)
+
+    return arch
+
+
 def _generate_architecture(
     user_request: str,
     workspace_root: str,
     supervisor_analysis: Dict
 ) -> Dict[str, Any]:
-    """Generate architecture based on request analysis
+    """Generate architecture based on request analysis (rule-based fallback)
 
-    This is a rule-based fallback. Will be enhanced with LLM integration.
+    This is a rule-based fallback when LLM is unavailable.
     """
     request_lower = user_request.lower()
 

@@ -1,7 +1,11 @@
-"""Root Cause Analysis Node using DeepSeek-R1
+"""Root Cause Analysis Node - Model-Aware
 
 This node analyzes why refinement iterations are failing and provides
 deep reasoning before attempting fixes.
+
+Supports multiple models:
+- DeepSeek-R1: Uses <think></think> tags
+- GPT-OSS/Qwen: Structured analysis without special tags
 """
 
 import logging
@@ -9,12 +13,7 @@ from typing import Dict
 from datetime import datetime
 
 from app.agent.langgraph.schemas.state import QualityGateState, DebugLog
-
-# Import DeepSeek-R1 prompts
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
-from shared.prompts.deepseek_r1 import DEEPSEEK_R1_LOOP_ANALYSIS_PROMPT
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -59,59 +58,69 @@ def rca_analyzer_node(state: QualityGateState) -> Dict:
     logger.info(f"   Issues: {len(issues)}")
     logger.info(f"   Previous diffs: {len(code_diffs)}")
 
-    # Perform RCA using DeepSeek-R1 prompt template
-    # In production, this would call DeepSeek-R1 API
-    # For now, we simulate structured reasoning
+    # Perform model-aware RCA
+    # Detect model type for appropriate output format
+    model_type = settings.get_reasoning_model_type
+    uses_think_tags = model_type == "deepseek"
 
-    rca_prompt = DEEPSEEK_R1_LOOP_ANALYSIS_PROMPT.format(
-        max_iterations=max_iterations,
-        current_iteration=refinement_iteration,
-        loop_state={
-            "issues": issues,
-            "suggestions": suggestions,
-            "diffs_applied": len(code_diffs),
-            "artifacts": coder_output.get("artifacts", []) if coder_output else []
-        },
-        review_feedback=review_feedback
-    )
+    logger.info(f"🔍 RCA using model type: {model_type} (think tags: {uses_think_tags})")
 
-    # SIMULATION: In production, this calls DeepSeek-R1 API
-    # The model would return structured analysis with <think> blocks
-    rca_analysis = f"""<think>
-1. Pattern Analysis: Reviewing {len(issues)} issues across {refinement_iteration} iterations
+    # Build analysis content
+    root_cause = _identify_root_cause(issues, code_diffs, refinement_iteration)
+    recommendation = _recommend_action(issues, refinement_iteration, max_iterations)
+
+    analysis_content = f"""1. Pattern Analysis: Reviewing {len(issues)} issues across {refinement_iteration} iterations
 2. State Validation:
    - Artifacts present: {coder_output is not None}
    - Diffs generated: {len(code_diffs)}
    - Review feedback: {'available' if review_feedback else 'missing'}
 3. Root Cause Identification:
-   {_identify_root_cause(issues, code_diffs, refinement_iteration)}
+   {root_cause}
 4. Termination Check:
    - Iteration {refinement_iteration}/{max_iterations}
    - Loop should terminate: {refinement_iteration >= max_iterations}
-5. Recommended Action: {_recommend_action(issues, refinement_iteration, max_iterations)}
+5. Recommended Action: {recommendation}"""
+
+    # Format output based on model type
+    if uses_think_tags:
+        # DeepSeek-R1: Use <think> tags
+        rca_analysis = f"""<think>
+{analysis_content}
 </think>
 
 Analysis: The refinement loop is facing {len(issues)} persistent issues.
-Root cause: {_identify_root_cause(issues, code_diffs, refinement_iteration)}
-Recommendation: {_recommend_action(issues, refinement_iteration, max_iterations)}
-"""
+Root cause: {root_cause}
+Recommendation: {recommendation}"""
+    else:
+        # GPT-OSS/Qwen: Structured markdown without <think> tags
+        rca_analysis = f"""## Root Cause Analysis
+
+{analysis_content}
+
+---
+
+**Summary:** The refinement loop is facing {len(issues)} persistent issues.
+**Root Cause:** {root_cause}
+**Recommendation:** {recommendation}"""
 
     logger.info("🔍 RCA Complete")
     logger.info(f"   Root Cause: {_identify_root_cause(issues, code_diffs, refinement_iteration)[:100]}...")
 
-    # Add debug log
+    # Add debug log with model-aware agent name
     debug_logs = []
     if state.get("enable_debug"):
+        agent_name = "DeepSeek-R1" if uses_think_tags else f"GPT-OSS/{model_type}"
         debug_logs.append(DebugLog(
             timestamp=datetime.utcnow().isoformat(),
             node="rca_analyzer",
-            agent="DeepSeek-R1",
-            event_type="thinking",
+            agent=agent_name,
+            event_type="analysis",
             content=rca_analysis,
             metadata={
                 "issues_count": len(issues),
                 "iteration": refinement_iteration,
-                "max_iterations": max_iterations
+                "max_iterations": max_iterations,
+                "model_type": model_type
             },
             token_usage={"prompt_tokens": 800, "completion_tokens": 400, "total_tokens": 1200}
         ))

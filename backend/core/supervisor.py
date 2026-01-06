@@ -674,14 +674,14 @@ class SupervisorAgent:
     def _generate_reasoning(self, request: str) -> str:
         """Generate reasoning explanation
 
-        In production, this would use DeepSeek-R1 <think> blocks
+        Model-aware: Uses <think> tags only for DeepSeek-R1
         """
         complexity = self._assess_complexity(request)
         task_type = self._determine_task_type(request)
         agents = self._determine_required_agents(request)
 
-        reasoning = f"""<think>
-1. Request Analysis:
+        # Build reasoning content
+        analysis_content = f"""1. Request Analysis:
    - Input: "{request[:100]}..."
    - Detected complexity: {complexity}
    - Primary task type: {task_type}
@@ -698,11 +698,24 @@ class SupervisorAgent:
    - Start with planning/analysis
    - Route to appropriate implementation agents
    - Apply quality gates based on complexity
-   - Enable refinement loops if needed
+   - Enable refinement loops if needed"""
+
+        # Format based on model type
+        if self.uses_think_tags:
+            # DeepSeek-R1: Use <think> tags
+            reasoning = f"""<think>
+{analysis_content}
 </think>
 
-Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} agents.
-"""
+Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} agents."""
+        else:
+            # GPT-OSS/Qwen: Structured format without <think> tags
+            reasoning = f"""## Analysis
+
+{analysis_content}
+
+**Strategy:** {self._build_workflow_strategy(request)} approach with {len(agents)} agents."""
+
         return reasoning
 
     async def adjust_workflow(
