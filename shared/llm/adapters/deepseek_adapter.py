@@ -257,18 +257,28 @@ Provide review in JSON format:
         for attempt in range(max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=180.0) as client:  # Longer timeout for reasoning
+                    # Use chat completions format for instruction-tuned models
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
+
                     response = await client.post(
-                        f"{self.endpoint}/completions",
+                        f"{self.endpoint}/chat/completions",
                         json={
                             "model": self.model,
-                            "prompt": full_prompt,
-                            **config.to_dict(),
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
                         }
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        content = result["choices"][0]["text"]
+                        # Chat completions returns message.content, not text
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
                         # Retry on empty response with backoff
                         if not content or not content.strip():
@@ -343,18 +353,28 @@ Provide review in JSON format:
         for attempt in range(max_retries + 1):
             try:
                 with httpx.Client(timeout=180.0) as client:
+                    # Use chat completions format for instruction-tuned models
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
+
                     response = client.post(
-                        f"{self.endpoint}/completions",
+                        f"{self.endpoint}/chat/completions",
                         json={
                             "model": self.model,
-                            "prompt": full_prompt,
-                            **config.to_dict(),
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
                         }
                     )
 
                     if response.status_code == 200:
                         result = response.json()
-                        content = result["choices"][0]["text"]
+                        # Chat completions returns message.content, not text
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
                         # Retry on empty response with backoff
                         if not content or not content.strip():
@@ -413,22 +433,30 @@ Provide review in JSON format:
         task_type: TaskType = TaskType.GENERAL,
         config_override: Optional[LLMConfig] = None
     ) -> AsyncGenerator[str, None]:
-        """Stream response from DeepSeek-R1"""
+        """Stream response from DeepSeek-R1 using chat completions format"""
         config = config_override or self.get_config_for_task(task_type)
-        config.stream = True
 
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+
+        # Use chat completions format
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": formatted_prompt}
+        ]
 
         async with httpx.AsyncClient(timeout=180.0) as client:
             async with client.stream(
                 "POST",
-                f"{self.endpoint}/completions",
+                f"{self.endpoint}/chat/completions",
                 json={
                     "model": self.model,
-                    "prompt": full_prompt,
-                    **config.to_dict(),
+                    "messages": messages,
+                    "temperature": config.temperature,
+                    "max_tokens": config.max_tokens,
+                    "top_p": config.top_p,
+                    "stop": config.stop_sequences if config.stop_sequences else None,
+                    "stream": True,
                 }
             ) as response:
                 async for line in response.aiter_lines():
@@ -439,7 +467,9 @@ Provide review in JSON format:
                             try:
                                 chunk = json.loads(data)
                                 if "choices" in chunk and chunk["choices"]:
-                                    text = chunk["choices"][0].get("text", "")
+                                    # Chat completions streaming returns delta.content
+                                    delta = chunk["choices"][0].get("delta", {})
+                                    text = delta.get("content", "")
                                     if text:
                                         yield text
                             except json.JSONDecodeError:

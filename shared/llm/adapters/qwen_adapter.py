@@ -5,6 +5,8 @@ Specialized adapter for Qwen2.5-Coder optimized for code generation tasks.
 
 import logging
 import httpx
+import asyncio
+import time
 from typing import Optional, AsyncGenerator
 
 from shared.llm.base import (
@@ -14,6 +16,24 @@ from shared.llm.base import (
     TaskType,
     LLMProviderFactory,
 )
+
+
+def _calculate_backoff(attempt: int, base_delay: float = 1.0, max_delay: float = 30.0) -> float:
+    """Calculate exponential backoff delay with jitter.
+
+    Args:
+        attempt: Current retry attempt (0-indexed)
+        base_delay: Base delay in seconds
+        max_delay: Maximum delay in seconds
+
+    Returns:
+        Delay in seconds with jitter
+    """
+    import random
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    # Add jitter (0.5x to 1.5x)
+    jitter = delay * (0.5 + random.random())
+    return jitter
 
 logger = logging.getLogger(__name__)
 
@@ -170,81 +190,185 @@ Fixed code:"""
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 3
     ) -> LLMResponse:
-        """Generate response from Qwen-Coder"""
+        """Generate response from Qwen-Coder with retry and exponential backoff"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+        # Log prompt size for debugging
+        prompt_tokens_estimate = len(f"{system_prompt}\n\n{formatted_prompt}") // 4
+        logger.debug(f"Qwen request: ~{prompt_tokens_estimate} tokens, task={task_type.value}")
 
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    # Use chat completions format for instruction-tuned models
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
+                    response = await client.post(
+                        f"{self.endpoint}/chat/completions",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
+                        }
+                    )
 
-                    llm_response = self.parse_response(content, task_type)
-                    llm_response.usage = result.get("usage")
-                    llm_response.raw_response = result
-                    return llm_response
-                else:
-                    logger.error(f"Qwen request failed: {response.status_code}")
-                    raise Exception(f"Qwen request failed: {response.status_code}")
+                    if response.status_code == 200:
+                        result = response.json()
+                        # Chat completions returns message.content, not text
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
-        except httpx.TimeoutException:
-            logger.error("Qwen request timed out")
-            raise
+                        # Retry on empty response with backoff
+                        if not content or not content.strip():
+                            finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
+                            usage = result.get("usage", {})
+                            logger.warning(
+                                f"Empty response from Qwen: "
+                                f"finish_reason={finish_reason}, "
+                                f"prompt_tokens={usage.get('prompt_tokens', 'N/A')}, "
+                                f"completion_tokens={usage.get('completion_tokens', 'N/A')}"
+                            )
+
+                            if attempt < max_retries:
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Retrying in {backoff:.1f}s ({attempt + 1}/{max_retries})...")
+                                await asyncio.sleep(backoff)
+                                continue
+                            else:
+                                logger.error("Empty response from Qwen after all retries")
+                                return LLMResponse(
+                                    content="[LLM returned empty response - please retry]",
+                                    model=self.model,
+                                    finish_reason=finish_reason,
+                                )
+
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        # Retry on server errors (5xx) with backoff
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"Qwen server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            await asyncio.sleep(backoff)
+                            continue
+                        logger.error(f"Qwen request failed: {response.status_code}")
+                        raise Exception(f"Qwen request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"Qwen request timed out, retrying in {backoff:.1f}s...")
+                    await asyncio.sleep(backoff)
+                    continue
+                logger.error("Qwen request timed out after all retries")
+                raise
+
+        # Should not reach here, but return empty response as fallback
+        return LLMResponse(content="", model=self.model)
 
     def generate_sync(
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 3
     ) -> LLMResponse:
-        """Synchronous generation for Qwen-Coder"""
+        """Synchronous generation for Qwen-Coder with retry and exponential backoff"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+        # Log prompt size for debugging
+        prompt_tokens_estimate = len(f"{system_prompt}\n\n{formatted_prompt}") // 4
+        logger.debug(f"Qwen sync request: ~{prompt_tokens_estimate} tokens, task={task_type.value}")
 
-        try:
-            with httpx.Client(timeout=120.0) as client:
-                response = client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+        for attempt in range(max_retries + 1):
+            try:
+                with httpx.Client(timeout=120.0) as client:
+                    # Use chat completions format for instruction-tuned models
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
+                    response = client.post(
+                        f"{self.endpoint}/chat/completions",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
+                        }
+                    )
 
-                    llm_response = self.parse_response(content, task_type)
-                    llm_response.usage = result.get("usage")
-                    llm_response.raw_response = result
-                    return llm_response
-                else:
-                    logger.error(f"Qwen request failed: {response.status_code}")
-                    raise Exception(f"Qwen request failed: {response.status_code}")
+                    if response.status_code == 200:
+                        result = response.json()
+                        # Chat completions returns message.content, not text
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
-        except httpx.TimeoutException:
-            logger.error("Qwen request timed out")
-            raise
+                        # Retry on empty response with backoff
+                        if not content or not content.strip():
+                            finish_reason = result.get("choices", [{}])[0].get("finish_reason", "unknown")
+                            usage = result.get("usage", {})
+                            logger.warning(
+                                f"Empty response from Qwen (sync): "
+                                f"finish_reason={finish_reason}, "
+                                f"prompt_tokens={usage.get('prompt_tokens', 'N/A')}, "
+                                f"completion_tokens={usage.get('completion_tokens', 'N/A')}"
+                            )
+
+                            if attempt < max_retries:
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Retrying in {backoff:.1f}s ({attempt + 1}/{max_retries})...")
+                                time.sleep(backoff)
+                                continue
+                            else:
+                                logger.error("Empty response from Qwen (sync) after all retries")
+                                return LLMResponse(
+                                    content="[LLM returned empty response - please retry]",
+                                    model=self.model,
+                                    finish_reason=finish_reason,
+                                )
+
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        # Retry on server errors (5xx) with backoff
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"Qwen server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            time.sleep(backoff)
+                            continue
+                        logger.error(f"Qwen request failed: {response.status_code}")
+                        raise Exception(f"Qwen request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"Qwen request timed out, retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                    continue
+                logger.error("Qwen request timed out after all retries")
+                raise
+
+        # Should not reach here, but return empty response as fallback
+        return LLMResponse(content="", model=self.model)
 
     async def stream(
         self,
@@ -252,22 +376,30 @@ Fixed code:"""
         task_type: TaskType = TaskType.GENERAL,
         config_override: Optional[LLMConfig] = None
     ) -> AsyncGenerator[str, None]:
-        """Stream response from Qwen-Coder"""
+        """Stream response from Qwen-Coder using chat completions format"""
         config = config_override or self.get_config_for_task(task_type)
-        config.stream = True
 
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+
+        # Use chat completions format
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": formatted_prompt}
+        ]
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
-                f"{self.endpoint}/completions",
+                f"{self.endpoint}/chat/completions",
                 json={
                     "model": self.model,
-                    "prompt": full_prompt,
-                    **config.to_dict(),
+                    "messages": messages,
+                    "temperature": config.temperature,
+                    "max_tokens": config.max_tokens,
+                    "top_p": config.top_p,
+                    "stop": config.stop_sequences if config.stop_sequences else None,
+                    "stream": True,
                 }
             ) as response:
                 async for line in response.aiter_lines():
@@ -278,7 +410,9 @@ Fixed code:"""
                             try:
                                 chunk = json.loads(data)
                                 if "choices" in chunk and chunk["choices"]:
-                                    text = chunk["choices"][0].get("text", "")
+                                    # Chat completions streaming returns delta.content
+                                    delta = chunk["choices"][0].get("delta", {})
+                                    text = delta.get("content", "")
                                     if text:
                                         yield text
                             except json.JSONDecodeError:

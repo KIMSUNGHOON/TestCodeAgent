@@ -6,6 +6,8 @@ most OpenAI-compatible API endpoints.
 
 import logging
 import httpx
+import asyncio
+import time
 from typing import Optional, AsyncGenerator, Dict, List
 
 from shared.llm.base import (
@@ -15,6 +17,14 @@ from shared.llm.base import (
     TaskType,
     LLMProviderFactory,
 )
+
+
+def _calculate_backoff(attempt: int, base_delay: float = 1.0, max_delay: float = 30.0) -> float:
+    """Calculate exponential backoff delay with jitter."""
+    import random
+    delay = min(base_delay * (2 ** attempt), max_delay)
+    jitter = delay * (0.5 + random.random())
+    return jitter
 
 logger = logging.getLogger(__name__)
 
@@ -141,76 +151,152 @@ Provide your review in JSON format:
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 3
     ) -> LLMResponse:
-        """Generate response using the LLM API"""
+        """Generate response using the LLM API with chat completions format"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    # Use chat completions format
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
 
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+                    response = await client.post(
+                        f"{self.endpoint}/chat/completions",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
+                        }
+                    )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
-                    return self.parse_response(content, task_type)
-                else:
-                    logger.error(f"LLM request failed: {response.status_code}")
-                    raise Exception(f"LLM request failed: {response.status_code}")
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
-        except httpx.TimeoutException:
-            logger.error("LLM request timed out")
-            raise
-        except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
-            raise
+                        if not content or not content.strip():
+                            if attempt < max_retries:
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Empty response, retrying in {backoff:.1f}s...")
+                                await asyncio.sleep(backoff)
+                                continue
+                            else:
+                                logger.error("Empty response after all retries")
+                                return LLMResponse(
+                                    content="[LLM returned empty response - please retry]",
+                                    model=self.model,
+                                )
+
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"Server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            await asyncio.sleep(backoff)
+                            continue
+                        logger.error(f"LLM request failed: {response.status_code}")
+                        raise Exception(f"LLM request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"Request timed out, retrying in {backoff:.1f}s...")
+                    await asyncio.sleep(backoff)
+                    continue
+                logger.error("LLM request timed out after all retries")
+                raise
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                raise
+
+        return LLMResponse(content="", model=self.model)
 
     def generate_sync(
         self,
         prompt: str,
         task_type: TaskType = TaskType.GENERAL,
-        config_override: Optional[LLMConfig] = None
+        config_override: Optional[LLMConfig] = None,
+        max_retries: int = 3
     ) -> LLMResponse:
-        """Synchronous version of generate"""
+        """Synchronous version of generate with chat completions format"""
         config = config_override or self.get_config_for_task(task_type)
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
 
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+        for attempt in range(max_retries + 1):
+            try:
+                with httpx.Client(timeout=120.0) as client:
+                    # Use chat completions format
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": formatted_prompt}
+                    ]
 
-        try:
-            with httpx.Client(timeout=120.0) as client:
-                response = client.post(
-                    f"{self.endpoint}/completions",
-                    json={
-                        "model": self.model,
-                        "prompt": full_prompt,
-                        **config.to_dict(),
-                    }
-                )
+                    response = client.post(
+                        f"{self.endpoint}/chat/completions",
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": config.temperature,
+                            "max_tokens": config.max_tokens,
+                            "top_p": config.top_p,
+                            "stop": config.stop_sequences if config.stop_sequences else None,
+                        }
+                    )
 
-                if response.status_code == 200:
-                    result = response.json()
-                    content = result["choices"][0]["text"]
-                    return self.parse_response(content, task_type)
-                else:
-                    logger.error(f"LLM request failed: {response.status_code}")
-                    raise Exception(f"LLM request failed: {response.status_code}")
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result["choices"][0].get("message", {}).get("content", "")
 
-        except httpx.TimeoutException:
-            logger.error("LLM request timed out")
-            raise
+                        if not content or not content.strip():
+                            if attempt < max_retries:
+                                backoff = _calculate_backoff(attempt)
+                                logger.warning(f"Empty response, retrying in {backoff:.1f}s...")
+                                time.sleep(backoff)
+                                continue
+                            else:
+                                logger.error("Empty response after all retries")
+                                return LLMResponse(
+                                    content="[LLM returned empty response - please retry]",
+                                    model=self.model,
+                                )
+
+                        llm_response = self.parse_response(content, task_type)
+                        llm_response.usage = result.get("usage")
+                        llm_response.raw_response = result
+                        return llm_response
+                    else:
+                        if response.status_code >= 500 and attempt < max_retries:
+                            backoff = _calculate_backoff(attempt)
+                            logger.warning(f"Server error {response.status_code}, retrying in {backoff:.1f}s...")
+                            time.sleep(backoff)
+                            continue
+                        logger.error(f"LLM request failed: {response.status_code}")
+                        raise Exception(f"LLM request failed: {response.status_code}")
+
+            except httpx.TimeoutException:
+                if attempt < max_retries:
+                    backoff = _calculate_backoff(attempt)
+                    logger.warning(f"Request timed out, retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                    continue
+                logger.error("LLM request timed out after all retries")
+                raise
+
+        return LLMResponse(content="", model=self.model)
 
     async def stream(
         self,
@@ -218,22 +304,30 @@ Provide your review in JSON format:
         task_type: TaskType = TaskType.GENERAL,
         config_override: Optional[LLMConfig] = None
     ) -> AsyncGenerator[str, None]:
-        """Stream response from the LLM"""
+        """Stream response from the LLM using chat completions format"""
         config = config_override or self.get_config_for_task(task_type)
-        config.stream = True
 
         formatted_prompt = self.format_prompt(prompt, task_type)
         system_prompt = self.format_system_prompt(task_type)
-        full_prompt = f"{system_prompt}\n\n{formatted_prompt}"
+
+        # Use chat completions format
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": formatted_prompt}
+        ]
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
-                f"{self.endpoint}/completions",
+                f"{self.endpoint}/chat/completions",
                 json={
                     "model": self.model,
-                    "prompt": full_prompt,
-                    **config.to_dict(),
+                    "messages": messages,
+                    "temperature": config.temperature,
+                    "max_tokens": config.max_tokens,
+                    "top_p": config.top_p,
+                    "stop": config.stop_sequences if config.stop_sequences else None,
+                    "stream": True,
                 }
             ) as response:
                 async for line in response.aiter_lines():
@@ -244,7 +338,9 @@ Provide your review in JSON format:
                             try:
                                 chunk = json.loads(data)
                                 if "choices" in chunk and chunk["choices"]:
-                                    text = chunk["choices"][0].get("text", "")
+                                    # Chat completions streaming returns delta.content
+                                    delta = chunk["choices"][0].get("delta", {})
+                                    text = delta.get("content", "")
                                     if text:
                                         yield text
                             except json.JSONDecodeError:
