@@ -868,6 +868,37 @@ class ApiClient {
       };
     }
   }
+
+  // ==================== Download/Export ====================
+
+  /**
+   * Download session workspace as ZIP archive
+   * Opens download in browser
+   */
+  downloadSessionWorkspace(sessionId: string, format: 'zip' | 'tar' = 'zip'): void {
+    const baseURL = this.client.defaults.baseURL || '/api';
+    const url = `${baseURL}/sessions/${sessionId}/download?format=${format}`;
+    window.open(url, '_blank');
+  }
+
+  /**
+   * Download workspace by path as ZIP archive
+   * Opens download in browser
+   */
+  downloadWorkspace(workspacePath: string, format: 'zip' | 'tar' = 'zip'): void {
+    const baseURL = this.client.defaults.baseURL || '/api';
+    const encodedPath = encodeURIComponent(workspacePath);
+    const url = `${baseURL}/workspace/download?workspace_path=${encodedPath}&format=${format}`;
+    window.open(url, '_blank');
+  }
+
+  /**
+   * Get download URL for session workspace (for use in anchor tags)
+   */
+  getSessionDownloadUrl(sessionId: string, format: 'zip' | 'tar' = 'zip'): string {
+    const baseURL = this.client.defaults.baseURL || '/api';
+    return `${baseURL}/sessions/${sessionId}/download?format=${format}`;
+  }
 }
 
 // Export singleton instance

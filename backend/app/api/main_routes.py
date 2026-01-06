@@ -1774,3 +1774,213 @@ async def read_session_file(
     except Exception as e:
         logger.error(f"Error reading session file: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ==================== Download/Export Endpoints ====================
+
+
+@router.get("/sessions/{session_id}/download")
+async def download_session_workspace(
+    session_id: str,
+    format: str = Query("zip", regex="^(zip|tar)$")
+):
+    """Download session workspace as a ZIP or TAR archive.
+
+    Args:
+        session_id: Session identifier
+        format: Archive format ('zip' or 'tar')
+
+    Returns:
+        Streaming file download
+    """
+    import os
+    import io
+    import zipfile
+    import tarfile
+    from datetime import datetime
+
+    try:
+        workspace = await session_store.get_workspace(session_id)
+
+        if not os.path.exists(workspace):
+            raise HTTPException(status_code=404, detail=f"Workspace not found: {workspace}")
+
+        # Get project name from workspace path
+        project_name = os.path.basename(workspace) or "workspace"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        archive_name = f"{project_name}_{timestamp}"
+
+        # Directories and files to skip
+        skip_dirs = {'.git', 'node_modules', '__pycache__', 'venv', '.venv', 'dist', 'build', '.next'}
+        skip_files = {'.DS_Store', 'Thumbs.db'}
+
+        if format == "zip":
+            # Create ZIP archive in memory
+            zip_buffer = io.BytesIO()
+
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for root, dirs, files in os.walk(workspace):
+                    # Skip excluded directories
+                    dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
+
+                    for file in files:
+                        if file in skip_files or file.startswith('.'):
+                            continue
+
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, workspace)
+
+                        try:
+                            zip_file.write(file_path, arc_name)
+                        except (PermissionError, OSError) as e:
+                            logger.warning(f"Skipping file {file_path}: {e}")
+
+            zip_buffer.seek(0)
+
+            return StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{archive_name}.zip"'
+                }
+            )
+
+        else:  # tar format
+            tar_buffer = io.BytesIO()
+
+            with tarfile.open(fileobj=tar_buffer, mode='w:gz') as tar_file:
+                for root, dirs, files in os.walk(workspace):
+                    dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
+
+                    for file in files:
+                        if file in skip_files or file.startswith('.'):
+                            continue
+
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, workspace)
+
+                        try:
+                            tar_file.add(file_path, arcname=arc_name)
+                        except (PermissionError, OSError) as e:
+                            logger.warning(f"Skipping file {file_path}: {e}")
+
+            tar_buffer.seek(0)
+
+            return StreamingResponse(
+                tar_buffer,
+                media_type="application/gzip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{archive_name}.tar.gz"'
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating archive: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/workspace/download")
+async def download_workspace_path(
+    workspace_path: str,
+    format: str = Query("zip", regex="^(zip|tar)$")
+):
+    """Download any workspace directory as archive.
+
+    Args:
+        workspace_path: Full path to workspace directory
+        format: Archive format ('zip' or 'tar')
+
+    Returns:
+        Streaming file download
+    """
+    import os
+    import io
+    import zipfile
+    import tarfile
+    from datetime import datetime
+
+    # Security: Validate path is within allowed base
+    BASE_WORKSPACE = Path("/home/user/workspace")
+
+    try:
+        validated_path = sanitize_path(workspace_path, BASE_WORKSPACE, allow_creation=False)
+    except SecurityError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
+    if not validated_path.exists():
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    if not validated_path.is_dir():
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+
+    project_name = validated_path.name or "workspace"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_name = f"{project_name}_{timestamp}"
+
+    skip_dirs = {'.git', 'node_modules', '__pycache__', 'venv', '.venv', 'dist', 'build', '.next'}
+    skip_files = {'.DS_Store', 'Thumbs.db'}
+
+    try:
+        if format == "zip":
+            zip_buffer = io.BytesIO()
+
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                for root, dirs, files in os.walk(str(validated_path)):
+                    dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
+
+                    for file in files:
+                        if file in skip_files or file.startswith('.'):
+                            continue
+
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, str(validated_path))
+
+                        try:
+                            zip_file.write(file_path, arc_name)
+                        except (PermissionError, OSError):
+                            pass
+
+            zip_buffer.seek(0)
+
+            return StreamingResponse(
+                zip_buffer,
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{archive_name}.zip"'
+                }
+            )
+
+        else:
+            tar_buffer = io.BytesIO()
+
+            with tarfile.open(fileobj=tar_buffer, mode='w:gz') as tar_file:
+                for root, dirs, files in os.walk(str(validated_path)):
+                    dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith('.')]
+
+                    for file in files:
+                        if file in skip_files or file.startswith('.'):
+                            continue
+
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, str(validated_path))
+
+                        try:
+                            tar_file.add(file_path, arcname=arc_name)
+                        except (PermissionError, OSError):
+                            pass
+
+            tar_buffer.seek(0)
+
+            return StreamingResponse(
+                tar_buffer,
+                media_type="application/gzip",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{archive_name}.tar.gz"'
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"Error creating archive: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
