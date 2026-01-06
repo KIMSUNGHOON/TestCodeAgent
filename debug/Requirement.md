@@ -1,17 +1,104 @@
 # Todos
 ~~* 현재 프로젝트가 Environment에도 호환이 잘 되도록 코드를 수정하고, Frontend UI/UX에도 잘 반영 될 수 있도록 해라.~~
-* Frontend 경로 호환성 개선
-* 메모리/리소스 최적화
-* UI/UX 개선 적용
+~~* Frontend 경로 호환성 개선~~
+~~* 메모리/리소스 최적화~~
+~~* UI/UX 개선 적용~~
 
 # Issues
-* @debug\s1.png 에 보면은 좀 conversations UI가 너무 비효율적이야... Stream방식이면 실시간으로 token이 생성되는것이 streaming으로 되야
-  하는데. 저게 뭔지.. 모르겠네. streaming을 제대로 UI에서 표현 못하는거 같은데. Todos의 UI/UX 개선 적용에 해당 문제를 반영 하도록 해.
-* @debug\conversations.log 확인해 보면 실제 대화 내용을 복사 해서 붙혀 넣었는데. 이거 Workflow status나 indicator와 전혀 연동이 되지 않네? 이게 의도 된건지? @debug\backend.log 도 제대로 의도 되로 된건지.. 확인이 필요해 보이네.
+1. 또 model type이 바뀌면 다시 문제가 생기는건 아니죠?
+2. Workflow 내에 agent 들이 현재 무슨 일을 하고 있는지 conversations에는 전혀 알 수가 없네요. 단순히 "실행 중..." 이라는 정보만
+  사용자에게 보여주네요. 이런 conversations ui는 사용자에게 지루함을 느끼게 하거나, 진행 상황을 알 수가 없습니다. Conversations UI/UX를
+  개선 할 필요가 있습니다. 당신이 생각했을때 개발자에게 도움이 되는 내용들을 streaming으로 UI에 rendering하는 방법 등 좋은 방법으로 개선
+  해주기를 바랍니다.
+3. 아래 Conversations 내용을 살펴보십시오. 
+   - 코드를 생성했으나, workspace디렉토리에는 아무런 파일이 저장이 되지 않았음.
+   - Conversations UI에서는 심지어 artifact 조차 markdown의 code block을 보여주지도 않음. 
+   - 각 agent들의 결과에 대해서도 언급이 없음. 정보가 너무 없음.
+
+"
+$
+I want to create a calculator in Python. Could you help me with the plan?
+
+✓ 완료
+복사
+모든 처리가 완료되었습니다.
+
+✓ 완료
+복사
+Workflow completed
+
+$
+Now, please implement the code.
+
+✓ 완료
+복사
+모든 처리가 완료되었습니다.
+
+$ workflow execute --stream
+✓
+[감독자]
+분석 완료: code_generation
+
+✓
+[감독자]
+Task identified as: code_generation
+
+✓
+[planning]
+PlanningAgent
+
+✓
+[coding]
+Successfully created 23 files using parallel execution (up to 23 concurrent)
+
+✓
+[orchestrator]
+Parallel execution completed with 23 concurrent agents. Generated 23 files.
+
+✓
+[review]
+Review completed: 23 files reviewed in parallel, 41 total issues found
+
+✓
+[orchestrator]
+Parallel review completed with 4 concurrent agents. Reviewed 23 files, found 41 issues.
+
+✓
+[fixcode]
+FixCodeAgent
+
+✓
+[review]
+ReviewAgent
+
+✓
+[fixcode]
+FixCodeAgent
+
+✓
+[review]
+ReviewAgent
+
+✓
+[orchestrator]
+Code review passed. Generated 1 file(s).
+
+✓
+[codegenerationhandler]
+코드 생성이 완료되었습니다.
+
+✓
+[unifiedagentmanager]
+모든 처리가 완료되었습니다.
+
+✓ 워크플로우 완료
+"
+4. 1,2 번이 모두 수행되면 모든 문서에 update하고, git commit & push 하십시오.
 
 # Reference
 * backend log는 (@debug\\*.log) 를 뒤질 것
 * frontend log는 (@debug\\*.log) 를 뒤질 것
+* conversations log는 (@debug\\*.log) 를 뒤질 것
 
 # 중요
 * 반드시 작업 내역을 해당 파일에 업데이트 할 것
@@ -23,6 +110,7 @@
 * Computing Resource가 뭐냐에 따라 적응형 최적화가 기본입니다. 물론 GPU에 따른 Model설정은 서버 관리자의 몫입니다.
 * 항상 기능 추가 및 수정에는 반드시 최종 로직 테스트 코드로 확인이 되어야합니다. (예: API 변경 또는 구현시에 동작 테스트 필수)
 * DeepSeek-R1, Qwen3, gpt-oss 이 세가지 모델을 서버 관리자가 사용할텐데, 항상 모델 설정에 따른 프롬프트 엔지니어링 전략, 시스템 프롬프트는 각 모델의 Guide를 참고 하도록 하시오.
+* 기능을 추가하거나, 수정한다음에 반드시 git commit을 하고 push를 하십시오. 
 
 # Environment
 * Nvidia RTX 3090 24GB Single Card
@@ -286,3 +374,94 @@ clean_text = re.sub(r'</?think>', '', clean_text, flags=re.IGNORECASE)
 1-13: (기존 작업들)
 14. CodeGenerationHandler 대화 컨텍스트 전달 로직 추가
 15. deepseek-r1 `<think>` 태그 처리 (parse_checklist, parse_code_blocks, parse_review, parse_task_type)
+
+### 22. Issue 2 해결: Conversations UI 진행 상황 개선 (2026-01-07)
+- **문제**: "실행 중..." 메시지만 표시되고 각 Agent가 무슨 작업을 하는지 보이지 않음
+- **원인**: `streaming_content`가 StreamUpdate에서 전달되지 않음
+- **해결**:
+
+#### Backend 수정:
+1. **`backend/core/response_aggregator.py`** (Line 86-87)
+   - `StreamUpdate` 클래스에 `streaming_content: Optional[str] = None` 필드 추가
+   - `to_dict()` 메서드에 `streaming_content` 포함
+
+2. **`backend/app/agent/handlers/base.py`** (Line 53)
+   - `StreamUpdate` 클래스에 `streaming_content` 필드 추가 (동기화)
+   - `to_dict()` 메서드 업데이트
+
+3. **`backend/app/agent/handlers/code_generation.py`** (Lines 165-172, 189)
+   - `execute_stream()`에서 workflow update의 `streaming_content` 직접 전달
+   - `streaming_content` 추출 로직 개선: `update.get("streaming_content") or update.get("content") or update.get("partial_output")`
+
+4. **`backend/app/agent/handlers/planning.py`** (Lines 183-184, 220-226, 245)
+   - LLM 스트리밍 중 `streaming_content` 추가
+   - 실시간 계획 내용 미리보기 전달
+
+#### Frontend 수정:
+1. **`frontend/src/types/api.ts`** (Line 107)
+   - `UnifiedStreamUpdate`에 `streaming_content?: string` 필드 추가
+   - `update_type`에 `'streaming'` 타입 추가
+
+2. **`frontend/src/components/WorkflowInterface.tsx`** (Lines 332-333, 543-546, 729-731)
+   - `updateAgentProgress()`에서 `streaming_content` 직접 확인 추가
+   - `liveOutputs` 업데이트 시 직접 streaming_content 사용
+   - `executeUnifiedWorkflow()`에서 `'streaming'` 타입 처리
+
+3. **`frontend/src/components/TerminalOutput.tsx`** (Lines 107-114, 121-173, 296)
+   - 핸들러 한글 이름 매핑 추가 (planninghandler, codegenerationhandler 등)
+   - `getAgentStatusMessage()` 함수 추가 - 에이전트별 상세 상태 메시지
+   - 라이브 출력 표시에 상세 상태 메시지 적용
+
+### 23. Issue 3 해결: Artifact 저장 및 표시 개선 (2026-01-07)
+- **문제**: `/chat/unified/stream`에서 artifact가 디스크에 저장되지 않음, UI에 code block 없음
+- **원인**: `unified_agent_manager.py`에 artifact 저장 로직 없음
+- **해결**:
+
+#### Backend 수정:
+1. **`backend/app/agent/unified_agent_manager.py`** (Lines 10-11, 277-339, 216-226, 254-275)
+   - `import aiofiles` 및 `from pathlib import Path` 추가
+   - `_save_artifact_to_workspace()` 메서드 추가:
+     - 경로 보안 처리 (path traversal 방지)
+     - 부모 디렉토리 자동 생성
+     - aiofiles로 비동기 파일 저장
+     - 저장 결과 반환 (saved, saved_path, saved_at, error)
+   - `_stream_response()`에서 artifact 저장 호출
+   - 저장된 파일 목록 및 개수 포함한 완료 메시지 생성
+
+#### Frontend 수정:
+1. **`frontend/src/components/WorkflowInterface.tsx`** (Lines 714-722)
+   - artifact 추출 시 `saved`, `saved_at`, `error`, `action` 필드 포함
+   - `savedFiles` 상태에 저장 상태 정보 추가
+
+### 예상 결과
+
+#### Before (개선 전)
+```
+[CodeGenerationHandler] 실행 중...
+모든 처리가 완료되었습니다.
+```
+
+#### After (개선 후)
+```
+[감독자] 요청을 분석하고 최적의 처리 방법을 결정하고 있습니다...
+[계획 수립] 개발 계획을 수립하고 있습니다...
+  ## 구현 계획
+  1. 프로젝트 구조 생성...
+[코드 생성] 코드를 생성하고 있습니다...
+  ✓ calculator.py (저장됨: C:\workspace\calculator.py)
+  ✓ test_calculator.py (저장됨: C:\workspace\test_calculator.py)
+모든 처리가 완료되었습니다. (2개 파일 생성)
+```
+
+## 수정 파일 목록 (Issue 2 & 3)
+
+| 순서 | 파일 | 변경 내용 |
+|-----|------|---------|
+| 1 | `backend/core/response_aggregator.py` | StreamUpdate에 streaming_content 추가 |
+| 2 | `backend/app/agent/handlers/base.py` | StreamUpdate 동기화 |
+| 3 | `backend/app/agent/handlers/code_generation.py` | streaming_content 전달 |
+| 4 | `backend/app/agent/handlers/planning.py` | streaming_content 전달 |
+| 5 | `backend/app/agent/unified_agent_manager.py` | artifact 저장 로직 추가 |
+| 6 | `frontend/src/types/api.ts` | 타입 확장 |
+| 7 | `frontend/src/components/WorkflowInterface.tsx` | streaming_content 처리 |
+| 8 | `frontend/src/components/TerminalOutput.tsx` | 에이전트별 상태 메시지, artifact 표시 |

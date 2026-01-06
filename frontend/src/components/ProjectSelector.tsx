@@ -3,6 +3,7 @@
  */
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client';
+import { getDefaultWorkspace } from '../utils/workspace';
 
 interface Project {
   name: string;
@@ -20,7 +21,7 @@ interface ProjectSelectorProps {
 const ProjectSelector = ({
   currentWorkspace,
   onProjectSelect,
-  baseWorkspace = '/home/user/workspace'
+  baseWorkspace = getDefaultWorkspace()
 }: ProjectSelectorProps) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);

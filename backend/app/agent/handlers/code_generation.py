@@ -162,6 +162,14 @@ class CodeGenerationHandler(BaseHandler):
                 status = update.get("status", "running")
                 message = update.get("message", "")
 
+                # streaming_content 추출 (워크플로우에서 전달된 실시간 출력)
+                streaming_content = (
+                    update.get("streaming_content") or
+                    update.get("content") or
+                    update.get("partial_output") or
+                    ""
+                )
+
                 # 아티팩트 수집
                 if update.get("artifacts"):
                     artifacts.extend(update["artifacts"])
@@ -178,6 +186,7 @@ class CodeGenerationHandler(BaseHandler):
                     update_type=update_type,
                     status=status,
                     message=message,
+                    streaming_content=streaming_content if streaming_content else None,
                     data=update
                 )
 

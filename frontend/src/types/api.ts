@@ -99,11 +99,12 @@ export interface UnifiedChatResponse {
  */
 export interface UnifiedStreamUpdate {
   agent: string;
-  update_type: 'thinking' | 'artifact' | 'progress' | 'completed' | 'error' | 'analysis' | 'done';
+  update_type: 'thinking' | 'artifact' | 'progress' | 'completed' | 'error' | 'analysis' | 'done' | 'streaming';
   status: 'running' | 'completed' | 'error';
   message: string;
   data?: Record<string, unknown>;
   timestamp?: string;
+  streaming_content?: string;  // Real-time detailed output from agent
 }
 
 /**
@@ -195,6 +196,8 @@ export interface TaskAnalysis {
   workflow_name: string;
   agents: string[];
   has_review_loop: boolean;
+  response_type?: string;  // Response type from supervisor analysis
+  complexity?: 'simple' | 'moderate' | 'complex' | 'critical';  // Task complexity level
 }
 
 // Decision info for review decisions
@@ -274,8 +277,11 @@ export interface CodePreview {
 export interface WorkflowUpdate {
   agent: string;
   agent_label?: string;  // Custom display name for the agent (task-based)
+  agent_title?: string;  // Display title for the agent
   task_description?: string;  // Description of what this agent is doing
-  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision' | 'mode_selection' | 'parallel_start' | 'parallel_batch' | 'parallel_complete' | 'shared_context' | 'code_preview' | 'project_info' | 'update' | 'streaming';
+  node?: string;  // Node name for agent progress mapping
+  timestamp?: string;  // Update timestamp
+  type: 'thinking' | 'artifact' | 'task_completed' | 'completed' | 'error' | 'agent_spawn' | 'workflow_created' | 'decision' | 'mode_selection' | 'parallel_start' | 'parallel_batch' | 'parallel_complete' | 'shared_context' | 'code_preview' | 'project_info' | 'update' | 'streaming' | 'progress' | 'analysis' | 'approved' | 'done';
   status: 'running' | 'completed' | 'error' | 'finished' | 'starting' | 'thinking' | 'streaming' | 'awaiting_approval';
   message?: string;
   // Real-time streaming content

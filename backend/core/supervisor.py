@@ -494,7 +494,8 @@ class SupervisorAgent:
             # English
             "review", "check", "analyze", "look at", "improve", "refactor",
         ]
-        if any(p in request_lower for p in review_patterns) and "코드" in request_lower or "code" in request_lower:
+        # Fixed: Proper operator precedence with parentheses
+        if any(p in request_lower for p in review_patterns) and ("코드" in request_lower or "code" in request_lower):
             return ResponseType.CODE_REVIEW
 
         # 4. Debugging patterns

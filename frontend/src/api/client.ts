@@ -13,6 +13,7 @@ import {
   UnifiedStreamUpdate,
   UnifiedContext,
 } from '../types/api';
+import { getDefaultWorkspace } from '../utils/workspace';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -595,7 +596,7 @@ class ApiClient {
   /**
    * List all projects in base workspace
    */
-  async listProjects(baseWorkspace: string = '/home/user/workspace'): Promise<{
+  async listProjects(baseWorkspace: string = getDefaultWorkspace()): Promise<{
     success: boolean;
     projects?: Array<{
       name: string;

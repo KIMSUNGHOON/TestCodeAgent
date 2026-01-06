@@ -7,6 +7,8 @@ Claude Code / OpenAI Codex 방식의 통합 워크플로우를 구현합니다:
 User Prompt → Supervisor → Handler → Response
 """
 import logging
+import aiofiles
+from pathlib import Path
 from typing import Dict, Any, Optional, Union, AsyncGenerator, List
 from datetime import datetime
 
@@ -197,6 +199,7 @@ class UnifiedAgentManager:
             update_type="analysis",
             status="completed",
             message=f"분석 완료: {analysis.get('response_type', 'unknown')}",
+            streaming_content=f"요청 분석 결과:\n- 응답 유형: {analysis.get('response_type', 'unknown')}\n- 복잡도: {analysis.get('complexity', 'unknown')}\n- 작업 유형: {analysis.get('task_type', 'unknown')}",
             data={
                 "response_type": analysis.get("response_type"),
                 "complexity": analysis.get("complexity"),
@@ -208,8 +211,19 @@ class UnifiedAgentManager:
         artifacts = []
         final_content = ""
         plan_file = None
+        workspace = context.workspace if context else None
 
         async for update in handler.execute_stream(user_message, analysis, context):
+            # 아티팩트가 있으면 workspace에 저장
+            if update.data and update.data.get("artifacts") and workspace:
+                saved_artifacts = []
+                for artifact in update.data["artifacts"]:
+                    if artifact.get("content") and not artifact.get("saved"):
+                        save_result = await self._save_artifact_to_workspace(artifact, workspace)
+                        artifact.update(save_result)
+                    saved_artifacts.append(artifact)
+                update.data["artifacts"] = saved_artifacts
+
             yield update
 
             # 최종 결과 수집
@@ -237,19 +251,92 @@ class UnifiedAgentManager:
             plan_file
         )
 
+        # 저장된 파일 목록 생성
+        saved_files = [
+            f"✓ {a.get('filename')} ({a.get('saved_path', '저장됨')})"
+            for a in artifacts if a.get("saved")
+        ]
+        saved_summary = "\n".join(saved_files) if saved_files else "생성된 파일 없음"
+
         # 최종 완료 업데이트
         yield StreamUpdate(
             agent="UnifiedAgentManager",
             update_type="done",
             status="completed",
             message="모든 처리가 완료되었습니다.",
+            streaming_content=f"## 작업 완료\n\n### 생성된 파일 ({len(artifacts)}개)\n{saved_summary}",
             data={
                 "session_id": session_id,
                 "artifact_count": len(artifacts),
+                "artifacts": artifacts,
                 "next_actions": next_actions,
                 "plan_file": plan_file
             }
         )
+
+    async def _save_artifact_to_workspace(
+        self,
+        artifact: Dict[str, Any],
+        workspace: str
+    ) -> Dict[str, Any]:
+        """Artifact를 워크스페이스에 저장
+
+        Args:
+            artifact: 저장할 artifact 정보 (filename, content, language)
+            workspace: 워크스페이스 경로
+
+        Returns:
+            Dict: 저장 결과 (saved, saved_path, saved_at, error)
+        """
+        try:
+            filename = artifact.get("filename", "code.py")
+            content = artifact.get("content", "")
+
+            if not content:
+                return {
+                    "saved": False,
+                    "saved_path": None,
+                    "saved_at": None,
+                    "error": "Empty content"
+                }
+
+            # 경로 정리 (보안: 경로 탈출 방지)
+            # 파일명에서 상위 디렉토리 이동 방지
+            safe_parts = []
+            for part in filename.replace("\\", "/").split("/"):
+                if part and part != ".." and part != ".":
+                    safe_parts.append(part)
+
+            if not safe_parts:
+                safe_parts = ["code.py"]
+
+            safe_filename = "/".join(safe_parts)
+            file_path = Path(workspace) / safe_filename
+
+            # 부모 디렉토리 생성
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # 파일 저장
+            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+                await f.write(content)
+
+            logger.info(f"Saved artifact to: {file_path}")
+
+            return {
+                "saved": True,
+                "saved_path": str(file_path),
+                "saved_at": datetime.now().isoformat(),
+                "error": None
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to save artifact: {e}")
+            return {
+                "saved": False,
+                "saved_path": None,
+                "saved_at": None,
+                "error": str(e)
+            }
 
     async def get_context(self, session_id: str) -> ConversationContext:
         """세션 컨텍스트 조회

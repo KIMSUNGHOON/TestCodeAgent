@@ -765,10 +765,12 @@ async def create_conversation(
     try:
         repo = ConversationRepository(db)
 
-        # Check if conversation already exists
+        # Get or create conversation (idempotent)
         existing = repo.get_conversation(session_id)
         if existing:
-            raise HTTPException(status_code=400, detail="Conversation already exists")
+            # Already exists - return existing conversation (idempotent behavior)
+            logger.debug(f"Conversation already exists: {session_id}, returning existing")
+            return existing.to_dict()
 
         conversation = repo.create_conversation(session_id, title, mode)
         return conversation.to_dict()

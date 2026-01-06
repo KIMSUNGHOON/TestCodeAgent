@@ -42,6 +42,7 @@ class StreamUpdate:
         message: 상태 메시지
         data: 추가 데이터
         timestamp: 타임스탬프
+        streaming_content: 실시간 상세 출력 (진행 중인 작업 내용)
     """
     agent: str
     update_type: str
@@ -49,6 +50,7 @@ class StreamUpdate:
     message: str
     data: Optional[Dict[str, Any]] = None
     timestamp: Optional[str] = None
+    streaming_content: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """딕셔너리로 변환"""
@@ -62,6 +64,8 @@ class StreamUpdate:
             result["data"] = self.data
         if self.timestamp:
             result["timestamp"] = self.timestamp
+        if self.streaming_content:
+            result["streaming_content"] = self.streaming_content
         return result
 
 

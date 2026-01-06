@@ -179,7 +179,8 @@ class PlanningHandler(BaseHandler):
             agent="PlanningHandler",
             update_type="thinking",
             status="running",
-            message="요청을 분석하고 있습니다..."
+            message="요청을 분석하고 있습니다...",
+            streaming_content="## 분석 시작\n- 요청 내용 파악 중...\n- 복잡도 평가 중..."
         )
 
         try:
@@ -203,17 +204,25 @@ class PlanningHandler(BaseHandler):
 
             # 스트리밍 LLM 호출
             plan_content = ""
+            last_update_len = 0
             async for chunk in self.llm.astream(messages):
                 if chunk.content:
                     plan_content += chunk.content
 
-                    # 진행 상황 업데이트 (100자마다)
-                    if len(plan_content) % 100 < 10:
+                    # 진행 상황 업데이트 (100자마다 또는 의미있는 변화가 있을 때)
+                    if len(plan_content) - last_update_len >= 100:
+                        last_update_len = len(plan_content)
+                        # think 태그 제거한 미리보기 생성
+                        preview = self._strip_think_tags(plan_content)
+                        # 최근 500자만 streaming_content로 전달
+                        preview_content = preview[-500:] if len(preview) > 500 else preview
+
                         yield StreamUpdate(
                             agent="PlanningHandler",
-                            update_type="progress",
+                            update_type="streaming",
                             status="running",
-                            message=f"계획 작성 중... ({len(plan_content)} 자)"
+                            message=f"계획 작성 중... ({len(plan_content)} 자)",
+                            streaming_content=preview_content
                         )
 
             # 정리 및 저장
@@ -233,6 +242,7 @@ class PlanningHandler(BaseHandler):
                 update_type="completed",
                 status="completed",
                 message=user_response[:200],
+                streaming_content=plan_content,
                 data={
                     "plan_file": plan_file,
                     "full_content": user_response

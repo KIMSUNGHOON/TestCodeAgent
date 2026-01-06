@@ -83,6 +83,7 @@ class StreamUpdate:
     message: str                                    # 메시지
     data: Optional[Dict[str, Any]] = None           # 추가 데이터
     timestamp: Optional[str] = None                 # 타임스탬프
+    streaming_content: Optional[str] = None         # 실시간 상세 출력 (진행 중인 작업 내용)
 
     def to_dict(self) -> Dict[str, Any]:
         """딕셔너리로 변환"""
@@ -96,6 +97,8 @@ class StreamUpdate:
             result["data"] = self.data
         if self.timestamp:
             result["timestamp"] = self.timestamp
+        if self.streaming_content:
+            result["streaming_content"] = self.streaming_content
         return result
 
 

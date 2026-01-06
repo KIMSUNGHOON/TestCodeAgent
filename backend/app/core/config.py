@@ -142,6 +142,16 @@ class Settings(BaseSettings):
     # Higher values for powerful GPUs (H100: 10-15, A100: 8-10, RTX 4090: 5-8)
     coder_batch_size: int = 10  # Default optimized for H100
 
+    # Max parallel coding agents
+    # H100 + vLLM: 25 (continuous batching)
+    # A100 + vLLM: 15
+    # RTX 4090 + vLLM: 8
+    # RTX 3090 + Ollama: 1-2 (sequential processing recommended)
+    max_parallel_agents: int = 2  # Default for Ollama/single GPU
+
+    # Enable parallel coding (set to False for sequential processing)
+    enable_parallel_coding: bool = True
+
     # =========================
     # Workspace Configuration
     # =========================
@@ -174,9 +184,35 @@ class Settings(BaseSettings):
 # Create settings instance
 settings = Settings()
 
-# Log loaded configuration at startup (helps debug .env loading issues)
-import logging
-_logger = logging.getLogger(__name__)
-_logger.info(f"📁 Config loaded from: {ENV_FILE} (exists: {ENV_FILE.exists()})")
-_logger.info(f"🔧 Coding endpoint: {settings.get_coding_endpoint}")
-_logger.info(f"🔧 Reasoning endpoint: {settings.get_reasoning_endpoint}")
+# Print loaded configuration at startup (before logging is configured)
+print("=" * 60)
+print("📁 CONFIGURATION LOADED")
+print("=" * 60)
+print(f"📂 .env file path: {ENV_FILE}")
+print(f"📂 .env file exists: {ENV_FILE.exists()}")
+print("-" * 60)
+print("🔧 LLM Settings:")
+print(f"   LLM_ENDPOINT: {settings.llm_endpoint}")
+print(f"   LLM_MODEL: {settings.llm_model}")
+print(f"   MODEL_TYPE: {settings.model_type or 'auto-detect'}")
+print(f"   REASONING_ENDPOINT: {settings.get_reasoning_endpoint}")
+print(f"   CODING_ENDPOINT: {settings.get_coding_endpoint}")
+print(f"   REASONING_MODEL: {settings.get_reasoning_model}")
+print(f"   CODING_MODEL: {settings.get_coding_model}")
+print("-" * 60)
+print("⚙️ Workflow Settings:")
+print(f"   AGENT_FRAMEWORK: {settings.agent_framework}")
+print(f"   MAX_PARALLEL_AGENTS: {settings.max_parallel_agents}")
+print(f"   ENABLE_PARALLEL_CODING: {settings.enable_parallel_coding}")
+print(f"   CODER_BATCH_SIZE: {settings.coder_batch_size}")
+print(f"   MAX_REVIEW_ITERATIONS: {settings.max_review_iterations}")
+print("-" * 60)
+print("📂 Workspace Settings:")
+print(f"   DEFAULT_WORKSPACE: {settings.default_workspace}")
+print("-" * 60)
+print("🌐 Server Settings:")
+print(f"   API_HOST: {settings.api_host}")
+print(f"   API_PORT: {settings.api_port}")
+print(f"   CORS_ORIGINS: {settings.cors_origins}")
+print(f"   LOG_LEVEL: {settings.log_level}")
+print("=" * 60)

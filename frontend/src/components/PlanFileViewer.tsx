@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { getBasename } from '../utils/workspace';
 
 interface PlanFileViewerProps {
   planFilePath: string;
@@ -71,7 +72,7 @@ const PlanFileViewer = ({
   if (!isOpen) return null;
 
   // Extract filename from path
-  const filename = planFilePath.split('/').pop() || 'plan.md';
+  const filename = getBasename(planFilePath);
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">

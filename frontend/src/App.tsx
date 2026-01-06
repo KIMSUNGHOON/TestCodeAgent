@@ -8,6 +8,7 @@ import Terminal from './components/Terminal';
 import PromptLibrary from './components/PromptLibrary';
 import { WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
+import { getDefaultWorkspace } from './utils/workspace';
 
 interface FrameworkInfo {
   framework: string;
@@ -18,7 +19,7 @@ interface FrameworkInfo {
 function App() {
   const [sessionId] = useState(() => `session-${Date.now()}`);
   const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
-  const [workspace, setWorkspace] = useState<string>('/home/user/workspace');
+  const [workspace, setWorkspace] = useState<string>(() => getDefaultWorkspace());
   const [showTerminal, setShowTerminal] = useState(false);
   const [showPromptLibrary, setShowPromptLibrary] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<string>('');

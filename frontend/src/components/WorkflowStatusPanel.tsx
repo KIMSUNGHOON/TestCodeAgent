@@ -71,7 +71,7 @@ const WorkflowStatusPanel = ({
   streamingContent,
   savedFiles,
   projectDir,
-  sessionId,
+  sessionId: _sessionId,
 }: WorkflowStatusPanelProps) => {
   const [expandedSections, setExpandedSections] = useState({
     output: true,

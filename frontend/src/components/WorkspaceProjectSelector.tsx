@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client';
+import { getDefaultWorkspacePlaceholder } from '../utils/workspace';
 
 interface Project {
   name: string;
@@ -222,7 +223,7 @@ const WorkspaceProjectSelector = ({
                       if (e.key === 'Escape') setIsEditingWorkspace(false);
                     }}
                     className="w-full px-2 py-1 text-sm border border-[#DA7756] rounded focus:outline-none focus:ring-2 focus:ring-[#DA7756]"
-                    placeholder="/home/user/workspace"
+                    placeholder={getDefaultWorkspacePlaceholder()}
                     autoFocus
                   />
                   <div className="mt-2 text-xs text-[#999999]">

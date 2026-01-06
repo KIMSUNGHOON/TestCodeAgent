@@ -7,7 +7,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
-import { WorkflowUpdate, Artifact, WorkflowInfo, HITLRequest, HITLCheckpointType, UnifiedStreamUpdate } from '../types/api';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { WorkflowUpdate, Artifact, WorkflowInfo, HITLRequest, HITLCheckpointType } from '../types/api';
 import SharedContextViewer from './SharedContextViewer';
 import WorkflowGraph from './WorkflowGraph';
 import WorkspaceProjectSelector from './WorkspaceProjectSelector';
@@ -19,6 +21,7 @@ import TerminalOutput from './TerminalOutput';
 import NextActionsPanel from './NextActionsPanel';
 import PlanFileViewer from './PlanFileViewer';
 import apiClient from '../api/client';
+import { getDefaultWorkspace, getDefaultWorkspacePlaceholder } from '../utils/workspace';
 
 // Agent status for progress tracking
 interface AgentProgressStatus {
@@ -100,15 +103,15 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Workspace configuration
+  // Workspace configuration - use cross-platform defaults
   const [workspace, setWorkspace] = useState<string>(() => {
-    return workspaceProp || localStorage.getItem('workflow_workspace') || '/home/user/workspace';
+    return workspaceProp || getDefaultWorkspace();
   });
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState<boolean>(() => {
     return !localStorage.getItem('workflow_workspace'); // Show on first use
   });
   const [workspaceInput, setWorkspaceInput] = useState<string>(() => {
-    return localStorage.getItem('workflow_workspace') || '/home/user/workspace';
+    return getDefaultWorkspace();
   });
   const [projectName, setProjectName] = useState<string>('');
   const [workspaceStep, setWorkspaceStep] = useState<'project' | 'path'>('project'); // Two-step dialog
@@ -146,19 +149,34 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const [tempSystemPrompt, setTempSystemPrompt] = useState('');
 
-  // Enhanced progress tracking (including refiner for refinement loop)
-  const [agentProgress, setAgentProgress] = useState<AgentProgressStatus[]>([
-    { name: 'supervisor', title: '🧠 Supervisor', description: 'Task Analysis', status: 'pending' },
-    { name: 'architect', title: '🏗️ Architect', description: 'Project Design', status: 'pending' },
-    { name: 'coder', title: '💻 Coder', description: 'Implementation', status: 'pending' },
-    { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
-    { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
-    { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
-    { name: 'refiner', title: '🔧 Refiner', description: 'Code Refinement', status: 'pending' },
-    { name: 'aggregator', title: '📊 Aggregator', description: 'Results Aggregation', status: 'pending' },
-    { name: 'hitl', title: '👤 Human Review', description: 'Awaiting Approval', status: 'pending' },
-    { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
-  ]);
+  // Agent info mapping for dynamic agent display
+  const getAgentInfo = (name: string): { title: string; description: string } => {
+    const agentMap: Record<string, { title: string; description: string }> = {
+      'supervisor': { title: '🧠 Supervisor', description: 'Task Analysis' },
+      'architect': { title: '🏗️ Architect', description: 'Project Design' },
+      'coder': { title: '💻 Coder', description: 'Implementation' },
+      'reviewer': { title: '👀 Reviewer', description: 'Code Review' },
+      'qa_gate': { title: '🧪 QA Tester', description: 'Testing' },
+      'security_gate': { title: '🔒 Security', description: 'Security Audit' },
+      'refiner': { title: '🔧 Refiner', description: 'Code Refinement' },
+      'aggregator': { title: '📊 Aggregator', description: 'Results Aggregation' },
+      'hitl': { title: '👤 Human Review', description: 'Awaiting Approval' },
+      'persistence': { title: '💾 Persistence', description: 'Saving Files' },
+      'unifiedagentmanager': { title: '🎯 UnifiedAgentManager', description: 'Workflow Management' },
+      'planninghandler': { title: '📋 PlanningHandler', description: 'Plan Generation' },
+      'codegenerationhandler': { title: '💻 CodeGenerator', description: 'Code Generation' },
+      'orchestrator': { title: '🎭 Orchestrator', description: 'Task Orchestration' },
+      'workspaceexplorer': { title: '🔍 Explorer', description: 'Workspace Analysis' },
+    };
+    const info = agentMap[name.toLowerCase()];
+    if (info) return info;
+    // Fallback: create title from name
+    const formattedName = name.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+    return { title: `⚡ ${formattedName}`, description: 'Processing' };
+  };
+
+  // Enhanced progress tracking - starts empty, dynamically populated
+  const [agentProgress, setAgentProgress] = useState<AgentProgressStatus[]>([]);
   const [totalProgress, setTotalProgress] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | undefined>();
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -221,18 +239,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
   // Reset progress when workflow starts
   const resetProgress = () => {
-    setAgentProgress([
-      { name: 'supervisor', title: '🧠 Supervisor', description: 'Task Analysis', status: 'pending' },
-      { name: 'architect', title: '🏗️ Architect', description: 'Project Design', status: 'pending' },
-      { name: 'coder', title: '💻 Coder', description: 'Implementation', status: 'pending' },
-      { name: 'reviewer', title: '👀 Reviewer', description: 'Code Review', status: 'pending' },
-      { name: 'qa_gate', title: '🧪 QA Tester', description: 'Testing', status: 'pending' },
-      { name: 'security_gate', title: '🔒 Security', description: 'Security Audit', status: 'pending' },
-      { name: 'refiner', title: '🔧 Refiner', description: 'Code Refinement', status: 'pending' },
-      { name: 'aggregator', title: '📊 Aggregator', description: 'Results Aggregation', status: 'pending' },
-      { name: 'hitl', title: '👤 Human Review', description: 'Awaiting Approval', status: 'pending' },
-      { name: 'persistence', title: '💾 Persistence', description: 'Saving Files', status: 'pending' },
-    ]);
+    // Reset to empty - agents will be added dynamically as they run
+    setAgentProgress([]);
     setTotalProgress(0);
     setEstimatedTimeRemaining(undefined);
     setElapsedTime(0);
@@ -254,14 +262,75 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   // Refinement loop state (tracked for potential future UI display)
   const [_refinementIteration, setRefinementIteration] = useState(0);
 
+  // Map backend node names to frontend agent names
+  const mapNodeToAgent = (nodeName: string): string => {
+    const normalizedName = nodeName?.toLowerCase().replace(/[^a-z]/g, '') || '';
+
+    // Direct matches
+    const directMapping: Record<string, string> = {
+      'supervisor': 'supervisor',
+      'supervisoragent': 'supervisor',
+      'architect': 'architect',
+      'architectagent': 'architect',
+      'planning': 'architect',
+      'planningagent': 'architect',
+      'planninghandler': 'architect',
+      'coder': 'coder',
+      'coderagent': 'coder',
+      'coding': 'coder',
+      'codingagent': 'coder',
+      'codegenerationhandler': 'coder',
+      'reviewer': 'reviewer',
+      'reviewagent': 'reviewer',
+      'review': 'reviewer',
+      'qa': 'qa_gate',
+      'qagate': 'qa_gate',
+      'qatester': 'qa_gate',
+      'security': 'security_gate',
+      'securitygate': 'security_gate',
+      'refiner': 'refiner',
+      'refinement': 'refiner',
+      'fixcodeagent': 'refiner',
+      'aggregator': 'aggregator',
+      'persistence': 'persistence',
+      'hitl': 'hitl',
+      'human': 'hitl',
+      'humanreview': 'hitl',
+      'orchestrator': 'supervisor',
+      'workspaceexplorer': 'architect',
+      'unifiedagentmanager': 'supervisor',
+    };
+
+    if (directMapping[normalizedName]) {
+      return directMapping[normalizedName];
+    }
+
+    // Pattern matching for partial matches
+    if (normalizedName.includes('supervis') || normalizedName.includes('orchestr')) return 'supervisor';
+    if (normalizedName.includes('plan') || normalizedName.includes('architect')) return 'architect';
+    if (normalizedName.includes('cod') || normalizedName.includes('implement')) return 'coder';
+    if (normalizedName.includes('review') || normalizedName.includes('검토')) return 'reviewer';
+    if (normalizedName.includes('qa') || normalizedName.includes('test')) return 'qa_gate';
+    if (normalizedName.includes('secur')) return 'security_gate';
+    if (normalizedName.includes('refin') || normalizedName.includes('fix')) return 'refiner';
+    if (normalizedName.includes('aggreg')) return 'aggregator';
+    if (normalizedName.includes('persist') || normalizedName.includes('save')) return 'persistence';
+    if (normalizedName.includes('human') || normalizedName.includes('hitl') || normalizedName.includes('approval')) return 'hitl';
+
+    // Return original if no match found
+    return normalizedName;
+  };
+
   // Update agent progress from event
   const updateAgentProgress = (event: any) => {
-    const nodeName = event.node;
+    const rawNodeName = event.node;
+    const nodeName = mapNodeToAgent(rawNodeName);
     const status = event.status;
     const executionTime = event.updates?.execution_time;
     const agentTitle = event.agent_title;
     const agentDescription = event.agent_description;
-    const streamingContent = event.updates?.streaming_content;
+    // Check both direct streaming_content and updates.streaming_content
+    const streamingContent = event.streaming_content || event.updates?.streaming_content;
     const currentRefinementIteration = event.updates?.refinement_iteration || event.updates?.iteration;
 
     // Track refinement iteration
@@ -362,56 +431,81 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     }
 
     setAgentProgress(prev => {
-      const updated = prev.map(agent => {
-        if (agent.name === nodeName) {
-          let newStatus: AgentProgressStatus['status'] = agent.status;
-          if (status === 'starting' || status === 'running' || status === 'thinking' || status === 'streaming' || status === 'awaiting_approval' || status === 'waiting') {
-            newStatus = 'running';
-          } else if (status === 'completed' || status === 'approved') {
-            newStatus = 'completed';
-          } else if (status === 'error' || status === 'rejected' || status === 'timeout') {
-            newStatus = 'error';
-          }
+      // Skip workflow-level events for agent list
+      if (nodeName === 'workflow') return prev;
 
-          // Build description with refinement iteration info
-          let description = agentDescription || agent.description;
-          if (currentRefinementIteration && currentRefinementIteration > 0) {
-            // Add iteration info for quality gates and refiner
-            if (['reviewer', 'qa_gate', 'security_gate'].includes(nodeName)) {
-              description = `${description} (iter ${currentRefinementIteration + 1})`;
-            } else if (nodeName === 'refiner') {
-              description = `Iteration ${currentRefinementIteration}/${event.updates?.max_iterations || 3}`;
-            }
-          }
+      // Check if agent already exists
+      const existingAgent = prev.find(a => a.name === nodeName);
 
-          // Capture token usage if provided in event
-          const eventTokenUsage = event.updates?.token_usage;
-          let tokenUsage = agent.tokenUsage;
-          if (eventTokenUsage) {
-            tokenUsage = {
-              promptTokens: eventTokenUsage.prompt_tokens || eventTokenUsage.promptTokens || 0,
-              completionTokens: eventTokenUsage.completion_tokens || eventTokenUsage.completionTokens || 0,
-              totalTokens: eventTokenUsage.total_tokens || eventTokenUsage.totalTokens || 0,
+      // Determine new status
+      let newStatus: AgentProgressStatus['status'] = 'pending';
+      if (status === 'starting' || status === 'running' || status === 'thinking' || status === 'streaming' || status === 'awaiting_approval' || status === 'waiting') {
+        newStatus = 'running';
+      } else if (status === 'completed' || status === 'approved') {
+        newStatus = 'completed';
+      } else if (status === 'error' || status === 'rejected' || status === 'timeout') {
+        newStatus = 'error';
+      }
+
+      // Build description with refinement iteration info
+      const agentInfo = getAgentInfo(nodeName);
+      let description = agentDescription || (existingAgent?.description || agentInfo.description);
+      if (currentRefinementIteration && currentRefinementIteration > 0) {
+        if (['reviewer', 'qa_gate', 'security_gate'].includes(nodeName)) {
+          description = `${description} (iter ${currentRefinementIteration + 1})`;
+        } else if (nodeName === 'refiner') {
+          description = `Iteration ${currentRefinementIteration}/${event.updates?.max_iterations || 3}`;
+        }
+      }
+
+      // Capture token usage if provided in event
+      const eventTokenUsage = event.updates?.token_usage;
+      let tokenUsage = existingAgent?.tokenUsage;
+      if (eventTokenUsage) {
+        tokenUsage = {
+          promptTokens: eventTokenUsage.prompt_tokens || eventTokenUsage.promptTokens || 0,
+          completionTokens: eventTokenUsage.completion_tokens || eventTokenUsage.completionTokens || 0,
+          totalTokens: eventTokenUsage.total_tokens || eventTokenUsage.totalTokens || 0,
+        };
+      }
+
+      let updated: AgentProgressStatus[];
+
+      if (existingAgent) {
+        // Update existing agent
+        updated = prev.map(agent => {
+          if (agent.name === nodeName) {
+            return {
+              ...agent,
+              title: agentTitle || agent.title,
+              description: description,
+              status: newStatus,
+              executionTime: executionTime !== undefined ? executionTime : agent.executionTime,
+              streamingContent: streamingContent || agent.streamingContent,
+              tokenUsage: tokenUsage,
             };
           }
-
-          return {
-            ...agent,
-            title: agentTitle || agent.title,
-            description: description,
-            status: newStatus,
-            executionTime: executionTime !== undefined ? executionTime : agent.executionTime,
-            streamingContent: streamingContent || agent.streamingContent,
-            tokenUsage: tokenUsage,
-          };
-        }
-        return agent;
-      });
+          return agent;
+        });
+      } else {
+        // Add new agent dynamically
+        const newAgent: AgentProgressStatus = {
+          name: nodeName,
+          title: agentTitle || agentInfo.title,
+          description: description,
+          status: newStatus,
+          executionTime: executionTime,
+          streamingContent: streamingContent,
+          tokenUsage: tokenUsage,
+        };
+        updated = [...prev, newAgent];
+      }
 
       // Calculate total progress
       const completedCount = updated.filter(a => a.status === 'completed').length;
       const runningCount = updated.filter(a => a.status === 'running').length;
-      const progress = ((completedCount + runningCount * 0.5) / updated.length) * 100;
+      const totalAgents = updated.length || 1;
+      const progress = ((completedCount + runningCount * 0.5) / totalAgents) * 100;
       setTotalProgress(Math.min(progress, 100));
 
       return updated;
@@ -432,8 +526,9 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
     } else if (event.updates?.streaming_file) {
       setCurrentStreamingFile(event.updates.streaming_file);
     }
-    if (event.updates?.streaming_content) {
-      setCurrentStreamingContent(event.updates.streaming_content);
+    // Update current streaming content (check both direct and updates.streaming_content)
+    if (streamingContent) {
+      setCurrentStreamingContent(streamingContent);
     }
 
     // ALWAYS update live outputs for agent status changes (not just when streaming_content exists)
@@ -445,10 +540,11 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         const existing = prev.get(nodeName);
 
         // Only update if status changed or new content available
-        const newContent = event.updates?.streaming_content || existing?.content || '';
+        // Check both direct streaming_content and updates.streaming_content
+        const newContent = streamingContent || existing?.content || '';
         const shouldUpdate = !existing ||
           existing.status !== status ||
-          event.updates?.streaming_content;
+          streamingContent;
 
         if (shouldUpdate) {
           newMap.set(nodeName, {
@@ -596,6 +692,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         const workflowUpdate: WorkflowUpdate = {
           agent: update.agent,
           agent_title: update.agent,
+          node: update.agent,  // Add node for updateAgentProgress mapping
           status: update.status,
           message: update.message,
           type: update.update_type,
@@ -606,8 +703,11 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         if (update.update_type === 'analysis' && update.data) {
           workflowUpdate.task_analysis = {
             response_type: update.data.response_type as string,
-            complexity: update.data.complexity as string,
+            complexity: update.data.complexity as 'simple' | 'moderate' | 'complex' | 'critical' | undefined,
             task_type: update.data.task_type as string,
+            workflow_name: '',
+            agents: [],
+            has_review_loop: false,
           };
         }
 
@@ -619,18 +719,25 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               language: a.language || 'text',
               content: a.content || '',
               saved_path: a.saved_path,
+              saved: a.saved || false,
+              saved_at: a.saved_at,
+              error: a.error,
+              action: a.saved ? 'created' : undefined,
             }));
             setSavedFiles(prev => [...prev, ...workflowUpdate.artifacts!]);
           }
-          // Extract full content for display
+          // Extract full content for display, also check streaming_content
           if (update.data.full_content) {
             workflowUpdate.streaming_content = update.data.full_content as string;
+          } else if (update.streaming_content) {
+            workflowUpdate.streaming_content = update.streaming_content;
           }
         }
 
-        if (update.update_type === 'thinking' || update.update_type === 'progress') {
+        if (update.update_type === 'thinking' || update.update_type === 'progress' || update.update_type === 'streaming') {
           setIsThinking(true);
-          workflowUpdate.streaming_content = update.message;
+          // Use streaming_content directly if available, fallback to message
+          workflowUpdate.streaming_content = update.streaming_content || update.message;
         }
 
         if (update.update_type === 'done') {
@@ -660,9 +767,21 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         // Update agent progress
         updateAgentProgress(workflowUpdate);
 
-        // Add to updates
+        // Add to allUpdates for history (all updates)
         allUpdates.push(workflowUpdate);
-        setUpdates(prev => [...prev, workflowUpdate]);
+
+        // Only add significant updates to display (filter streaming noise)
+        // Significant: completed, error, artifact, analysis, decision, mode_selection, agent_spawn, approved
+        // Skip: thinking, progress, streaming (these are handled by liveOutputs)
+        const significantTypes = ['completed', 'error', 'artifact', 'analysis', 'decision', 'mode_selection', 'approved', 'done'];
+        const isSignificant = significantTypes.includes(update.update_type) ||
+                              (workflowUpdate.artifacts && workflowUpdate.artifacts.length > 0) ||
+                              workflowUpdate.status === 'error' ||
+                              workflowUpdate.status === 'completed';
+
+        if (isSignificant) {
+          setUpdates(prev => [...prev, workflowUpdate]);
+        }
       }
 
       // Save final state
@@ -1179,7 +1298,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                   type="text"
                   value={workspaceInput}
                   onChange={(e) => setWorkspaceInput(e.target.value)}
-                  placeholder="/home/user/workspace"
+                  placeholder={getDefaultWorkspacePlaceholder()}
                   className="w-full px-2 sm:px-3 py-1.5 sm:py-2 bg-gray-800 text-gray-100 placeholder-gray-600 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-700 font-mono text-xs sm:text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -1216,7 +1335,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               {workspaceStep === 'project' && (
                 <button
                   onClick={() => {
-                    const defaultPath = '/home/user/workspace/new-project';
+                    const defaultPath = `${getDefaultWorkspacePlaceholder()}/new-project`;
                     setWorkspace(defaultPath);
                     localStorage.setItem('workflow_workspace', defaultPath);
                     setShowWorkspaceDialog(false);
@@ -1343,7 +1462,34 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                         prose-ul:my-1 prose-ol:my-1
                         prose-code:text-cyan-400 prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded
                         prose-strong:text-blue-300 prose-em:text-blue-300">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={{
+                            code(props) {
+                              const { children, className, ...rest } = props;
+                              const match = /language-(\w+)/.exec(className || '');
+                              return match ? (
+                                <SyntaxHighlighter
+                                  style={oneDark}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  customStyle={{
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    margin: '8px 0',
+                                    fontSize: '11px',
+                                  }}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className={`${className || ''} bg-gray-800 px-1 py-0.5 rounded text-cyan-400 text-[10px]`} {...rest}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
                           {turn.content}
                         </ReactMarkdown>
                       </div>
@@ -1374,7 +1520,34 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                         prose-p:text-gray-400 prose-p:my-1
                         prose-li:text-gray-400 prose-li:my-0.5
                         prose-code:text-green-400 prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm, remarkBreaks]}
+                          components={{
+                            code(props) {
+                              const { children, className, ...rest } = props;
+                              const match = /language-(\w+)/.exec(className || '');
+                              return match ? (
+                                <SyntaxHighlighter
+                                  style={oneDark}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  customStyle={{
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    margin: '8px 0',
+                                    fontSize: '11px',
+                                  }}
+                                >
+                                  {String(children).replace(/\n$/, '')}
+                                </SyntaxHighlighter>
+                              ) : (
+                                <code className={`${className || ''} bg-gray-800 px-1 py-0.5 rounded text-green-400 text-[10px]`} {...rest}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
                           {turn.content}
                         </ReactMarkdown>
                       </div>
@@ -1571,6 +1744,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               <WorkspaceProjectSelector
                 currentWorkspace={workspace}
                 currentProject={workspace}
+                sessionId={sessionId}
                 onWorkspaceChange={(newWorkspace) => {
                   setWorkspace(newWorkspace);
                   if (onWorkspaceChange) {
@@ -1771,7 +1945,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
           planFilePath={planFilePath}
           isOpen={isPlanViewerOpen}
           onClose={() => setIsPlanViewerOpen(false)}
-          onStartCodeGeneration={(planContent) => {
+          onStartCodeGeneration={(_planContent) => {
             // Set input to "Execute the plan" or similar and auto-submit
             setInput('위 계획대로 코드 생성을 시작해주세요.');
             // Close the modal first
