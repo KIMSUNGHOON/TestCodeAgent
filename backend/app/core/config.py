@@ -141,7 +141,7 @@ class Settings(BaseSettings):
     agent_framework: Literal["microsoft", "langchain", "deepagent"] = "microsoft"
 
     # Workflow Configuration
-    max_review_iterations: int = 3  # Maximum code review/fix iterations
+    max_review_iterations: int = 1  # Maximum code review/fix iterations (default: 1 for speed)
 
     # Coder batch size - for parallel file generation display
     # Higher values for powerful GPUs (H100: 10-15, A100: 8-10, RTX 4090: 5-8)
