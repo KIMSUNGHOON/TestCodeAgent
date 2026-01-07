@@ -1084,12 +1084,12 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
             if task_type in ["code_generation", "bug_fix", "refactoring"]:
                 # Execute standard Planning -> Coding -> Review loop
                 async for update in self._execute_coding_workflow(
-                    user_request, task_type, template, workflow_id, max_iterations
+                    user_request, task_type, template, workflow_id, max_iterations, project_context
                 ):
                     yield update
             elif task_type == "test_generation":
                 async for update in self._execute_test_workflow(
-                    user_request, template, workflow_id, max_iterations
+                    user_request, template, workflow_id, max_iterations, project_context
                 ):
                     yield update
             elif task_type == "code_review":
@@ -1105,7 +1105,7 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
             else:
                 # Fallback to general coding workflow
                 async for update in self._execute_coding_workflow(
-                    user_request, task_type, template, workflow_id, max_iterations
+                    user_request, task_type, template, workflow_id, max_iterations, project_context
                 ):
                     yield update
 
@@ -1125,7 +1125,8 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
         task_type: TaskType,
         template: Dict[str, Any],
         workflow_id: str,
-        max_iterations: int
+        max_iterations: int,
+        project_context: str = ""
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Execute the standard coding workflow (Planning -> Coding -> Review -> Fix loop)."""
 
@@ -2494,12 +2495,13 @@ Provide detailed review focusing on this specific file."""
         user_request: str,
         template: Dict[str, Any],
         workflow_id: str,
-        max_iterations: int
+        max_iterations: int,
+        project_context: str = ""
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """Execute test generation workflow."""
         # Simplified - use coding workflow structure
         async for update in self._execute_coding_workflow(
-            user_request, "test_generation", template, workflow_id, max_iterations
+            user_request, "test_generation", template, workflow_id, max_iterations, project_context
         ):
             yield update
 
