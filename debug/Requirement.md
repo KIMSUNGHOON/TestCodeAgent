@@ -1428,4 +1428,4 @@ Testing Context Manager...
 | 4 | `backend/tests/test_context_manager.py` | 테스트 코드 작성 (NEW) |
 | 5 | `docs/CONTEXT_IMPROVEMENT_PLAN.md` | Phase 2 완료 상태로 업데이트 |
 
-**Commit**: (다음)
+**Commit**: `a7fd3f9 - feat: Phase 2 Context Improvement - Compression, extraction, and agent filtering`

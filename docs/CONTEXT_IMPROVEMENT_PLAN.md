@@ -307,5 +307,5 @@ class SessionMemory:
 - 중요 정보 자동 추출: 파일명, 에러, 결정사항, 사용자 선호도
 - 에이전트별 필터링: Coder/Reviewer/Refiner/Security/Testing 각각 관련 컨텍스트만 전달
 - Supervisor, Coder 에이전트에 적용
-- 전체 기능 테스트 작성 및 통과
-- Commit: (다음)
+- 전체 기능 테스트 작성 및 통과 (5개 테스트 모두 통과)
+- Commit: `a7fd3f9`
