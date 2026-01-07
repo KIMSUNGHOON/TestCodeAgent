@@ -1,4 +1,5 @@
 """API routes for the coding agent."""
+import asyncio
 import logging
 import json
 from pathlib import Path
@@ -27,6 +28,7 @@ from app.core.session_store import get_session_store
 from app.db import get_db, ConversationRepository
 from app.utils.security import sanitize_path, SecurityError
 from app.services import WorkflowService
+from app.services.code_indexer import get_code_indexer
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1454,7 +1456,15 @@ async def set_workspace(request: dict):
 
         await session_store.set_workspace(session_id, str(validated_path))
 
-        return {"success": True, "workspace": str(validated_path)}
+        # Start background code indexing for RAG
+        indexer = get_code_indexer(str(validated_path), session_id)
+        asyncio.create_task(
+            indexer.index_project(incremental=True),
+            name=f"index_{session_id}"
+        )
+        logger.info(f"Started background indexing for workspace: {validated_path}")
+
+        return {"success": True, "workspace": str(validated_path), "indexing": "started"}
 
     except SecurityError as e:
         logger.warning(f"Security violation in set_workspace: {e}")
@@ -1476,6 +1486,73 @@ async def get_workspace(session_id: str = "default"):
     """
     workspace = await session_store.get_workspace(session_id)
     return {"success": True, "workspace": workspace}
+
+
+@router.post("/workspace/index")
+async def index_workspace(request: dict):
+    """Manually trigger code indexing for workspace.
+
+    Args:
+        request: Contains session_id and optional incremental flag
+
+    Returns:
+        Indexing statistics
+    """
+    session_id = request.get("session_id", "default")
+    incremental = request.get("incremental", True)
+    max_files = request.get("max_files", None)
+
+    workspace = await session_store.get_workspace(session_id)
+    if not workspace:
+        return {"success": False, "error": "No workspace set for this session"}
+
+    try:
+        indexer = get_code_indexer(workspace, session_id)
+        stats = await indexer.index_project(incremental=incremental, max_files=max_files)
+
+        return {
+            "success": True,
+            "workspace": workspace,
+            "stats": {
+                "indexed": stats.indexed,
+                "skipped": stats.skipped,
+                "errors": stats.errors,
+                "total_chunks": stats.total_chunks,
+                "files_processed": stats.files_processed[:20],  # Limit response size
+                "error_files": stats.error_files
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error indexing workspace: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@router.get("/workspace/index/stats")
+async def get_index_stats(session_id: str = "default"):
+    """Get indexing statistics for workspace.
+
+    Args:
+        session_id: Session identifier
+
+    Returns:
+        Vector DB statistics for the session
+    """
+    from app.services.vector_db import vector_db
+
+    workspace = await session_store.get_workspace(session_id)
+    if not workspace:
+        return {"success": False, "error": "No workspace set for this session"}
+
+    try:
+        stats = vector_db.get_stats()
+        return {
+            "success": True,
+            "workspace": workspace,
+            "vector_stats": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting index stats: {e}")
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/workspace/write")
