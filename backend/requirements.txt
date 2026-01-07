@@ -13,8 +13,8 @@ agent-framework>=1.0.0b1
 # Database
 sqlalchemy>=2.0.0
 
-# Vector DB for semantic search (optional - comment out if causing conflicts)
-# chromadb>=0.4.0
+# Vector DB for semantic search (RAG Phase 3)
+chromadb>=0.4.0
 
 # Caching
 redis>=5.0.0
