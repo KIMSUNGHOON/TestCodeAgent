@@ -56,3 +56,7 @@ htmlcov/
 
 # Docker
 *.pid
+
+# Data and workspace directories
+data/
+workspace/
