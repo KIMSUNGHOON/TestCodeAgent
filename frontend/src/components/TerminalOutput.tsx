@@ -525,6 +525,7 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
                     📝 {update.artifacts.length}개 파일 처리됨
                     {update.artifacts.some(a => a.action === 'created') && <span className="text-green-400 ml-1">({update.artifacts.filter(a => a.action === 'created').length}개 생성)</span>}
                     {update.artifacts.some(a => a.action === 'modified') && <span className="text-yellow-400 ml-1">({update.artifacts.filter(a => a.action === 'modified').length}개 수정)</span>}
+                    {update.artifacts.some(a => a.action === 'deleted') && <span className="text-red-400 ml-1">({update.artifacts.filter(a => a.action === 'deleted').length}개 삭제)</span>}
                   </div>
                 </div>
               )}
@@ -535,8 +536,14 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
                   <div className="text-gray-500 text-[10px] sm:text-xs">
                     📝 파일 처리됨: <span className="text-gray-300 font-mono">{update.artifact.filename}</span>
                     {update.artifact.action && (
-                      <span className={update.artifact.action === 'created' ? 'text-green-400 ml-1' : 'text-yellow-400 ml-1'}>
-                        ({update.artifact.action === 'created' ? '생성' : '수정'})
+                      <span className={
+                        update.artifact.action === 'created' ? 'text-green-400 ml-1' :
+                        update.artifact.action === 'deleted' ? 'text-red-400 ml-1' :
+                        'text-yellow-400 ml-1'
+                      }>
+                        ({update.artifact.action === 'created' ? '생성' :
+                          update.artifact.action === 'deleted' ? '삭제' :
+                          '수정'})
                       </span>
                     )}
                   </div>

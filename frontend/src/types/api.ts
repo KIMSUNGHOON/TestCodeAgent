@@ -140,7 +140,7 @@ export interface Artifact {
   saved_at?: string | null;  // Timestamp when file was saved
   error?: string | null;  // Error message if save failed
   // Enhanced fields for better UI display
-  action?: 'created' | 'modified';  // Whether file was created or modified
+  action?: 'created' | 'modified' | 'deleted';  // Whether file was created, modified, or deleted
   relative_path?: string;  // Path relative to project root
   project_root?: string;  // Project root directory
   file_path?: string;  // Full absolute path

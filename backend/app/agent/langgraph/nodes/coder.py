@@ -47,6 +47,9 @@ Request: {user_request}
 Task Type: {task_type}
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format with this structure:
 {{
     "files": [
@@ -56,7 +59,8 @@ Respond in JSON format with this structure:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}
 
 Generate the code now:"""
@@ -74,6 +78,9 @@ Request: {user_request}
 Task Type: {task_type}
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format:
 {{
     "files": [
@@ -83,7 +90,8 @@ Respond in JSON format:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}"""
         config = {"temperature": 0.3, "max_tokens": 8000}
     else:
@@ -97,8 +105,12 @@ Think through the problem step by step:
 1. What files are needed?
 2. What is the structure?
 3. What error handling is required?
+4. Are there any files that should be deleted?
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format:
 {{
     "files": [
@@ -108,7 +120,8 @@ Respond in JSON format:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}
 
 Generate the code now:"""
@@ -155,8 +168,8 @@ def coder_node(state: QualityGateState) -> Dict:
         ))
 
     try:
-        # Generate code using vLLM (returns tuple of files and token_usage)
-        generated_files, token_usage = _generate_code_with_vllm(
+        # Generate code using vLLM (returns tuple of files, deleted_files, and token_usage)
+        generated_files, deleted_files, token_usage = _generate_code_with_vllm(
             user_request=user_request,
             task_type=task_type,
             workspace_root=workspace_root
@@ -223,6 +236,41 @@ def coder_node(state: QualityGateState) -> Dict:
             else:
                 logger.error(f"❌ Failed to write {filename}: {result['error']}")
 
+        # Process deleted files (FILE DELETION FEATURE)
+        if deleted_files:
+            logger.info(f"🗑️  Processing {len(deleted_files)} file(s) for deletion...")
+
+            for filename in deleted_files:
+                # Normalize path
+                normalized_path = os.path.normpath(os.path.join(workspace_root, filename))
+                full_path = os.path.join(workspace_root, filename)
+
+                # Check if file exists before trying to delete
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                        logger.info(f"🗑️  Deleted: {filename}")
+
+                        # Create artifact for deleted file
+                        artifacts.append({
+                            "filename": filename,
+                            "file_path": full_path,
+                            "relative_path": filename,
+                            "project_root": workspace_root,
+                            "language": "text",  # Unknown language for deleted files
+                            "content": "",  # No content for deleted files
+                            "description": "File deleted",
+                            "size_bytes": 0,
+                            "checksum": "",
+                            "saved": True,
+                            "saved_path": full_path,
+                            "action": "deleted",  # Mark as deleted
+                        })
+                    except Exception as e:
+                        logger.error(f"❌ Failed to delete {filename}: {e}")
+                else:
+                    logger.warning(f"⚠️  Cannot delete {filename}: File does not exist")
+
         # Add result debug log with actual token usage
         if state.get("enable_debug"):
             debug_logs.append(DebugLog(
@@ -287,8 +335,9 @@ def _generate_code_with_vllm(
         workspace_root: Workspace root directory
 
     Returns:
-        Tuple of (files_list, token_usage_dict)
+        Tuple of (files_list, deleted_files_list, token_usage_dict)
         - files_list: List of file dictionaries with filename, content, language, description
+        - deleted_files_list: List of file paths to delete
         - token_usage_dict: Dictionary with prompt_tokens, completion_tokens, total_tokens
     """
     # Get endpoint and model from settings (supports both unified and split configs)
@@ -301,7 +350,7 @@ def _generate_code_with_vllm(
     # Check if endpoint is configured
     if not coding_endpoint:
         logger.warning("⚠️  LLM coding endpoint not configured, using fallback generator")
-        return _fallback_code_generator(user_request, task_type), token_usage
+        return _fallback_code_generator(user_request, task_type), [], token_usage
 
     try:
         # Get model-appropriate prompt and config
@@ -335,7 +384,7 @@ def _generate_code_with_vllm(
 
         if error:
             logger.error(f"vLLM request failed after retries: {error}")
-            return _fallback_code_generator(user_request, task_type), token_usage
+            return _fallback_code_generator(user_request, task_type), [], token_usage
 
         # Chat completions returns content in message
         generated_text = result["choices"][0]["message"]["content"]
@@ -357,17 +406,20 @@ def _generate_code_with_vllm(
             if json_start != -1 and json_end > json_start:
                 json_str = generated_text[json_start:json_end]
                 parsed = json.loads(json_str)
-                return parsed.get("files", []), token_usage
+                files = parsed.get("files", [])
+                deleted_files = parsed.get("deleted_files", [])  # FILE DELETION FEATURE
+                logger.info(f"📝 Parsed {len(files)} files, {len(deleted_files)} files to delete")
+                return files, deleted_files, token_usage
         except json.JSONDecodeError:
             logger.warning("Failed to parse vLLM JSON response, using fallback")
-            return _fallback_code_generator(user_request, task_type), token_usage
+            return _fallback_code_generator(user_request, task_type), [], token_usage
 
     except Exception as e:
         logger.error(f"vLLM call failed: {e}", exc_info=True)
-        return _fallback_code_generator(user_request, task_type), token_usage
+        return _fallback_code_generator(user_request, task_type), [], token_usage
 
     # Fallback if we exit without returning (should not happen)
-    return _fallback_code_generator(user_request, task_type), token_usage
+    return _fallback_code_generator(user_request, task_type), [], token_usage
 
 
 def _fallback_code_generator(user_request: str, task_type: str) -> List[Dict]:

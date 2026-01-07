@@ -172,10 +172,13 @@ const TreeNodeComponent = ({
               ? 'bg-green-500/20 text-green-400'
               : node.artifact.action === 'modified'
               ? 'bg-yellow-500/20 text-yellow-400'
+              : node.artifact.action === 'deleted'
+              ? 'bg-red-500/20 text-red-400'
               : 'bg-gray-500/20 text-gray-400'
           }`}>
             {node.artifact.action === 'created' ? 'NEW' :
-             node.artifact.action === 'modified' ? 'MOD' : ''}
+             node.artifact.action === 'modified' ? 'MOD' :
+             node.artifact.action === 'deleted' ? 'DEL' : ''}
           </span>
         )}
       </div>

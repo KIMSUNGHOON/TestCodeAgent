@@ -44,13 +44,14 @@ class ReviewFeedback(TypedDict):
 
 
 class Artifact(TypedDict):
-    """Generated or modified file artifact"""
+    """Generated, modified, or deleted file artifact"""
     filename: str
     file_path: str
     language: str
     content: str
     size_bytes: int
     checksum: str
+    action: Optional[str]  # 'created', 'modified', or 'deleted'
 
 
 class CodeDiff(TypedDict):
