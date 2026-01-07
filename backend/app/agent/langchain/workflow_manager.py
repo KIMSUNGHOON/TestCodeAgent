@@ -998,9 +998,9 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
         session_id = context.get("session_id", workflow_id)
         logger.info(f"[WORKSPACE DEBUG] session_id extracted: {session_id}")
 
-        # Get default workspace from environment
-        default_workspace = os.getenv("DEFAULT_WORKSPACE", "/workspace")
-        logger.info(f"[WORKSPACE DEBUG] default_workspace from env: {default_workspace}")
+        # Get default workspace from settings (loaded from .env file)
+        default_workspace = settings.default_workspace
+        logger.info(f"[WORKSPACE DEBUG] default_workspace from settings: {default_workspace}")
 
         # Try to extract project name from user request
         logger.info(f"[WORKSPACE DEBUG] user_request: {user_request[:200]}")

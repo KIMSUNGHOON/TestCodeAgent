@@ -11,6 +11,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import json
 
+# Import settings for workspace configuration
+from app.core.config import settings
+
 # Import all workflows for flexibility
 from app.agent.langgraph.unified_workflow import unified_workflow
 from app.agent.langgraph.enhanced_workflow import enhanced_workflow
@@ -96,9 +99,9 @@ async def execute_workflow(request: WorkflowRequest):
     session_id = request.session_id if request.session_id else str(uuid.uuid4())[:8]
     logger.info(f"[WORKSPACE] session_id: {session_id}")
 
-    # Get default workspace from environment
-    default_workspace = os.getenv("DEFAULT_WORKSPACE", "/workspace")
-    logger.info(f"[WORKSPACE] default_workspace: {default_workspace}")
+    # Get default workspace from settings (loaded from .env file)
+    default_workspace = settings.default_workspace
+    logger.info(f"[WORKSPACE] default_workspace from settings: {default_workspace}")
 
     # Try to extract project name from user request
     def extract_project_name(text: str) -> Optional[str]:
