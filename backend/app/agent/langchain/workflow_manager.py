@@ -986,40 +986,74 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
         if context is None:
             context = {}
 
+        # ========================================
+        # DEBUG: Workspace Generation
+        # ========================================
+        logger.info("=" * 80)
+        logger.info("[WORKSPACE DEBUG] Starting workspace generation")
+        logger.info(f"[WORKSPACE DEBUG] Received context: {context}")
+        logger.info(f"[WORKSPACE DEBUG] workflow_id: {workflow_id}")
+
         # Extract session_id from context or use workflow_id
         session_id = context.get("session_id", workflow_id)
+        logger.info(f"[WORKSPACE DEBUG] session_id extracted: {session_id}")
 
         # Get default workspace from environment
         default_workspace = os.getenv("DEFAULT_WORKSPACE", "/workspace")
+        logger.info(f"[WORKSPACE DEBUG] default_workspace from env: {default_workspace}")
 
         # Try to extract project name from user request
+        logger.info(f"[WORKSPACE DEBUG] user_request: {user_request[:200]}")
         project_name = self._extract_project_name(user_request)
+        logger.info(f"[WORKSPACE DEBUG] extracted project_name: {project_name}")
 
         # Build workspace path: {default}/{session_id}/{project_name or default}
         if project_name:
             workspace = os.path.join(default_workspace, session_id, project_name)
-            logger.info(f"Workspace path (with project name): {workspace}")
+            logger.info(f"[WORKSPACE DEBUG] Workspace path (with project name): {workspace}")
         else:
             # No project name detected - use session_id only
             workspace = os.path.join(default_workspace, session_id)
             project_name = f"project-{session_id[:8]}"
-            logger.info(f"Workspace path (default): {workspace}")
+            logger.info(f"[WORKSPACE DEBUG] Workspace path (default, no project name): {workspace}")
+
+        logger.info(f"[WORKSPACE DEBUG] Final workspace path: {workspace}")
+        logger.info(f"[WORKSPACE DEBUG] Final project_name: {project_name}")
 
         # Create workspace directory
         try:
+            logger.info(f"[WORKSPACE DEBUG] Attempting to create directory: {workspace}")
             os.makedirs(workspace, exist_ok=True)
-            logger.info(f"Workspace directory created: {workspace}")
+
+            # Verify directory was created
+            if os.path.exists(workspace):
+                logger.info(f"[WORKSPACE DEBUG] ✅ Directory exists after creation")
+                logger.info(f"[WORKSPACE DEBUG] Directory absolute path: {os.path.abspath(workspace)}")
+                logger.info(f"[WORKSPACE DEBUG] Directory is writable: {os.access(workspace, os.W_OK)}")
+            else:
+                logger.error(f"[WORKSPACE DEBUG] ❌ Directory does NOT exist after creation attempt")
+
         except Exception as e:
-            logger.error(f"Failed to create workspace directory: {e}")
+            logger.error(f"[WORKSPACE DEBUG] ❌ Failed to create workspace directory: {e}")
+            logger.error(f"[WORKSPACE DEBUG] Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"[WORKSPACE DEBUG] Traceback: {traceback.format_exc()}")
             # Continue with execution - persistence will handle errors
+
+        logger.info("=" * 80)
 
         # Update context with workspace info
         context["workspace"] = workspace
         context["session_id"] = session_id
         context["project_name"] = project_name
 
+        logger.info(f"[WORKSPACE DEBUG] Context updated with workspace info")
+        logger.info(f"[WORKSPACE DEBUG] context['workspace']: {context.get('workspace')}")
+        logger.info(f"[WORKSPACE DEBUG] context['session_id']: {context.get('session_id')}")
+        logger.info(f"[WORKSPACE DEBUG] context['project_name']: {context.get('project_name')}")
+
         # Notify user of workspace path
-        yield {
+        workspace_event = {
             "agent": "WorkspaceManager",
             "type": "workspace_info",
             "status": "info",
@@ -1029,6 +1063,11 @@ Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project t
             "project_name": project_name,
             "timestamp": datetime.now().isoformat()
         }
+
+        logger.info(f"[WORKSPACE DEBUG] Yielding workspace_info event:")
+        logger.info(f"[WORKSPACE DEBUG] Event data: {workspace_event}")
+
+        yield workspace_event
 
         # Generate project context for prompts
         project_context = self._get_project_context_prompt(project_name)

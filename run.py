@@ -120,7 +120,12 @@ class SystemRunner:
 
         process = subprocess.Popen(
             ["python", "-m", "uvicorn", "app.main:app",
-             "--host", "0.0.0.0", "--port", "8000", "--reload"],
+             "--host", "0.0.0.0", "--port", "8000", "--reload",
+             "--reload-exclude", "*/data/*",
+             "--reload-exclude", "*/workspace/*",
+             "--reload-exclude", "*/__pycache__/*",
+             "--reload-exclude", "*.pyc",
+             "--reload-exclude", "*.log"],
             cwd=backend_dir,
             env=env,
             stdout=subprocess.PIPE,

@@ -78,10 +78,87 @@ async def execute_workflow(request: WorkflowRequest):
     """
     logger.info(f"🚀 Starting workflow execution")
     logger.info(f"   Request: {request.user_request[:100]}")
-    logger.info(f"   Workspace: {request.workspace_root}")
+    logger.info(f"   Session ID: {request.session_id}")
+    logger.info(f"   Workspace (from request): {request.workspace_root}")
     logger.info(f"   Execution Mode: {request.execution_mode}")
     logger.info(f"   Enhanced Mode: {request.use_enhanced}")
     logger.info(f"   Dynamic Mode: {request.use_dynamic}")
+
+    # ========================================
+    # AUTO-GENERATE WORKSPACE PATH
+    # PATH: $DEFAULT_WORKSPACE/{session_id}/{project_name}
+    # ========================================
+    import os
+    import uuid
+    import re
+
+    # Use session_id if provided, otherwise generate one
+    session_id = request.session_id if request.session_id else str(uuid.uuid4())[:8]
+    logger.info(f"[WORKSPACE] session_id: {session_id}")
+
+    # Get default workspace from environment
+    default_workspace = os.getenv("DEFAULT_WORKSPACE", "/workspace")
+    logger.info(f"[WORKSPACE] default_workspace: {default_workspace}")
+
+    # Try to extract project name from user request
+    def extract_project_name(text: str) -> Optional[str]:
+        """Extract project name from user request"""
+        text_lower = text.lower()
+
+        # Strategy 1: Explicit patterns
+        patterns = [
+            r'create\s+(?:a\s+)?(?:new\s+)?([a-z0-9\-_]+)\s+(?:project|app)',
+            r'build\s+(?:a\s+)?(?:new\s+)?([a-z0-9\-_]+)\s+(?:project|app)',
+            r'(?:project|app)\s+(?:named|called)\s+["\']?([a-z0-9\-_]+)["\']?',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                name = match.group(1).strip().replace(' ', '-')
+                if name and len(name) > 1:
+                    logger.info(f"[WORKSPACE] Extracted project name: {name}")
+                    return name
+
+        # Strategy 2: Common project types
+        project_types = {
+            'calculator': 'calculator',
+            'blog': 'blog',
+            'todo': 'todo-app',
+            'chat': 'chat-app',
+            '계산기': 'calculator',
+        }
+
+        for keyword, project_name in project_types.items():
+            if keyword in text_lower:
+                logger.info(f"[WORKSPACE] Detected project type: {project_name}")
+                return project_name
+
+        return None
+
+    project_name = extract_project_name(request.user_request)
+
+    # Build workspace path
+    if project_name:
+        workspace_root = os.path.join(default_workspace, session_id, project_name)
+    else:
+        workspace_root = os.path.join(default_workspace, session_id)
+        project_name = f"project-{session_id[:8]}"
+
+    logger.info(f"[WORKSPACE] Generated workspace_root: {workspace_root}")
+    logger.info(f"[WORKSPACE] project_name: {project_name}")
+
+    # Create workspace directory
+    try:
+        os.makedirs(workspace_root, exist_ok=True)
+        logger.info(f"[WORKSPACE] ✅ Directory created/verified: {workspace_root}")
+    except Exception as e:
+        logger.error(f"[WORKSPACE] ❌ Failed to create directory: {e}")
+
+    # Override request workspace_root with auto-generated one
+    request.workspace_root = workspace_root
+
+    logger.info(f"   Final Workspace: {workspace_root}")
 
     # Determine actual execution mode using Supervisor analysis (not keyword matching)
     execution_mode = request.execution_mode
@@ -119,6 +196,23 @@ async def execute_workflow(request: WorkflowRequest):
     async def event_stream() -> AsyncGenerator[str, None]:
         """Stream workflow events to client"""
         try:
+            # Send workspace_info event first
+            from datetime import datetime
+            workspace_info_event = {
+                "update_type": "workspace_info",
+                "node": "WorkspaceManager",
+                "status": "info",
+                "data": {
+                    "workspace": workspace_root,
+                    "session_id": session_id,
+                    "project_name": project_name,
+                    "message": f"📁 Workspace: {workspace_root}"
+                },
+                "timestamp": datetime.now().isoformat()
+            }
+            logger.info(f"[WORKSPACE] Sending workspace_info event: {workspace_info_event}")
+            yield f"data: {json.dumps(workspace_info_event, default=str)}\n\n"
+
             if execution_mode == "quick":
                 # Quick Q&A mode - use Supervisor only
                 async for update in quick_qa_response(
