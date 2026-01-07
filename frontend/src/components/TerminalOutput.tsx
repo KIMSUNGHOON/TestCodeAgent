@@ -202,6 +202,19 @@ const getAgentStatusMessage = (agentName: string, status: string): string => {
 const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDownloadZip, isDownloadingZip }: TerminalOutputProps) => {
   const [showAllUpdates, setShowAllUpdates] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [expandedOutputCards, setExpandedOutputCards] = useState<Set<number>>(new Set());
+
+  const toggleOutputCard = (index: number) => {
+    setExpandedOutputCards(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
 
   // Filter updates to show only significant ones (hide progress/streaming noise)
   const filteredUpdates = updates.filter(update => {
@@ -426,8 +439,20 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
                     {/* 헤더 */}
                     <div className="flex items-center justify-between px-3 py-1.5 bg-gray-800/80 border-b border-gray-700/50">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleOutputCard(index)}
+                          className="text-gray-500 hover:text-gray-300 transition-colors"
+                          title={expandedOutputCards.has(index) ? '접기' : '펼치기'}
+                        >
+                          {expandedOutputCards.has(index) ? '▼' : '▶'}
+                        </button>
                         <span className="text-[10px] text-cyan-400 font-medium">📄 Output</span>
                         <span className="text-[9px] text-gray-500">{formatAgentName(update.agent)}</span>
+                        {!expandedOutputCards.has(index) && (
+                          <span className="text-[9px] text-gray-600 truncate max-w-[150px]">
+                            {update.streaming_content?.slice(0, 50)}...
+                          </span>
+                        )}
                       </div>
                       <button
                         onClick={() => {
@@ -445,7 +470,8 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
                         복사
                       </button>
                     </div>
-                    {/* 콘텐츠 */}
+                    {/* 콘텐츠 - 접힌 경우 숨김 */}
+                    {expandedOutputCards.has(index) && (
                     <div className="p-3 text-gray-300 text-[10px] sm:text-xs overflow-x-auto max-h-80 overflow-y-auto prose prose-sm prose-invert max-w-none
                       prose-headings:text-gray-200 prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-2 prose-headings:text-sm
                       prose-h2:text-cyan-400 prose-h2:border-b prose-h2:border-gray-700 prose-h2:pb-1
@@ -487,6 +513,7 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
                         {update.streaming_content}
                       </ReactMarkdown>
                     </div>
+                    )}
                   </div>
                 </div>
               )}
