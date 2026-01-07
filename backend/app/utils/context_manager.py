@@ -11,6 +11,38 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 
+# Configuration constants for context management
+class ContextConfig:
+    """Configuration constants for ContextManager.
+
+    These values control how context is compressed, extracted, and filtered.
+    Adjust based on model context window size and performance requirements.
+    """
+    # Summary display limits
+    MAX_FILES_IN_SUMMARY = 10
+    MAX_ERRORS_IN_SUMMARY = 5
+    MAX_DECISIONS_IN_SUMMARY = 5
+
+    # Key info extraction limits
+    MAX_FILES_EXTRACTED = 20
+    MAX_ERRORS_EXTRACTED = 10
+    MAX_DECISIONS_EXTRACTED = 10
+    MAX_PREFERENCES_EXTRACTED = 5
+
+    # Text truncation limits
+    MAX_SENTENCE_LENGTH = 200
+    MAX_CONTENT_LENGTH = 1000
+
+    # Agent context filtering
+    RECENT_MESSAGES_FOR_AGENT = 5
+
+    # Prompt formatting
+    MAX_CONTENT_IN_PROMPT = 1000
+    MAX_FILES_IN_PROMPT = 10
+    MAX_ERRORS_IN_PROMPT = 3
+    MAX_DECISIONS_IN_PROMPT = 3
+
+
 class ContextManager:
     """Manages conversation context with compression and filtering"""
 
@@ -75,17 +107,17 @@ class ContextManager:
 
         # Add file information
         if key_info["files_mentioned"]:
-            files_str = ", ".join(key_info["files_mentioned"][:10])
+            files_str = ", ".join(key_info["files_mentioned"][:ContextConfig.MAX_FILES_IN_SUMMARY])
             summary_parts.append(f"작업한 파일: {files_str}")
 
         # Add error information
         if key_info["errors_encountered"]:
-            errors_str = "; ".join(key_info["errors_encountered"][:5])
+            errors_str = "; ".join(key_info["errors_encountered"][:ContextConfig.MAX_ERRORS_IN_SUMMARY])
             summary_parts.append(f"발생한 에러: {errors_str}")
 
         # Add decisions made
         if key_info["decisions_made"]:
-            decisions_str = "; ".join(key_info["decisions_made"][:5])
+            decisions_str = "; ".join(key_info["decisions_made"][:ContextConfig.MAX_DECISIONS_IN_SUMMARY])
             summary_parts.append(f"주요 결정사항: {decisions_str}")
 
         # Add general summary
@@ -135,7 +167,7 @@ class ContextManager:
                 sentences = content.split(".")
                 for sentence in sentences:
                     if any(keyword in sentence.lower() for keyword in error_keywords):
-                        errors_encountered.append(sentence.strip()[:200])
+                        errors_encountered.append(sentence.strip()[:ContextConfig.MAX_SENTENCE_LENGTH])
                         break
 
             # Extract decisions (user preferences)
@@ -148,7 +180,7 @@ class ContextManager:
                     # Extract first meaningful sentence
                     sentences = content.split(".")
                     if sentences:
-                        decisions_made.append(sentences[0].strip()[:200])
+                        decisions_made.append(sentences[0].strip()[:ContextConfig.MAX_SENTENCE_LENGTH])
 
             # Extract user preferences
             if role == "user":
@@ -156,13 +188,13 @@ class ContextManager:
                     "선호", "prefer", "좋아", "like", "싫어", "dislike"
                 ]
                 if any(keyword in content.lower() for keyword in preference_keywords):
-                    user_preferences.append(content[:200])
+                    user_preferences.append(content[:ContextConfig.MAX_SENTENCE_LENGTH])
 
         return {
-            "files_mentioned": sorted(list(files_mentioned))[:20],  # Top 20 files
-            "errors_encountered": errors_encountered[:10],  # Top 10 errors
-            "decisions_made": decisions_made[:10],  # Top 10 decisions
-            "user_preferences": user_preferences[:5],  # Top 5 preferences
+            "files_mentioned": sorted(list(files_mentioned))[:ContextConfig.MAX_FILES_EXTRACTED],
+            "errors_encountered": errors_encountered[:ContextConfig.MAX_ERRORS_EXTRACTED],
+            "decisions_made": decisions_made[:ContextConfig.MAX_DECISIONS_EXTRACTED],
+            "user_preferences": user_preferences[:ContextConfig.MAX_PREFERENCES_EXTRACTED],
         }
 
     def get_agent_relevant_context(
@@ -217,7 +249,7 @@ class ContextManager:
 
         # Always include recent messages even if not matching keywords
         # to maintain conversation flow
-        recent_messages = history[-5:]
+        recent_messages = history[-ContextConfig.RECENT_MESSAGES_FOR_AGENT:]
         for msg in recent_messages:
             if msg not in filtered:
                 filtered.append(msg)
@@ -293,15 +325,15 @@ class ContextManager:
             parts.append("## 주요 컨텍스트 정보\n")
 
             if key_info.get("files_mentioned"):
-                files_str = ", ".join(key_info["files_mentioned"][:10])
+                files_str = ", ".join(key_info["files_mentioned"][:ContextConfig.MAX_FILES_IN_PROMPT])
                 parts.append(f"**작업 파일**: {files_str}\n")
 
             if key_info.get("errors_encountered"):
-                errors_str = "\n- ".join(key_info["errors_encountered"][:3])
+                errors_str = "\n- ".join(key_info["errors_encountered"][:ContextConfig.MAX_ERRORS_IN_PROMPT])
                 parts.append(f"**최근 에러**:\n- {errors_str}\n")
 
             if key_info.get("decisions_made"):
-                decisions_str = "\n- ".join(key_info["decisions_made"][:3])
+                decisions_str = "\n- ".join(key_info["decisions_made"][:ContextConfig.MAX_DECISIONS_IN_PROMPT])
                 parts.append(f"**주요 결정사항**:\n- {decisions_str}\n")
 
         # Add conversation history
@@ -311,7 +343,7 @@ class ContextManager:
 
             for i, msg in enumerate(history, 1):
                 role = "사용자" if msg.get("role") == "user" else "AI"
-                content = msg.get("content", "")[:1000]
+                content = msg.get("content", "")[:ContextConfig.MAX_CONTENT_IN_PROMPT]
                 parts.append(f"**[{i}] {role}**: {content}\n")
 
         return "\n".join(parts)

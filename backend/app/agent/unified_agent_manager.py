@@ -374,50 +374,6 @@ class UnifiedAgentManager:
                 "action": None
             }
 
-    def _get_versioned_path(self, file_path: Path) -> Path:
-        """파일이 이미 존재할 경우 버전 번호가 포함된 새 경로 생성
-
-        크로스 플랫폼 호환: Windows/Linux/MacOS 모두 지원
-
-        Args:
-            file_path: 원본 파일 경로
-
-        Returns:
-            Path: 버전 번호가 포함된 새 파일 경로 (예: file_v2.py)
-        """
-        stem = file_path.stem  # 확장자 제외한 파일명
-        suffix = file_path.suffix  # 확장자
-        parent = file_path.parent
-
-        # 버전 번호 찾기 (file_v2.py 형식 지원)
-        import re
-        version_match = re.match(r'^(.+)_v(\d+)$', stem)
-
-        if version_match:
-            base_stem = version_match.group(1)
-            current_version = int(version_match.group(2))
-        else:
-            base_stem = stem
-            current_version = 1
-
-        # 다음 버전 번호로 새 경로 생성
-        version = current_version + 1
-        new_path = parent / f"{base_stem}_v{version}{suffix}"
-
-        # 해당 버전도 존재하면 다음 버전 찾기
-        while new_path.exists():
-            version += 1
-            new_path = parent / f"{base_stem}_v{version}{suffix}"
-
-            # 무한 루프 방지 (최대 100개 버전)
-            if version > 100:
-                # 타임스탬프 기반 fallback
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                new_path = parent / f"{base_stem}_{timestamp}{suffix}"
-                break
-
-        return new_path
-
     async def get_context(self, session_id: str) -> ConversationContext:
         """세션 컨텍스트 조회
 

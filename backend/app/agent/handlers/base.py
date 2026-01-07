@@ -3,12 +3,16 @@
 모든 핸들러는 이 클래스를 상속받아 구현합니다.
 """
 import logging
+import os
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, AsyncGenerator
+from typing import Dict, Any, List, Optional, AsyncGenerator, Callable, TypeVar
 
 logger = logging.getLogger(__name__)
+
+# Type variable for generic async operations
+T = TypeVar('T')
 
 
 @dataclass
@@ -213,3 +217,137 @@ class BaseHandler(ABC):
             lines.append(f"- `{filename}` ({language})")
 
         return "\n".join(lines)
+
+    def _get_project_name(self, context: Any) -> str:
+        """컨텍스트에서 프로젝트 이름 추출
+
+        Args:
+            context: 대화 컨텍스트
+
+        Returns:
+            str: 프로젝트 이름 또는 빈 문자열
+        """
+        if context and hasattr(context, 'workspace') and context.workspace:
+            return os.path.basename(context.workspace)
+        return ""
+
+    def _create_error_result(self, error: Exception) -> HandlerResult:
+        """에러 HandlerResult 생성
+
+        Args:
+            error: 발생한 예외
+
+        Returns:
+            HandlerResult: 에러를 포함한 결과
+        """
+        self.logger.error(f"{self.__class__.__name__} error: {error}")
+        return HandlerResult(
+            content="",
+            success=False,
+            error=str(error)
+        )
+
+    def _create_error_update(self, error: Exception) -> StreamUpdate:
+        """에러 StreamUpdate 생성
+
+        Args:
+            error: 발생한 예외
+
+        Returns:
+            StreamUpdate: 에러 상태 업데이트
+        """
+        self.logger.error(f"{self.__class__.__name__} stream error: {error}")
+        return StreamUpdate(
+            agent=self.__class__.__name__,
+            update_type="error",
+            status="error",
+            message=str(error)
+        )
+
+    def _create_progress_update(
+        self,
+        message: str,
+        streaming_content: Optional[str] = None,
+        data: Optional[Dict[str, Any]] = None
+    ) -> StreamUpdate:
+        """진행 상황 StreamUpdate 생성
+
+        Args:
+            message: 상태 메시지
+            streaming_content: 실시간 출력 내용
+            data: 추가 데이터
+
+        Returns:
+            StreamUpdate: 진행 상황 업데이트
+        """
+        return StreamUpdate(
+            agent=self.__class__.__name__,
+            update_type="progress",
+            status="running",
+            message=message,
+            streaming_content=streaming_content,
+            data=data
+        )
+
+    def _create_completed_update(
+        self,
+        message: str,
+        content: str,
+        artifacts: Optional[List[Dict[str, Any]]] = None,
+        extra_data: Optional[Dict[str, Any]] = None
+    ) -> StreamUpdate:
+        """완료 StreamUpdate 생성
+
+        Args:
+            message: 완료 메시지
+            content: 전체 응답 내용
+            artifacts: 생성된 아티팩트
+            extra_data: 추가 데이터
+
+        Returns:
+            StreamUpdate: 완료 상태 업데이트
+        """
+        data = {
+            "full_content": content,
+            "artifacts": artifacts or []
+        }
+        if extra_data:
+            data.update(extra_data)
+
+        return StreamUpdate(
+            agent=self.__class__.__name__,
+            update_type="completed",
+            status="completed",
+            message=message,
+            streaming_content=content,
+            data=data
+        )
+
+    def _build_enriched_message(self, user_message: str, context: Any) -> str:
+        """컨텍스트를 포함한 enriched 메시지 생성
+
+        Args:
+            user_message: 원본 사용자 메시지
+            context: 대화 컨텍스트
+
+        Returns:
+            str: 컨텍스트가 추가된 메시지
+        """
+        if not context:
+            return user_message
+
+        enriched_parts = [user_message]
+
+        # 이전 대화 참조가 있으면 추가
+        if hasattr(context, 'conversation_history') and context.conversation_history:
+            history = context.conversation_history
+            if len(history) > 2:
+                # 최근 대화 요약 추가
+                recent = history[-6:]  # 최근 6개
+                context_summary = "\n".join([
+                    f"{'User' if m.get('role') == 'user' else 'AI'}: {m.get('content', '')[:200]}..."
+                    for m in recent
+                ])
+                enriched_parts.append(f"\n[Previous conversation context]\n{context_summary}")
+
+        return "\n".join(enriched_parts)
