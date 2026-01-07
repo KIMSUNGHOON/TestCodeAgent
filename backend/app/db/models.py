@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, JSON, Index
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -15,8 +15,13 @@ class Conversation(Base):
     session_id = Column(String(100), unique=True, index=True, nullable=False)
     title = Column(String(500), default="New Conversation")
     mode = Column(String(20), default="chat")  # "chat" or "workflow"
+    task_type = Column(String(30), default="auto")  # "auto", "question", "codegen"
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Session configuration (persisted for multi-user support)
+    workspace_path = Column(String(500), nullable=True)  # User's workspace directory
+    framework = Column(String(20), default="standard")  # "standard" or "deepagents"
 
     # Workflow state (if mode == "workflow")
     workflow_state = Column(JSON, nullable=True)  # Store checklist, artifacts, etc.
@@ -32,10 +37,13 @@ class Conversation(Base):
             "session_id": self.session_id,
             "title": self.title,
             "mode": self.mode,
+            "task_type": self.task_type,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "message_count": len(self.messages) if self.messages else 0,
             "workflow_state": self.workflow_state,
+            "workspace_path": self.workspace_path,
+            "framework": self.framework,
         }
 
 
@@ -54,6 +62,18 @@ class Message(Base):
 
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
+
+    # Indexes for performance
+    __table_args__ = (
+        # Composite index for listing messages in chronological order
+        Index('idx_message_conversation_created', 'conversation_id', 'created_at'),
+
+        # Index for filtering by agent
+        Index('idx_message_agent_name', 'agent_name'),
+
+        # Composite index for role-based queries within conversation
+        Index('idx_message_conversation_role', 'conversation_id', 'role'),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
@@ -83,6 +103,18 @@ class Artifact(Base):
 
     # Relationships
     conversation = relationship("Conversation", back_populates="artifacts")
+
+    # Indexes for performance
+    __table_args__ = (
+        # Index for searching by filename
+        Index('idx_artifact_filename', 'filename'),
+
+        # Composite index for finding specific files within a conversation
+        Index('idx_artifact_conversation_filename', 'conversation_id', 'filename'),
+
+        # Index for ordering artifacts by creation time
+        Index('idx_artifact_conversation_created', 'conversation_id', 'created_at'),
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""

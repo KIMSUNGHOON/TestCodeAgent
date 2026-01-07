@@ -1,172 +1,149 @@
 /**
- * Main App component
+ * Main App component - Claude Web Style AI Code Assistant
+ * 전체 브라우저 크기에 맞춰 반응형 레이아웃
  */
-import { useState, useCallback } from 'react';
-import ChatInterface from './components/ChatInterface';
+import { useState, useEffect } from 'react';
 import WorkflowInterface from './components/WorkflowInterface';
-import AgentStatus from './components/AgentStatus';
-import ConversationList from './components/ConversationList';
-import { Conversation, StoredMessage, WorkflowUpdate } from './types/api';
+import Terminal from './components/Terminal';
+import PromptLibrary from './components/PromptLibrary';
+import { WorkflowUpdate } from './types/api';
 import apiClient from './api/client';
+import { getDefaultWorkspace } from './utils/workspace';
 
-type Mode = 'chat' | 'workflow';
+interface FrameworkInfo {
+  framework: string;
+  agent_manager: string;
+  workflow_manager: string;
+}
 
 function App() {
-  const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
-  const [taskType, setTaskType] = useState<'reasoning' | 'coding'>('coding');
-  const [mode, setMode] = useState<Mode>('workflow');
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [sessionId] = useState(() => `session-${Date.now()}`);
+  const [frameworkInfo, setFrameworkInfo] = useState<FrameworkInfo | null>(null);
+  const [workspace, setWorkspace] = useState<string>(() => getDefaultWorkspace());
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [showPromptLibrary, setShowPromptLibrary] = useState(false);
+  const [selectedPrompt, setSelectedPrompt] = useState<string>('');
 
   // Loaded conversation state
-  const [loadedMessages, setLoadedMessages] = useState<StoredMessage[]>([]);
   const [loadedWorkflowState, setLoadedWorkflowState] = useState<WorkflowUpdate[]>([]);
 
-  const handleNewConversation = useCallback(() => {
-    const newSessionId = `session-${Date.now()}`;
-    setSessionId(newSessionId);
-    setLoadedMessages([]);
-    setLoadedWorkflowState([]);
+  // Load framework info on mount
+  useEffect(() => {
+    const loadFrameworkInfo = async () => {
+      try {
+        const info = await apiClient.getFrameworkInfo();
+        setFrameworkInfo(info);
+      } catch (err) {
+        console.error('Failed to load framework info:', err);
+      }
+    };
+    loadFrameworkInfo();
   }, []);
 
-  const handleSelectConversation = useCallback(async (conversation: Conversation) => {
+  const handleWorkspaceChange = async (newWorkspace: string) => {
+    setWorkspace(newWorkspace);
     try {
-      // Load full conversation with messages
-      const fullConversation = await apiClient.getConversation(conversation.session_id);
-
-      setSessionId(conversation.session_id);
-
-      if (conversation.mode === 'workflow') {
-        setMode('workflow');
-        // Extract workflow updates from stored state (saved as { updates: [...] })
-        if (fullConversation.workflow_state) {
-          try {
-            const workflowState = fullConversation.workflow_state as { updates?: WorkflowUpdate[] };
-            if (workflowState && workflowState.updates && Array.isArray(workflowState.updates)) {
-              setLoadedWorkflowState(workflowState.updates);
-            } else {
-              console.warn('Invalid workflow state format:', fullConversation.workflow_state);
-              setLoadedWorkflowState([]);
-            }
-          } catch (parseErr) {
-            console.error('Failed to parse workflow state:', parseErr);
-            setLoadedWorkflowState([]);
-          }
-        } else {
-          setLoadedWorkflowState([]);
-        }
-      } else {
-        setMode('chat');
-        setLoadedMessages(fullConversation.messages || []);
-      }
+      await apiClient.setWorkspace(sessionId, newWorkspace);
+      setLoadedWorkflowState([]);
     } catch (err) {
-      console.error('Failed to load conversation:', err);
-      alert(`Failed to load conversation: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      // Reset to new conversation on error
-      handleNewConversation();
+      console.error('Failed to set workspace:', err);
     }
-  }, [handleNewConversation]);
+  };
 
-  const handleModeChange = (newMode: Mode) => {
-    setMode(newMode);
-    // Create new session when switching modes
-    handleNewConversation();
+  const handlePromptSelect = (prompt: string) => {
+    setSelectedPrompt(prompt);
+    setShowPromptLibrary(false);
   };
 
   return (
-    <div className="flex h-screen bg-[#1A1A1A]">
-      {/* Conversation List Sidebar */}
-      {showSidebar && (
-        <ConversationList
-          currentSessionId={sessionId}
-          mode={mode}
-          onSelectConversation={handleSelectConversation}
-          onNewConversation={handleNewConversation}
-        />
-      )}
+    <div className="flex flex-col w-screen h-screen bg-gray-950 text-gray-100 overflow-hidden">
+      {/* Minimal Header - Claude Web Style */}
+      <header className="flex-shrink-0 h-12 px-3 sm:px-4 flex items-center justify-between border-b border-gray-800 bg-gray-900">
+        {/* Logo */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+            <span className="text-white font-semibold text-xs sm:text-sm">C</span>
+          </div>
+          <div className="hidden sm:block">
+            <div className="font-medium text-sm text-gray-100">AI Code Agent</div>
+            <div className="text-[10px] text-gray-500">LangGraph Workflow</div>
+          </div>
+        </div>
 
-      {/* Main Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-[#404040] flex items-center justify-between bg-[#1A1A1A]">
-          {/* Sidebar Toggle */}
+        {/* Actions */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Framework Badge - Hidden on mobile */}
+          {frameworkInfo && (
+            <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded bg-gray-800 text-xs">
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                frameworkInfo.framework === 'langchain' ? 'bg-blue-500' :
+                frameworkInfo.framework === 'microsoft' ? 'bg-green-500' :
+                'bg-purple-500'
+              }`}></div>
+              <span className="text-gray-400">
+                {frameworkInfo.framework === 'langchain' ? 'LangChain' :
+                 frameworkInfo.framework === 'microsoft' ? 'Microsoft' :
+                 frameworkInfo.framework}
+              </span>
+            </div>
+          )}
+
+          {/* Prompt Library */}
           <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="p-2 text-[#9B9B9B] hover:text-[#ECECF1] hover:bg-[#2A2A2A] rounded-lg transition-colors"
-            title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}
+            onClick={() => setShowPromptLibrary(true)}
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+            title="프롬프트 라이브러리"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
             </svg>
           </button>
 
-          {/* Mode Switcher */}
-          <div className="flex space-x-2">
-            <button
-              onClick={() => handleModeChange('chat')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                mode === 'chat'
-                  ? 'bg-[#10A37F] text-white hover:bg-[#0E8C6F]'
-                  : 'bg-[#2A2A2A] text-[#ECECF1] hover:bg-[#343434]'
-              }`}
-            >
-              Chat Mode
-            </button>
-            <button
-              onClick={() => handleModeChange('workflow')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                mode === 'workflow'
-                  ? 'bg-[#10A37F] text-white hover:bg-[#0E8C6F]'
-                  : 'bg-[#2A2A2A] text-[#ECECF1] hover:bg-[#343434]'
-              }`}
-            >
-              Workflow Mode
-            </button>
-          </div>
+          {/* Terminal */}
+          <button
+            onClick={() => setShowTerminal(true)}
+            className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition-colors"
+            title="터미널"
+          >
+            <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </button>
 
-          {/* Session Info */}
-          <div className="text-sm text-[#9B9B9B]">
-            Session: {sessionId.slice(-8)}
+          {/* Session Status */}
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
+            <span className="hidden sm:inline">{sessionId.slice(-8)}</span>
           </div>
         </div>
+      </header>
 
-        {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 p-4 overflow-hidden">
-            {mode === 'chat' ? (
-              <ChatInterface
-                sessionId={sessionId}
-                taskType={taskType}
-                initialMessages={loadedMessages}
-              />
-            ) : (
-              <WorkflowInterface
-                sessionId={sessionId}
-                initialUpdates={loadedWorkflowState}
-              />
-            )}
-          </div>
+      {/* Main Content - Full remaining height */}
+      <main className="flex-1 min-h-0 overflow-hidden">
+        <WorkflowInterface
+          key={sessionId}
+          sessionId={sessionId}
+          initialUpdates={loadedWorkflowState}
+          workspace={workspace}
+          selectedPrompt={selectedPrompt}
+          onPromptUsed={() => setSelectedPrompt('')}
+          onWorkspaceChange={handleWorkspaceChange}
+        />
+      </main>
 
-          {/* Right Sidebar - only show in chat mode */}
-          {mode === 'chat' && (
-            <AgentStatus
-              sessionId={sessionId}
-              taskType={taskType}
-              onTaskTypeChange={setTaskType}
-            />
-          )}
-        </div>
-      </div>
+      {/* Modals */}
+      <PromptLibrary
+        isOpen={showPromptLibrary}
+        onClose={() => setShowPromptLibrary(false)}
+        onPromptSelect={handlePromptSelect}
+      />
+
+      <Terminal
+        sessionId={sessionId}
+        workspace={workspace}
+        isVisible={showTerminal}
+        onClose={() => setShowTerminal(false)}
+      />
     </div>
   );
 }

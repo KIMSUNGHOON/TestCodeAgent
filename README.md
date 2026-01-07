@@ -1,195 +1,111 @@
 # Coding Agent - Full Stack AI Assistant
 
-A full-stack coding agent powered by Microsoft Agent Framework and vLLM, featuring React frontend and FastAPI backend.
+Claude Code / OpenAI Codex 방식의 **Unified Workflow Architecture**를 구현한 AI 코딩 어시스턴트입니다.
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐
-│  React Frontend │ (Port 3000/80)
-│   - Chat UI     │
-│   - Code Display│
-└────────┬────────┘
-         │ REST API
-         ▼
-┌─────────────────┐
-│  FastAPI Server │ (Port 8000)
-│   - API Gateway │
-│   - Agent Mgmt  │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────────────────┐
-│ Microsoft Agent Framework   │
-│  - Agent Orchestration      │
-│  - OpenAI Client (Custom)   │
-└───────┬──────────┬──────────┘
-        │          │
-        ▼          ▼
-┌───────────┐  ┌───────────┐
-│ vLLM #1   │  │ vLLM #2   │
-│ DeepSeek  │  │ Qwen3     │
-│ R1        │  │ Coder     │
-│ (Port     │  │ (Port     │
-│  8001)    │  │  8002)    │
-└───────────┘  └───────────┘
+User Prompt
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unified Chat Endpoint                         │
+│                    POST /chat/unified                            │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    UnifiedAgentManager                           │
+│  - 세션 컨텍스트 관리                                              │
+│  - Supervisor 분석 요청                                           │
+│  - 응답 타입별 라우팅                                             │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SupervisorAgent                               │
+│  - 요청 분석 (Reasoning LLM)                                     │
+│  - response_type 결정                                            │
+│  - 복잡도 평가                                                    │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ├─► QUICK_QA ─────────► Direct LLM Response
+    ├─► PLANNING ─────────► PlanningHandler (계획 생성 + 파일 저장)
+    ├─► CODE_GENERATION ──► CodeGenerationHandler (워크플로우 실행)
+    ├─► CODE_REVIEW ──────► CodeReviewHandler
+    └─► DEBUGGING ────────► DebuggingHandler
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    ResponseAggregator                            │
+│  - UnifiedResponse 생성                                          │
+│  - Next Actions 제안                                             │
+│  - 컨텍스트 DB 저장                                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## 📋 Features
 
-- 🤖 **Dual Model Support**: DeepSeek-R1 for reasoning, Qwen3-Coder for code generation
-- 💬 **Interactive Chat Interface**: Real-time conversation with the agent
-- 🌊 **Streaming Responses**: Option for streaming or batch responses
-- 📊 **Agent Status Monitoring**: Live status and model information
-- 🎨 **Modern UI**: Built with React, TypeScript, and TailwindCSS
-- 🔄 **Session Management**: Persistent conversation history per session
-- 🐳 **Docker Support**: Easy deployment with Docker Compose
-- 🐍 **Conda Support**: Alternative setup using Conda/Miniconda environments
+### Unified Workflow Architecture
+- **단일 진입점**: 모든 요청이 Supervisor를 통과
+- **지능적 라우팅**: 요청 유형에 따른 자동 경로 결정 (QUICK_QA, PLANNING, CODE_GENERATION 등)
+- **통합 응답 포맷**: 모든 경로에서 동일한 응답 구조
+- **컨텍스트 영속성**: 대화 및 작업 컨텍스트 DB 저장
+- **Next Actions UI**: 응답 타입별 맞춤형 다음 행동 제안
+
+### LLM Provider Abstraction
+- **다중 모델 지원**: DeepSeek-R1, Qwen3-Coder, GPT-OSS
+- **모델별 어댑터**: 자동 프롬프트 최적화
+- **한국어 지원**: 동사 어간 기반 패턴 매칭
+
+### User Interface
+- **Claude.ai 스타일**: 깔끔한 대화형 인터페이스
+- **실시간 스트리밍**: 코드 생성 과정 실시간 표시
+- **계획 파일 뷰어**: 복잡한 작업 계획 미리보기
+- **반응형 디자인**: 데스크톱/모바일 지원
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **vLLM servers running** (required before starting the app):
+1. **vLLM 서버** (앱 시작 전 실행 필요):
    ```bash
-   # Terminal 1: Start DeepSeek-R1 for reasoning
+   # Terminal 1: Reasoning Model
    vllm serve deepseek-ai/DeepSeek-R1 --port 8001
 
-   # Terminal 2: Start Qwen3-Coder for coding
+   # Terminal 2: Coding Model
    vllm serve Qwen/Qwen3-8B-Coder --port 8002
    ```
 
-2. **Python 3.12** and **Node.js 20+** installed (or Conda/Miniconda)
+2. **Python 3.12** and **Node.js 20+**
 
 ### Development Setup
 
-You can set up the development environment using either **pip/venv** or **Conda**. Choose the method that works best for you.
-
----
-
-#### Option 1: Using Conda (Recommended for Data Scientists)
-
-**Prerequisites:** Conda or Miniconda installed, Python 3.12 environment
-
-📘 **Detailed installation guide:** See [INSTALL_CONDA.md](INSTALL_CONDA.md) for comprehensive instructions.
-
-**Quick Start - Using Existing Environment:**
-
 ```bash
-# Activate your existing conda environment (with Python 3.12)
-conda activate <your-env-name>
-
-# Install backend dependencies
-cd backend
-pip install -r requirements.txt
-
-# Setup environment file
+# 1. 환경 설정
 cp .env.example .env
-# Edit .env to configure vLLM endpoints
+# .env 파일에서 LLM 엔드포인트 설정
 
-# Install frontend dependencies
-cd ../frontend
-npm install
-
-# Run backend (Terminal 1)
-cd ../backend
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Run frontend (Terminal 2)
-cd frontend
-npm run dev
-```
-
-**Create New Environment (Optional):**
-
-If you don't have a conda environment yet, you can create one:
-
-```bash
-# Option A: Create from environment.yml (includes Python 3.12 + Node.js 20)
-conda env create -f environment.yml
-conda activate coding-agent
-
-# Option B: Backend-only environment
+# 2. Backend
 cd backend
-conda env create -f environment.yml
-conda activate coding-agent-backend
-
-# Then follow the Quick Start steps above
-```
-
-**Convenience Script:**
-
-```bash
-# Run entire stack with one command (requires 'coding-agent' environment)
-./run_conda.sh
-```
-
----
-
-#### Option 2: Using pip/venv
-
-**Backend:**
-
-```bash
-cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Copy and configure environment
-cp .env.example .env
-# Edit .env if needed to match your vLLM endpoints
-
-# Run the server
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-Or use the dev script:
-```bash
-cd backend
-./run_dev.sh
-```
-
-**Frontend:**
-
-```bash
+# 3. Frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-The frontend will be available at http://localhost:3000
+Frontend: http://localhost:5173
 
-### Production Deployment with Docker
+### Mock Mode (vLLM 없이 테스트)
 
 ```bash
-# Make sure vLLM servers are running on host machine
-
-# Copy environment file
-cp .env.example .env
-
-# Build and start services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+./RUN_MOCK.sh  # 또는 Windows: RUN_MOCK.bat
 ```
-
-The application will be available at:
-- Frontend: http://localhost
-- Backend API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
 
 ## 📁 Project Structure
 
@@ -197,277 +113,122 @@ The application will be available at:
 TestCodeAgent/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py              # FastAPI entry point
-│   │   ├── core/
-│   │   │   └── config.py        # Configuration management
-│   │   ├── api/
-│   │   │   ├── routes.py        # API endpoints
-│   │   │   └── models.py        # Pydantic models
+│   │   ├── main.py                         # FastAPI entry point
 │   │   ├── agent/
-│   │   │   └── agent_manager.py # Agent Framework integration
-│   │   └── services/
-│   │       └── vllm_client.py   # vLLM client & router
-│   ├── requirements.txt         # pip dependencies
-│   ├── environment.yml          # Conda environment (backend only, Python 3.12)
-│   ├── Dockerfile
-│   └── run_dev.sh              # pip/venv dev script
+│   │   │   ├── unified_agent_manager.py    # 통합 에이전트 매니저
+│   │   │   └── handlers/                   # 응답 타입별 핸들러
+│   │   └── api/
+│   │       └── main_routes.py              # /chat/unified 엔드포인트
+│   ├── core/
+│   │   ├── supervisor.py                   # SupervisorAgent
+│   │   ├── response_aggregator.py          # UnifiedResponse
+│   │   └── context_store.py                # 컨텍스트 저장소
+│   └── shared/
+│       └── llm/
+│           ├── base.py                     # LLMProvider 인터페이스
+│           └── adapters/                   # 모델별 어댑터
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ChatInterface.tsx
-│   │   │   ├── ChatMessage.tsx
-│   │   │   └── AgentStatus.tsx
-│   │   ├── api/
-│   │   │   └── client.ts        # API client
-│   │   ├── types/
-│   │   │   └── api.ts           # TypeScript types
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   ├── Dockerfile
-│   └── nginx.conf
-├── environment.yml              # Conda environment (full stack, Python 3.12)
-├── run_conda.sh                # Run full stack with Conda
-├── docker-compose.yml
-├── INSTALL_CONDA.md            # Detailed Conda installation guide
-├── .env.example
-└── README.md
+│   └── src/
+│       ├── components/
+│       │   ├── WorkflowInterface.tsx       # Unified 모드 UI
+│       │   ├── NextActionsPanel.tsx        # 다음 행동 버튼
+│       │   └── PlanFileViewer.tsx          # 계획 파일 뷰어
+│       └── api/
+│           └── client.ts                   # API 클라이언트
+└── docs/                                   # 기술 문서
+```
+
+## 🎯 API Endpoints
+
+### Unified Chat (Non-streaming)
+```
+POST /chat/unified
+```
+
+```json
+// Request
+{
+  "message": "Python으로 계산기 만들어줘",
+  "session_id": "session-123",
+  "workspace": "/home/user/workspace"
+}
+
+// Response
+{
+  "response_type": "code_generation",
+  "content": "## 코드 생성 완료\n\n...",
+  "artifacts": [...],
+  "next_actions": ["테스트 실행", "코드 리뷰 요청"],
+  "session_id": "session-123",
+  "success": true
+}
+```
+
+### Unified Chat (Streaming)
+```
+POST /chat/unified/stream
 ```
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the backend directory:
-
 ```env
-# vLLM Endpoints
+# Primary LLM
+LLM_ENDPOINT=http://localhost:8001/v1
+LLM_MODEL=deepseek-ai/DeepSeek-R1
+MODEL_TYPE=deepseek  # deepseek, qwen, gpt-oss, generic
+
+# Optional: Task-specific endpoints
 VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
 VLLM_CODING_ENDPOINT=http://localhost:8002/v1
-
-# Model names
 REASONING_MODEL=deepseek-ai/DeepSeek-R1
 CODING_MODEL=Qwen/Qwen3-8B-Coder
 
-# API Configuration
+# Server
 API_HOST=0.0.0.0
 API_PORT=8000
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-
-# Logging
-LOG_LEVEL=INFO
 ```
 
-## 🐍 Conda Environment Management
+## 📚 Documentation
 
-📘 **See [INSTALL_CONDA.md](INSTALL_CONDA.md) for detailed installation and setup instructions.**
+| 문서 | 설명 |
+|------|------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 아키텍처 상세 |
+| [MOCK_MODE.md](docs/MOCK_MODE.md) | Mock 모드 테스트 가이드 |
+| [MULTI_USER_ANALYSIS.md](docs/MULTI_USER_ANALYSIS.md) | 다중 사용자 동시 접속 분석 |
+| [OPTIMIZATION_RECOMMENDATIONS.md](docs/OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU 최적화 권장사항 |
+| [REFINEMENT_CYCLE_GUIDE.md](docs/REFINEMENT_CYCLE_GUIDE.md) | 코드 개선 워크플로우 가이드 |
+| [INSTALL_CONDA.md](INSTALL_CONDA.md) | Conda 환경 설치 가이드 |
 
-### Available Conda Environments
+### Archive (완료된 작업 문서)
+| 문서 | 설명 |
+|------|------|
+| [LLM_MODEL_CHANGE_PLAN.md](docs/archive/LLM_MODEL_CHANGE_PLAN.md) | LLM 추상화 계층 구현 완료 |
+| [AGENT_COMPATIBILITY_AUDIT.md](docs/archive/AGENT_COMPATIBILITY_AUDIT.md) | 프롬프트 호환성 감사 완료 |
+| [IMPROVEMENT_PLAN.md](docs/archive/IMPROVEMENT_PLAN.md) | 시스템 개선 Phase 1&2 완료 |
+| [AGENT_EXPANSION_PROPOSAL.md](docs/archive/AGENT_EXPANSION_PROPOSAL.md) | 에이전트 확장 제안서 |
 
-**Full Stack Environment (`coding-agent`):**
-- Includes Python 3.12, Node.js 20, and all backend dependencies
-- Best for running both frontend and backend
-- File: `environment.yml`
+## 🎨 UI Design
 
-**Backend Only Environment (`coding-agent-backend`):**
-- Includes Python 3.12 and backend dependencies only
-- Best for API development
-- File: `backend/environment.yml`
+Claude.ai 스타일 디자인:
 
-### Quick Installation
+| Element | Color |
+|---------|-------|
+| Background | `#FAF9F7` (warm off-white) |
+| Accent | `#DA7756` (terracotta) |
+| Text Primary | `#1A1A1A` |
+| Text Secondary | `#666666` |
 
-**Using Existing Environment:**
-```bash
-# Activate your conda environment (must have Python 3.12)
-conda activate <your-env-name>
+## 🛠️ Supported LLM Models
 
-# Install dependencies
-cd backend && pip install -r requirements.txt
-cd ../frontend && npm install
-```
-
-**Create New Environment:**
-```bash
-# Full stack
-conda env create -f environment.yml
-conda activate coding-agent
-
-# Backend only
-cd backend
-conda env create -f environment.yml
-conda activate coding-agent-backend
-```
-
-### Common Conda Commands
-
-```bash
-# List all conda environments
-conda env list
-
-# Activate environment
-conda activate coding-agent
-
-# Deactivate environment
-conda deactivate
-
-# Update environment from YAML file
-conda env update -f environment.yml --prune
-
-# Remove environment
-conda env remove -n coding-agent
-
-# Export current environment
-conda env export > environment_snapshot.yml
-
-# View installed packages
-conda list
-```
-
-### Updating Dependencies
-
-**Update backend dependencies:**
-```bash
-conda activate <your-env-name>
-cd backend
-pip install -r requirements.txt --upgrade
-```
-
-**Update frontend dependencies:**
-```bash
-cd frontend
-npm update
-```
-
-## 🎯 API Endpoints
-
-### Chat
-
-- `POST /api/chat` - Send a message (non-streaming)
-- `POST /api/chat/stream` - Send a message (streaming)
-
-### Agent Management
-
-- `GET /api/agent/status/{session_id}` - Get agent status
-- `POST /api/agent/clear/{session_id}` - Clear conversation history
-- `DELETE /api/agent/session/{session_id}` - Delete session
-- `GET /api/agent/sessions` - List active sessions
-
-### Models
-
-- `GET /api/models` - List available models
-- `GET /health` - Health check
-
-### Example Request
-
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Write a Python function to calculate fibonacci numbers",
-    "session_id": "test-session",
-    "task_type": "coding"
-  }'
-```
-
-## 🛠️ Technology Stack
-
-### Backend
-- **FastAPI** - Modern Python web framework
-- **Microsoft Agent Framework** - Agent orchestration
-- **OpenAI Python SDK** - vLLM communication
-- **Pydantic** - Data validation
-- **Uvicorn** - ASGI server
-
-### Frontend
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool
-- **TailwindCSS** - Styling
-- **Axios** - HTTP client
-- **React Markdown** - Markdown rendering
-- **React Syntax Highlighter** - Code highlighting
-
-### Infrastructure
-- **Docker & Docker Compose** - Containerization
-- **Nginx** - Frontend serving & reverse proxy
-
-## 🔄 Task Types
-
-### Coding Mode (Qwen3-Coder)
-Best for:
-- Code generation
-- Code fixes and debugging
-- Code explanation
-- Refactoring suggestions
-
-### Reasoning Mode (DeepSeek-R1)
-Best for:
-- Complex problem solving
-- Algorithm design
-- Architecture decisions
-- Planning and analysis
-
-## 📝 Development
-
-### Running Tests
-
-```bash
-# Backend
-cd backend
-pytest
-
-# Frontend
-cd frontend
-npm test
-```
-
-### Building for Production
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-
-# Frontend
-cd frontend
-npm run build
-```
-
-## 🐛 Troubleshooting
-
-### vLLM Connection Issues
-
-If the backend can't connect to vLLM:
-
-1. Verify vLLM servers are running:
-   ```bash
-   curl http://localhost:8001/v1/models
-   curl http://localhost:8002/v1/models
-   ```
-
-2. Check firewall settings
-3. Verify environment variables in `.env`
-
-### Docker Networking
-
-When running in Docker, vLLM endpoints should use `host.docker.internal`:
-
-```env
-VLLM_REASONING_ENDPOINT=http://host.docker.internal:8001/v1
-VLLM_CODING_ENDPOINT=http://host.docker.internal:8002/v1
-```
+| 모델 | 특징 | 프롬프트 형식 |
+|------|------|---------------|
+| DeepSeek-R1 | 추론 모델 | `<think></think>` 태그 |
+| Qwen3-Coder | 코딩 특화 | Standard prompts |
+| GPT-OSS | OpenAI Harmony | Structured reasoning |
 
 ## 📄 License
 
 MIT License - see LICENSE file for details
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📚 References
-
-- [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)
-- [vLLM Documentation](https://docs.vllm.ai)
-- [FastAPI Documentation](https://fastapi.tiangolo.com)
-- [React Documentation](https://react.dev)

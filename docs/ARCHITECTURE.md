@@ -1,0 +1,325 @@
+# TestCodeAgent 시스템 아키텍처
+
+**버전**: 2.0
+**최종 업데이트**: 2026-01-06
+
+---
+
+## 1. 시스템 개요
+
+TestCodeAgent는 **Claude Code / OpenAI Codex 방식**의 통합 워크플로우 아키텍처를 구현한 AI 코딩 어시스턴트입니다.
+
+### 1.1 핵심 설계 원칙
+
+1. **단일 진입점**: 모든 요청이 Supervisor를 통과
+2. **지능적 라우팅**: 요청 유형에 따른 자동 경로 결정
+3. **통합 응답 포맷**: 모든 경로에서 동일한 응답 구조
+4. **컨텍스트 영속성**: 대화 및 작업 컨텍스트 DB 저장
+5. **사용자 친화적 출력**: 내부 분석이 아닌 사용자용 응답
+
+---
+
+## 2. 아키텍처 다이어그램
+
+```
+User Prompt
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Unified Chat Endpoint                         │
+│                    POST /chat/unified                            │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    UnifiedAgentManager                           │
+│  - 세션 컨텍스트 로드                                             │
+│  - Supervisor 분석 요청                                           │
+│  - 응답 타입별 라우팅                                             │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    SupervisorAgent                               │
+│  - 요청 분석 (Reasoning LLM)                                     │
+│  - response_type 결정                                            │
+│  - 필요 에이전트 결정                                             │
+│  - 복잡도 평가                                                    │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ├─► QUICK_QA ─────────► Direct LLM Response
+    │                        (간단한 질문 답변)
+    │
+    ├─► PLANNING ─────────► PlanningHandler
+    │                        ├─► 계획 생성 (LLM)
+    │                        ├─► 사용자 응답 생성
+    │                        └─► 계획 파일 저장 (옵션)
+    │
+    ├─► CODE_GENERATION ──► CodeGenerationHandler
+    │                        ├─► Dynamic Workflow 실행
+    │                        ├─► Architect → Coder → Review
+    │                        └─► Artifacts 생성
+    │
+    ├─► CODE_REVIEW ──────► CodeReviewHandler
+    │                        ├─► 코드 분석
+    │                        └─► 리뷰 피드백 생성
+    │
+    └─► DEBUGGING ────────► DebuggingHandler
+                             ├─► RCA 분석
+                             └─► 수정 제안
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    ResponseAggregator                            │
+│  - 스트리밍 업데이트 수집                                         │
+│  - 최종 UnifiedResponse 생성                                     │
+│  - Artifacts 첨부                                                │
+│  - 컨텍스트 저장                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. 핵심 컴포넌트
+
+### 3.1 UnifiedAgentManager
+
+**파일**: `backend/app/agent/unified_agent_manager.py`
+
+모든 요청의 통합 처리 + 컨텍스트 관리를 담당합니다.
+
+```python
+class UnifiedAgentManager:
+    def __init__(self):
+        self.supervisor = SupervisorAgent(use_api=True)
+        self.context_store = ContextStore()
+        self.response_aggregator = ResponseAggregator()
+        self.handlers = {
+            ResponseType.QUICK_QA: QuickQAHandler(),
+            ResponseType.PLANNING: PlanningHandler(),
+            ResponseType.CODE_GENERATION: CodeGenerationHandler(),
+            # ...
+        }
+```
+
+### 3.2 Response Type Handlers
+
+**파일**: `backend/app/agent/handlers/`
+
+| 핸들러 | 역할 |
+|--------|------|
+| `QuickQAHandler` | 간단한 질문-답변 처리 |
+| `PlanningHandler` | 계획 수립 + 파일 저장 |
+| `CodeGenerationHandler` | 전체 워크플로우 실행 |
+| `CodeReviewHandler` | 코드 분석 및 리뷰 |
+| `DebuggingHandler` | RCA 분석 및 수정 제안 |
+
+### 3.3 ContextStore
+
+**파일**: `backend/core/context_store.py`
+
+- SQLAlchemy를 통한 대화 컨텍스트 DB 저장
+- 메모리 캐시 + DB 영속성 하이브리드 방식
+- 저장 데이터: 메시지, 아티팩트, 분석 결과, 워크스페이스
+
+---
+
+## 4. API 엔드포인트
+
+### 4.1 통합 채팅 (비스트리밍)
+
+```
+POST /chat/unified
+```
+
+**Request:**
+```json
+{
+  "message": "Python으로 계산기 만들어줘",
+  "session_id": "session-123",
+  "workspace": "/home/user/workspace/calculator"
+}
+```
+
+**Response:**
+```json
+{
+  "response_type": "code_generation",
+  "content": "## 코드 생성 완료\n\n다음 파일들이 생성되었습니다...",
+  "artifacts": [...],
+  "plan_file": null,
+  "analysis": {
+    "complexity": "moderate",
+    "task_type": "implementation",
+    "required_agents": ["coder", "reviewer"],
+    "confidence": 0.85
+  },
+  "next_actions": ["테스트 실행", "코드 리뷰 요청", "추가 기능 구현"],
+  "session_id": "session-123",
+  "success": true
+}
+```
+
+### 4.2 통합 채팅 (스트리밍)
+
+```
+POST /chat/unified/stream
+```
+
+**Response:** Server-Sent Events
+```
+data: {"agent": "Supervisor", "type": "analysis", "status": "completed", ...}
+data: {"agent": "CodeGenerationHandler", "type": "progress", ...}
+data: {"agent": "Coder", "type": "artifact", ...}
+data: {"agent": "UnifiedAgentManager", "type": "done", ...}
+data: [DONE]
+```
+
+---
+
+## 5. LLM Provider 구조
+
+### 5.1 지원 모델
+
+| 모델 | 특징 | 프롬프트 형식 |
+|------|------|---------------|
+| DeepSeek-R1 | 추론 모델 | `<think></think>` 태그 |
+| Qwen3 | 범용 코딩 모델 | Standard prompts |
+| GPT-OSS | OpenAI Harmony 포맷 | Structured reasoning |
+
+### 5.2 어댑터 구조
+
+```
+shared/llm/
+├── base.py              # BaseLLMProvider 추상 클래스
+└── adapters/
+    ├── deepseek_adapter.py
+    ├── gpt_oss_adapter.py
+    ├── qwen_adapter.py
+    └── generic_adapter.py
+```
+
+---
+
+## 6. 프론트엔드 컴포넌트
+
+### 6.1 Unified 모드 지원
+
+| 컴포넌트 | 파일 | 역할 |
+|----------|------|------|
+| WorkflowInterface | `WorkflowInterface.tsx` | Unified 모드 메인 UI |
+| NextActionsPanel | `NextActionsPanel.tsx` | 다음 행동 버튼 UI |
+| PlanFileViewer | `PlanFileViewer.tsx` | 계획 파일 미리보기 모달 |
+
+### 6.2 Next Actions 기능
+
+응답 타입별 맞춤형 다음 행동 제안:
+
+| 응답 타입 | 제안 행동 |
+|-----------|-----------|
+| QUICK_QA | "추가 질문하기" |
+| PLANNING | "코드 생성 시작", "계획 수정 요청", "계획 파일 확인" |
+| CODE_GENERATION | "테스트 실행", "코드 리뷰 요청", "추가 기능 구현" |
+| CODE_REVIEW | "수정 사항 적용", "추가 리뷰 요청" |
+| DEBUGGING | "수정 사항 적용", "테스트 실행" |
+
+---
+
+## 7. 데이터 흐름
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        Frontend (React)                          │
+│  ┌────────────┐    ┌────────────┐    ┌────────────────────────┐  │
+│  │ ChatInput  │───►│ API Client │───►│ WorkflowInterface      │  │
+│  └────────────┘    └────────────┘    │ - NextActionsPanel     │  │
+│                                      │ - PlanFileViewer       │  │
+│                                      └────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     Backend (FastAPI)                            │
+│  ┌────────────────┐    ┌────────────────────────────────────┐    │
+│  │  main_routes   │───►│     UnifiedAgentManager            │    │
+│  │/chat/unified   │    │  ┌──────────────────────────────┐  │    │
+│  │/chat/unified/  │    │  │     SupervisorAgent          │  │    │
+│  │       stream   │    │  │  - analyze_request_async()   │  │    │
+│  └────────────────┘    │  └──────────────────────────────┘  │    │
+│                        │                  │                 │    │
+│                        │     ┌────────────┴────────────┐    │    │
+│                        │     ▼            ▼            ▼    │    │
+│                        │  QuickQA    Planning    CodeGen    │    │
+│                        │  Handler    Handler     Handler    │    │
+│                        └────────────────────────────────────┘    │
+│                                      │                           │
+│                                      ▼                           │
+│                        ┌────────────────────────────────────┐    │
+│                        │         ContextStore (DB)          │    │
+│                        │   - messages, artifacts            │    │
+│                        │   - analysis, workspace            │    │
+│                        └────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     LLM Layer (vLLM)                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐    │
+│  │ DeepSeek-R1  │  │   GPT-OSS    │  │    Qwen3-Coder       │    │
+│  │  (Reasoning) │  │  (General)   │  │     (Coding)         │    │
+│  │   Port 8001  │  │   Port 8001  │  │    Port 8002         │    │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. 파일 구조
+
+```
+backend/
+├── app/
+│   ├── agent/
+│   │   ├── unified_agent_manager.py    # 통합 에이전트 매니저
+│   │   └── handlers/
+│   │       ├── base.py                 # BaseHandler 추상 클래스
+│   │       ├── quick_qa.py             # QUICK_QA 핸들러
+│   │       ├── planning.py             # PLANNING 핸들러
+│   │       └── code_generation.py      # CODE_GENERATION 핸들러
+│   └── api/
+│       └── main_routes.py              # /chat/unified 엔드포인트
+├── core/
+│   ├── supervisor.py                   # SupervisorAgent
+│   ├── response_aggregator.py          # UnifiedResponse 정의
+│   └── context_store.py                # 컨텍스트 저장소
+└── shared/
+    └── llm/
+        ├── base.py                     # LLMProvider 인터페이스
+        └── adapters/                   # 모델별 어댑터
+
+frontend/
+├── src/
+│   ├── api/
+│   │   └── client.ts                   # unifiedChat(), unifiedChatStream()
+│   ├── components/
+│   │   ├── WorkflowInterface.tsx       # Unified 모드 UI
+│   │   ├── NextActionsPanel.tsx        # 다음 행동 버튼
+│   │   └── PlanFileViewer.tsx          # 계획 파일 뷰어
+│   └── types/
+│       └── api.ts                      # UnifiedChatResponse 타입
+```
+
+---
+
+## 9. 관련 문서
+
+| 문서 | 설명 |
+|------|------|
+| [MOCK_MODE.md](./MOCK_MODE.md) | vLLM 없이 Mock 테스트 가이드 |
+| [MULTI_USER_ANALYSIS.md](./MULTI_USER_ANALYSIS.md) | 다중 사용자 동시 접속 분석 |
+| [OPTIMIZATION_RECOMMENDATIONS.md](./OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU 최적화 권장사항 |
+| [REFINEMENT_CYCLE_GUIDE.md](./REFINEMENT_CYCLE_GUIDE.md) | 코드 개선 워크플로우 가이드 |
+
+---
+
+*이 문서는 TestCodeAgent의 핵심 아키텍처를 설명합니다.*

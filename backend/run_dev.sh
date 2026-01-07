@@ -2,10 +2,14 @@
 
 # Development server startup script
 
-# Copy .env.example to .env if it doesn't exist
-if [ ! -f .env ]; then
-    cp .env.example .env
-    echo "Created .env file from .env.example"
+# Copy .env.example to .env in project root if it doesn't exist
+if [ ! -f ../.env ]; then
+    if [ -f ../.env.example ]; then
+        cp ../.env.example ../.env
+        echo "Created .env file from .env.example in project root"
+    else
+        echo "Warning: .env.example not found in project root"
+    fi
 fi
 
 # Install dependencies

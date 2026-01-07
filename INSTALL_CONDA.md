@@ -26,8 +26,8 @@ pip install -r requirements.txt
 cd ../frontend
 npm install
 
-# .env 파일 생성
-cd ../backend
+# .env 파일 생성 (프로젝트 루트)
+cd ..
 cp .env.example .env
 # .env 파일을 편집해서 vLLM 엔드포인트 설정
 
@@ -51,8 +51,8 @@ conda activate coding-agent
 cd frontend
 npm install
 
-# .env 파일 생성
-cd ../backend
+# .env 파일 생성 (프로젝트 루트)
+cd ..
 cp .env.example .env
 ```
 
@@ -66,20 +66,25 @@ conda env create -f environment.yml
 # 환경 활성화
 conda activate coding-agent-backend
 
-# .env 파일 생성
+# .env 파일 생성 (프로젝트 루트)
+cd ..
 cp .env.example .env
 ```
 
 ## 🔧 환경 변수 설정
 
-`backend/.env` 파일을 편집해서 vLLM 엔드포인트를 설정하세요:
+프로젝트 루트의 `.env` 파일을 편집해서 LLM 엔드포인트를 설정하세요:
 
 ```env
-# vLLM Endpoints
+# Primary LLM endpoint
+# IMPORTANT: Use localhost, NOT 0.0.0.0 for client connections
+LLM_ENDPOINT=http://localhost:8001/v1
+LLM_MODEL=deepseek-ai/DeepSeek-R1
+MODEL_TYPE=deepseek
+
+# Optional: Task-specific endpoints
 VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
 VLLM_CODING_ENDPOINT=http://localhost:8002/v1
-
-# Model names
 REASONING_MODEL=deepseek-ai/DeepSeek-R1
 CODING_MODEL=Qwen/Qwen3-8B-Coder
 ```
