@@ -218,6 +218,7 @@ async def unified_chat_stream(request: ChatRequest):
                 error_data = {
                     "agent": "System",
                     "type": "error",
+                    "update_type": "error",
                     "status": "error",
                     "message": str(e)
                 }
@@ -693,14 +694,20 @@ async def execute_workflow(request: ChatRequest):
                             save_result = await write_artifact_to_workspace(artifact)
                             artifact.update(save_result)
 
+                    # Add update_type for frontend TypeScript compatibility
+                    if "type" in update and "update_type" not in update:
+                        update["update_type"] = update["type"]
+
                     # Send update as JSON
                     yield json.dumps(update) + "\n"
             except Exception as e:
                 logger.error(f"Error in workflow execution: {e}")
                 yield json.dumps({
                     "agent": "Workflow",
+                    "type": "error",
+                    "update_type": "error",
                     "status": "error",
-                    "content": f"Error: {str(e)}"
+                    "message": f"Error: {str(e)}"
                 }) + "\n"
 
         return StreamingResponse(

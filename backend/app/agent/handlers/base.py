@@ -58,6 +58,7 @@ class StreamUpdate:
             "agent": self.agent,
             "node": self.agent,  # 프론트엔드 호환성
             "type": self.update_type,
+            "update_type": self.update_type,  # 프론트엔드 TypeScript 인터페이스 호환성
             "status": self.status,
             "message": self.message
         }

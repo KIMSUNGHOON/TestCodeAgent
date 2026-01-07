@@ -15,12 +15,27 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.config import settings
 from app.agent.handlers.base import BaseHandler, HandlerResult, StreamUpdate
+from shared.utils.token_utils import estimate_tokens, create_token_usage
+from shared.utils.language_utils import detect_language, get_language_instruction
 
 logger = logging.getLogger(__name__)
 
 
-def _get_planning_system_prompt(model_type: str) -> str:
-    """모델 타입에 따른 시스템 프롬프트 반환"""
+def _get_planning_system_prompt(model_type: str, user_message: str = "") -> str:
+    """모델 타입과 사용자 언어에 따른 시스템 프롬프트 반환
+
+    Args:
+        model_type: LLM 모델 타입
+        user_message: 사용자 메시지 (언어 감지용)
+
+    Returns:
+        시스템 프롬프트
+    """
+    # 언어 감지 및 지시어 생성
+    language_instruction = ""
+    if user_message:
+        language = detect_language(user_message)
+        language_instruction = get_language_instruction(language)
 
     base_prompt = """You are an expert software architect and development planner.
 
@@ -37,12 +52,10 @@ Output format:
 - Use clear markdown formatting
 - Number your steps
 - Include code structure suggestions where helpful
-- Provide rationale for key decisions
-
-Language: Respond in the same language as the user's request."""
+- Provide rationale for key decisions"""
 
     if model_type == "deepseek":
-        return f"""<think>
+        return f"""{language_instruction}<think>
 Before responding, analyze:
 1. What is the user trying to build?
 2. What are the key components needed?
@@ -52,7 +65,7 @@ Before responding, analyze:
 
 {base_prompt}"""
     else:
-        return base_prompt
+        return language_instruction + base_prompt
 
 
 class PlanningHandler(BaseHandler):
@@ -95,8 +108,8 @@ class PlanningHandler(BaseHandler):
             HandlerResult: 처리 결과 (계획 + 옵션으로 파일 저장)
         """
         try:
-            # 시스템 프롬프트 구성
-            system_prompt = _get_planning_system_prompt(self.model_type)
+            # 시스템 프롬프트 구성 (언어 감지 적용)
+            system_prompt = _get_planning_system_prompt(self.model_type, user_message)
 
             # 컨텍스트 정보 추가
             context_info = self._build_context_info(analysis, context)
@@ -184,8 +197,8 @@ class PlanningHandler(BaseHandler):
         )
 
         try:
-            # 시스템 프롬프트 구성
-            system_prompt = _get_planning_system_prompt(self.model_type)
+            # 시스템 프롬프트 구성 (언어 감지 적용)
+            system_prompt = _get_planning_system_prompt(self.model_type, user_message)
             context_info = self._build_context_info(analysis, context)
 
             user_prompt = f"""## 요청 분석
@@ -217,12 +230,20 @@ class PlanningHandler(BaseHandler):
                         # 최근 500자만 streaming_content로 전달
                         preview_content = preview[-500:] if len(preview) > 500 else preview
 
+                        # Real-time token estimation
+                        current_token_usage = {
+                            "prompt_tokens": estimate_tokens(f"{system_prompt}\n{user_prompt}"),
+                            "completion_tokens": estimate_tokens(plan_content),
+                            "total_tokens": estimate_tokens(f"{system_prompt}\n{user_prompt}") + estimate_tokens(plan_content)
+                        }
+
                         yield StreamUpdate(
                             agent="PlanningHandler",
                             update_type="streaming",
                             status="running",
                             message=f"계획 작성 중... ({len(plan_content)} 자)",
-                            streaming_content=preview_content
+                            streaming_content=preview_content,
+                            data={"token_usage": current_token_usage}
                         )
 
             # 정리 및 저장
@@ -237,6 +258,10 @@ class PlanningHandler(BaseHandler):
                 if workspace:
                     plan_file = await self._save_plan_file(plan_content, workspace, user_message)
 
+            # Calculate token usage
+            full_prompt = f"{system_prompt}\n{user_prompt}"
+            token_usage = create_token_usage(full_prompt, plan_content)
+
             yield StreamUpdate(
                 agent="PlanningHandler",
                 update_type="completed",
@@ -245,7 +270,8 @@ class PlanningHandler(BaseHandler):
                 streaming_content=plan_content,
                 data={
                     "plan_file": plan_file,
-                    "full_content": user_response
+                    "full_content": user_response,
+                    "token_usage": token_usage
                 }
             )
 
