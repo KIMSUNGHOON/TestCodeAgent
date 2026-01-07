@@ -857,3 +857,41 @@ if os.path.exists(candidate_workspace):
 | 순서 | 파일 | 변경 내용 |
 |-----|------|---------|
 | 1 | `backend/app/agent/langchain/workflow_manager.py` | estimate_tokens, create_token_usage 추가, SSE에 token_usage 포함 |
+
+### 42. FileTreeViewer 표시되지 않는 문제 수정 (2026-01-07)
+- **문제**: FileTreeViewer가 UI에 표시되지 않음
+- **원인 분석**:
+  1. 백엔드는 `"artifact": artifact` (단수)로 전송하지만, 프론트엔드는 `"artifacts"` (복수)만 확인
+  2. `update_type === 'artifact'` 이벤트(개별 파일)에 대한 처리 없음
+  3. `captureArtifacts()` 함수가 단수 artifact를 처리하지 않음
+
+- **해결**:
+  1. `captureArtifacts()`에 단수 `artifact` 및 `task_result.artifacts` 처리 추가
+  2. `update_type === 'artifact'` 이벤트 처리 추가
+  3. 중복 파일 처리 로직 개선
+
+```tsx
+// 개별 artifact 이벤트 처리 추가
+if (update.update_type === 'artifact' && update.data) {
+  const artifactData = update.data.artifact || update.data;
+  if (artifactData && artifactData.filename) {
+    // savedFiles에 추가
+    setSavedFiles(prev => {
+      const exists = prev.some(f => f.filename === artifact.filename);
+      if (exists) return prev.map(f => f.filename === artifact.filename ? artifact : f);
+      return [...prev, artifact];
+    });
+  }
+}
+
+// captureArtifacts에 단수 artifact 처리 추가
+if (event.updates?.artifact) {
+  artifactsToCapture = [event.updates.artifact];
+}
+```
+
+## 수정 파일 목록 (Issue 42)
+
+| 순서 | 파일 | 변경 내용 |
+|-----|------|---------|
+| 1 | `frontend/src/components/WorkflowInterface.tsx` | artifact 이벤트 처리 추가, captureArtifacts 단수/복수 처리 |

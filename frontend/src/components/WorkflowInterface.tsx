@@ -583,29 +583,41 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
     // CONSOLIDATED ARTIFACT CAPTURE
     // Capture artifacts from multiple sources and merge them together
-    // Priority: 1. Direct artifacts, 2. saved_files, 3. final_artifacts, 4. coder_output.artifacts
+    // Priority: 1. Direct artifacts (plural), 2. Single artifact, 3. saved_files, 4. final_artifacts, 5. task_result.artifacts, 6. coder_output.artifacts
     const captureArtifacts = () => {
       let artifactsToCapture: any[] = [];
 
-      // Source 1: Direct artifacts (most common)
+      // Source 1: Direct artifacts array (most common)
       if (event.updates?.artifacts && Array.isArray(event.updates.artifacts) && event.updates.artifacts.length > 0) {
         artifactsToCapture = event.updates.artifacts;
         console.log(`[${nodeName}:${status}] Captured ${artifactsToCapture.length} direct artifacts`);
       }
 
-      // Source 2: saved_files (from persistence)
+      // Source 2: Single artifact (singular) - 백엔드가 "artifact" 단수로 보내는 경우
+      if (artifactsToCapture.length === 0 && event.updates?.artifact) {
+        artifactsToCapture = [event.updates.artifact];
+        console.log(`[${nodeName}:${status}] Captured 1 single artifact`);
+      }
+
+      // Source 3: saved_files (from persistence)
       if (artifactsToCapture.length === 0 && event.updates?.saved_files && Array.isArray(event.updates.saved_files)) {
         artifactsToCapture = event.updates.saved_files;
         console.log(`[${nodeName}:${status}] Captured ${artifactsToCapture.length} from saved_files`);
       }
 
-      // Source 3: final_artifacts (from workflow completion)
+      // Source 4: final_artifacts (from workflow completion)
       if (artifactsToCapture.length === 0 && event.updates?.final_artifacts && Array.isArray(event.updates.final_artifacts)) {
         artifactsToCapture = event.updates.final_artifacts;
         console.log(`[${nodeName}:${status}] Captured ${artifactsToCapture.length} from final_artifacts`);
       }
 
-      // Source 4: Nested coder_output.artifacts (fallback for coder)
+      // Source 5: task_result.artifacts (from task completion)
+      if (artifactsToCapture.length === 0 && event.updates?.task_result?.artifacts && Array.isArray(event.updates.task_result.artifacts)) {
+        artifactsToCapture = event.updates.task_result.artifacts;
+        console.log(`[${nodeName}:${status}] Captured ${artifactsToCapture.length} from task_result.artifacts`);
+      }
+
+      // Source 6: Nested coder_output.artifacts (fallback for coder)
       if (artifactsToCapture.length === 0 && nodeName === 'coder' && event.updates?.coder_output?.artifacts) {
         artifactsToCapture = event.updates.coder_output.artifacts;
         console.log(`[${nodeName}:${status}] Captured ${artifactsToCapture.length} from coder_output.artifacts`);
@@ -621,8 +633,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
       }
     };
 
-    // Capture artifacts on completed events or when artifacts are present
-    if (status === 'completed' || event.updates?.artifacts || event.updates?.saved_files) {
+    // Capture artifacts on completed events or when artifacts are present (including singular artifact)
+    if (status === 'completed' || event.updates?.artifacts || event.updates?.artifact || event.updates?.saved_files || event.updates?.task_result?.artifacts) {
       captureArtifacts();
     }
 
@@ -718,6 +730,34 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
           };
         }
 
+        // Handle individual artifact events (type='artifact')
+        if (update.update_type === 'artifact' && update.data) {
+          const artifactData = update.data.artifact || update.data;
+          if (artifactData && artifactData.filename) {
+            const artifact = {
+              filename: artifactData.filename,
+              language: artifactData.language || 'text',
+              content: artifactData.content || '',
+              saved_path: artifactData.saved_path,
+              saved: artifactData.saved || false,
+              saved_at: artifactData.saved_at,
+              error: artifactData.error,
+              action: 'created' as const,
+            };
+            workflowUpdate.artifact = artifact;
+            // 개별 artifact도 savedFiles에 추가
+            setSavedFiles(prev => {
+              // 중복 체크
+              const exists = prev.some(f => f.filename === artifact.filename);
+              if (exists) {
+                return prev.map(f => f.filename === artifact.filename ? artifact : f);
+              }
+              return [...prev, artifact];
+            });
+            console.log(`[artifact] Added file: ${artifact.filename}`);
+          }
+        }
+
         if (update.update_type === 'completed' && update.data) {
           // Extract artifacts from completed update
           if (update.data.artifacts) {
@@ -729,9 +769,16 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               saved: a.saved || false,
               saved_at: a.saved_at,
               error: a.error,
-              action: a.saved ? 'created' : undefined,
+              action: a.saved ? 'created' : (a.action || undefined),
             }));
-            setSavedFiles(prev => [...prev, ...workflowUpdate.artifacts!]);
+            setSavedFiles(prev => {
+              // 중복 제거 후 병합
+              const newArtifacts = workflowUpdate.artifacts!.filter(
+                newA => !prev.some(existing => existing.filename === newA.filename)
+              );
+              return [...prev, ...newArtifacts];
+            });
+            console.log(`[completed] Added ${workflowUpdate.artifacts.length} artifacts`);
           }
           // Extract full content for display, also check streaming_content
           if (update.data.full_content) {
