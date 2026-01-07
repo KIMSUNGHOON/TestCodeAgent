@@ -201,6 +201,7 @@ const getAgentStatusMessage = (agentName: string, status: string): string => {
 
 const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDownloadZip, isDownloadingZip }: TerminalOutputProps) => {
   const [showAllUpdates, setShowAllUpdates] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Filter updates to show only significant ones (hide progress/streaming noise)
   const filteredUpdates = updates.filter(update => {
@@ -269,21 +270,37 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
     .sort((a, b) => a.timestamp - b.timestamp);
 
   return (
-    <div className="font-mono text-xs bg-gray-950 text-gray-300 p-2 sm:p-3 rounded-lg border border-gray-800 min-h-[150px] sm:min-h-[200px] max-h-[50vh] sm:max-h-[60vh] overflow-y-auto">
+    <div className={`font-mono text-xs bg-gray-950 text-gray-300 p-2 sm:p-3 rounded-lg border border-gray-800 ${isCollapsed ? 'min-h-0' : 'min-h-[150px] sm:min-h-[200px] max-h-[50vh] sm:max-h-[60vh]'} overflow-y-auto`}>
       {/* 터미널 프롬프트 헤더 */}
-      <div className="text-gray-600 mb-2 text-[10px] sm:text-xs">
-        $ workflow execute --stream
+      <div className="flex items-center justify-between text-gray-600 mb-2 text-[10px] sm:text-xs">
+        <span>$ workflow execute --stream</span>
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="text-gray-500 hover:text-gray-300 px-1.5 py-0.5 rounded hover:bg-gray-800 transition-colors"
+          title={isCollapsed ? '펼치기' : '접기'}
+        >
+          {isCollapsed ? '▶ 펼치기' : '▼ 접기'}
+        </button>
       </div>
 
+      {/* 접힌 상태 요약 */}
+      {isCollapsed && (
+        <div className="text-gray-500 text-[10px]">
+          {updates.length > 0 ? `${updates.length}개의 업데이트` : '출력 없음'}
+          {savedFiles.length > 0 && ` · ${savedFiles.length}개 파일`}
+          {isRunning && ' · 실행 중...'}
+        </div>
+      )}
+
       {/* 출력 없음 */}
-      {updates.length === 0 && !isRunning && (
+      {!isCollapsed && updates.length === 0 && !isRunning && (
         <div className="text-gray-600 italic">
           출력 없음. 작업을 입력하여 시작하세요.
         </div>
       )}
 
       {/* 파일 트리 뷰어 - 워크플로우 완료 후에만 표시 (최종 결과) */}
-      {!isRunning && savedFiles.length > 0 && (
+      {!isCollapsed && !isRunning && savedFiles.length > 0 && (
         <div className="mb-3">
           <div className="text-[10px] text-gray-500 mb-1">📁 생성된 파일 ({savedFiles.length}개)</div>
           <FileTreeViewer
@@ -295,7 +312,7 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
       )}
 
       {/* 라이브 스트리밍 출력 */}
-      {isRunning && sortedLiveOutputs.length > 0 && (
+      {!isCollapsed && isRunning && sortedLiveOutputs.length > 0 && (
         <div className="space-y-2">
           {sortedLiveOutputs.map((output) => (
             <div key={output.agentName} className="border-l-2 border-gray-800 pl-2">
@@ -339,7 +356,7 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
       )}
 
       {/* 완료된 업데이트 - 로그 형태 */}
-      {!isRunning && updates.length > 0 && (
+      {!isCollapsed && !isRunning && updates.length > 0 && (
         <div className="space-y-2 sm:space-y-3">
           {/* Toggle for showing all updates */}
           {hiddenCount > 0 && (
@@ -521,7 +538,7 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDo
       )}
 
       {/* 실행 중 표시 */}
-      {isRunning && (
+      {!isCollapsed && isRunning && (
         <div className="mt-3 flex items-center gap-2 text-gray-500">
           <span className="animate-spin">⟳</span>
           <span>실행 중...</span>
