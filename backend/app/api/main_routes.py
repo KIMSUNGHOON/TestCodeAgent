@@ -504,7 +504,8 @@ async def execute_workflow(request: ChatRequest):
         workspace = await workflow_service.get_or_create_workspace(
             session_id=request.session_id,
             user_message=request.message,
-            base_workspace=request.workspace
+            base_workspace=request.workspace,
+            project_name=request.project_name
         )
 
         # Get appropriate workflow based on framework selection

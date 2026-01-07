@@ -13,6 +13,8 @@ export interface ChatRequest {
   task_type?: 'reasoning' | 'coding';
   system_prompt?: string;
   stream?: boolean;
+  workspace?: string;
+  project_name?: string;
 }
 
 export interface ChatResponse {

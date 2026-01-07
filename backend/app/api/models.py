@@ -33,6 +33,7 @@ class ChatRequest(BaseModel):
     stream: bool = Field(default=False, description="Whether to stream the response")
     context: Optional[ConversationContext] = Field(None, description="Previous conversation context")
     workspace: Optional[str] = Field(None, description="Workspace directory for file operations")
+    project_name: Optional[str] = Field(None, description="Project name for context in prompts")
 
 
 class ChatResponse(BaseModel):

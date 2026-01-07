@@ -113,7 +113,8 @@ Examples:
         self,
         session_id: str,
         user_message: str,
-        base_workspace: Optional[str] = None
+        base_workspace: Optional[str] = None,
+        project_name: Optional[str] = None
     ) -> str:
         """
         Get existing workspace or create a new session-specific one.
@@ -131,6 +132,7 @@ Examples:
             session_id: Session identifier
             user_message: User's message (for project name suggestion)
             base_workspace: Optional base workspace path
+            project_name: Optional project name (if provided, skip LLM suggestion)
 
         Returns:
             Workspace path for the session
@@ -158,8 +160,17 @@ Examples:
             session_short = session_id[-12:] if len(session_id) > 12 else session_id
             session_short = re.sub(r'[^a-zA-Z0-9_-]', '_', session_short)
 
-            # Let LLM suggest a project name based on the user's request
-            project_name = await self.suggest_project_name(user_message)
+            # Use provided project_name or let LLM suggest one
+            if project_name:
+                # Sanitize user-provided project name
+                project_name = re.sub(r'[^a-zA-Z0-9_-]', '_', project_name.strip())
+                project_name = re.sub(r'_+', '_', project_name).strip('_').lower()
+                if not project_name:
+                    project_name = await self.suggest_project_name(user_message)
+                logger.info(f"Using user-provided project name: {project_name}")
+            else:
+                # Let LLM suggest a project name based on the user's request
+                project_name = await self.suggest_project_name(user_message)
 
             # Build session-specific workspace path
             # base_workspace/date/session/project

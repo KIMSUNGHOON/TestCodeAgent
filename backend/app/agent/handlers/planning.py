@@ -21,12 +21,13 @@ from shared.utils.language_utils import detect_language, get_language_instructio
 logger = logging.getLogger(__name__)
 
 
-def _get_planning_system_prompt(model_type: str, user_message: str = "") -> str:
+def _get_planning_system_prompt(model_type: str, user_message: str = "", project_name: str = "") -> str:
     """모델 타입과 사용자 언어에 따른 시스템 프롬프트 반환
 
     Args:
         model_type: LLM 모델 타입
         user_message: 사용자 메시지 (언어 감지용)
+        project_name: 프로젝트 이름 (컨텍스트용)
 
     Returns:
         시스템 프롬프트
@@ -36,6 +37,18 @@ def _get_planning_system_prompt(model_type: str, user_message: str = "") -> str:
     if user_message:
         language = detect_language(user_message)
         language_instruction = get_language_instruction(language)
+
+    # 프로젝트 컨텍스트 추가
+    project_context = ""
+    if project_name:
+        project_context = f"""
+[PROJECT CONTEXT]
+You are working on a project named "{project_name}".
+All generated files and code should be organized within this project's directory structure.
+Use "{project_name}" as the root directory for file paths when suggesting file organization.
+[/PROJECT CONTEXT]
+
+"""
 
     base_prompt = """You are an expert software architect and development planner.
 
@@ -55,7 +68,7 @@ Output format:
 - Provide rationale for key decisions"""
 
     if model_type == "deepseek":
-        return f"""{language_instruction}<think>
+        return f"""{language_instruction}{project_context}<think>
 Before responding, analyze:
 1. What is the user trying to build?
 2. What are the key components needed?
@@ -65,7 +78,7 @@ Before responding, analyze:
 
 {base_prompt}"""
     else:
-        return language_instruction + base_prompt
+        return language_instruction + project_context + base_prompt
 
 
 class PlanningHandler(BaseHandler):
@@ -108,8 +121,14 @@ class PlanningHandler(BaseHandler):
             HandlerResult: 처리 결과 (계획 + 옵션으로 파일 저장)
         """
         try:
-            # 시스템 프롬프트 구성 (언어 감지 적용)
-            system_prompt = _get_planning_system_prompt(self.model_type, user_message)
+            # 프로젝트 이름 추출
+            project_name = ""
+            if context and hasattr(context, 'workspace') and context.workspace:
+                import os
+                project_name = os.path.basename(context.workspace)
+
+            # 시스템 프롬프트 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
+            system_prompt = _get_planning_system_prompt(self.model_type, user_message, project_name)
 
             # 컨텍스트 정보 추가
             context_info = self._build_context_info(analysis, context)
@@ -197,8 +216,14 @@ class PlanningHandler(BaseHandler):
         )
 
         try:
-            # 시스템 프롬프트 구성 (언어 감지 적용)
-            system_prompt = _get_planning_system_prompt(self.model_type, user_message)
+            # 프로젝트 이름 추출
+            project_name = ""
+            if context and hasattr(context, 'workspace') and context.workspace:
+                import os
+                project_name = os.path.basename(context.workspace)
+
+            # 시스템 프롬프트 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
+            system_prompt = _get_planning_system_prompt(self.model_type, user_message, project_name)
             context_info = self._build_context_info(analysis, context)
 
             user_prompt = f"""## 요청 분석

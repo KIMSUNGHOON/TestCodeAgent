@@ -864,6 +864,25 @@ PRIORITY: [high/medium/low for each]
         # This is a simplified non-streaming version
         return f"Task analyzed as: {task_type}\nWorkflow: {template['name']}"
 
+    def _get_project_context_prompt(self, project_name: str) -> str:
+        """Generate project context prompt to prepend to agent prompts.
+
+        Args:
+            project_name: Project name for context
+
+        Returns:
+            Project context string to prepend to prompts
+        """
+        if not project_name:
+            return ""
+        return f"""[PROJECT CONTEXT]
+You are working on a project named "{project_name}".
+All generated files should be organized within this project's directory structure.
+Use appropriate subdirectories (e.g., src/, lib/, tests/) based on the project type.
+[/PROJECT CONTEXT]
+
+"""
+
     async def execute_stream(
         self,
         user_request: str,
@@ -874,10 +893,16 @@ PRIORITY: [high/medium/low for each]
         workflow_id = str(uuid.uuid4())[:8]
         max_iterations = settings.max_review_iterations
 
-        # Extract workspace from context
+        # Extract workspace and project_name from context
         workspace = None
+        project_name = ""
         if context and isinstance(context, dict):
             workspace = context.get("workspace")
+            if workspace:
+                project_name = os.path.basename(workspace)
+
+        # Generate project context for prompts
+        project_context = self._get_project_context_prompt(project_name)
 
         try:
             # ========================================
@@ -1118,7 +1143,8 @@ PRIORITY: [high/medium/low for each]
 
         # Step 1: Planning (이전 계획이 있으면 스킵)
         planning_agent = template["nodes"][0]  # Usually PlanningAgent or AnalysisAgent
-        planning_prompt = self.prompts.get(planning_agent, self.prompts["PlanningAgent"])
+        # Add project context to planning prompt
+        planning_prompt = project_context + self.prompts.get(planning_agent, self.prompts["PlanningAgent"])
 
         # 이전 계획이 포함되어 있는지 확인
         previous_plan_marker = "## Previous Implementation Plan"
@@ -1236,7 +1262,8 @@ PRIORITY: [high/medium/low for each]
 
         # Step 2: Coding (with parallel execution option)
         coding_agent = "CodingAgent" if "CodingAgent" in template["nodes"] else "RefactorAgent"
-        coding_prompt = self.prompts.get(coding_agent, self.prompts["CodingAgent"])
+        # Add project context to coding prompt
+        coding_prompt = project_context + self.prompts.get(coding_agent, self.prompts["CodingAgent"])
 
         # Decide whether to use parallel execution
         use_parallel = (
@@ -1412,8 +1439,9 @@ PRIORITY: [high/medium/low for each]
             review_iteration = 0
             approved = False
             review_result = {"approved": False, "issues": [], "suggestions": [], "corrected_artifacts": [], "analysis": ""}  # Initialize
-            review_prompt = self.prompts["ReviewAgent"]
-            fix_prompt_template = self.prompts["FixCodeAgent"]
+            # Add project context to review and fix prompts
+            review_prompt = project_context + self.prompts["ReviewAgent"]
+            fix_prompt_template = project_context + self.prompts["FixCodeAgent"]
 
             while not approved and review_iteration < max_iterations:
                 review_iteration += 1

@@ -32,18 +32,31 @@ Do not:
 """
 
 
-def get_quick_qa_prompt(user_message: str) -> str:
-    """Generate QuickQA prompt with proper language instruction.
+def get_quick_qa_prompt(user_message: str, project_name: str = "") -> str:
+    """Generate QuickQA prompt with proper language instruction and project context.
 
     Args:
         user_message: User's input message for language detection
+        project_name: Project name for context
 
     Returns:
-        System prompt with language instruction
+        System prompt with language instruction and project context
     """
     language = detect_language(user_message)
     language_instruction = get_language_instruction(language)
-    return language_instruction + QUICK_QA_BASE_PROMPT
+
+    # 프로젝트 컨텍스트 추가
+    project_context = ""
+    if project_name:
+        project_context = f"""
+[PROJECT CONTEXT]
+You are working on a project named "{project_name}".
+When referring to files or code, consider the context of this project.
+[/PROJECT CONTEXT]
+
+"""
+
+    return language_instruction + project_context + QUICK_QA_BASE_PROMPT
 
 
 class QuickQAHandler(BaseHandler):
@@ -84,8 +97,14 @@ class QuickQAHandler(BaseHandler):
             HandlerResult: 처리 결과
         """
         try:
-            # 메시지 구성 (언어 감지 적용)
-            system_prompt = get_quick_qa_prompt(user_message)
+            # 프로젝트 이름 추출
+            import os
+            project_name = ""
+            if context and hasattr(context, 'workspace') and context.workspace:
+                project_name = os.path.basename(context.workspace)
+
+            # 메시지 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
+            system_prompt = get_quick_qa_prompt(user_message, project_name)
             messages = [SystemMessage(content=system_prompt)]
 
             # 이전 대화 컨텍스트 추가 (있는 경우)
@@ -152,8 +171,14 @@ class QuickQAHandler(BaseHandler):
         )
 
         try:
-            # 메시지 구성 (언어 감지 적용)
-            system_prompt = get_quick_qa_prompt(user_message)
+            # 프로젝트 이름 추출
+            import os
+            project_name = ""
+            if context and hasattr(context, 'workspace') and context.workspace:
+                project_name = os.path.basename(context.workspace)
+
+            # 메시지 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
+            system_prompt = get_quick_qa_prompt(user_message, project_name)
             messages = [SystemMessage(content=system_prompt)]
 
             # 이전 대화 컨텍스트 추가 (있는 경우)
