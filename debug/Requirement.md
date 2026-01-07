@@ -817,3 +817,30 @@ if os.path.exists(candidate_workspace):
 | 2 | `backend/app/agent/handlers/base.py` | StreamUpdate.to_dict() updates/node 추가 |
 | 3 | `backend/app/services/workflow_service.py` | 디렉토리 중복 방지 로직 수정 |
 | 4 | `frontend/src/components/WorkflowInterface.tsx` | 대화 히스토리 파일 표시 UI 개선 |
+
+### 40. 대화 히스토리에 FileTreeViewer 적용 (2026-01-07)
+- **문제**: 대화 히스토리에서 생성된 파일이 단순 텍스트 리스트로 표시됨
+- **해결**: FileTreeViewer 컴포넌트를 사용하여 Windows 스타일 파일 브라우저 UI 적용
+  - 트리 구조로 폴더/파일 표시
+  - 파일 클릭 시 코드 뷰어 팝업
+  - ZIP 다운로드 버튼 통합
+
+```tsx
+// Before (텍스트 리스트)
+{turn.artifacts.map((artifact, idx) => (
+  <div>{artifact.filename} [{artifact.language}]</div>
+))}
+
+// After (FileTreeViewer 사용)
+<FileTreeViewer
+  files={turn.artifacts}
+  onDownloadZip={handleDownloadZip}
+  isDownloading={isDownloadingZip}
+/>
+```
+
+## 수정 파일 목록 (Issue 40)
+
+| 순서 | 파일 | 변경 내용 |
+|-----|------|---------|
+| 1 | `frontend/src/components/WorkflowInterface.tsx` | FileTreeViewer import 및 대화 히스토리 적용 |
