@@ -26,6 +26,7 @@ from app.agent.handlers import (
     CodeGenerationHandler,
     HandlerResult
 )
+from app.services.rag_context import get_rag_builder, RAGContext
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +104,9 @@ class UnifiedAgentManager:
                 await self.context_store.update_workspace(session_id, workspace)
                 context.workspace = workspace
 
-            # 2. Supervisor 분석
-            logger.info("Running Supervisor analysis...")
-            analysis = await self._analyze_request(user_message, context)
+            # 2. Supervisor 분석 (RAG 통합)
+            logger.info("Running Supervisor analysis with RAG enrichment...")
+            analysis = await self._analyze_request(user_message, context, session_id)
 
             response_type = analysis.get("response_type", ResponseType.QUICK_QA)
             logger.info(f"Response type determined: {response_type}")
@@ -154,24 +155,71 @@ class UnifiedAgentManager:
     async def _analyze_request(
         self,
         user_message: str,
-        context: ConversationContext
+        context: ConversationContext,
+        session_id: str = "default"
     ) -> Dict[str, Any]:
         """Supervisor를 통한 요청 분석
 
         Args:
             user_message: 사용자 메시지
             context: 대화 컨텍스트
+            session_id: 세션 ID (RAG 검색용)
 
         Returns:
             Dict[str, Any]: 분석 결과
         """
+        # RAG 컨텍스트로 요청 보강
+        enriched_message, rag_context = await self._enrich_with_rag(
+            user_message, session_id
+        )
+
         # 컨텍스트를 Supervisor에 전달
         context_dict = context.to_dict() if context else None
 
         # Supervisor 동기 분석 사용 (비동기 버전은 스트리밍용)
-        analysis = self.supervisor.analyze_request(user_message, context_dict)
+        analysis = self.supervisor.analyze_request(enriched_message, context_dict)
+
+        # RAG 정보를 분석 결과에 추가
+        if rag_context and rag_context.results_count > 0:
+            analysis["rag_context"] = {
+                "results_count": rag_context.results_count,
+                "files_referenced": rag_context.files_referenced,
+                "avg_relevance": rag_context.avg_relevance
+            }
+            logger.info(
+                f"RAG enriched request with {rag_context.results_count} results "
+                f"(avg relevance: {rag_context.avg_relevance:.1%})"
+            )
 
         return analysis
+
+    async def _enrich_with_rag(
+        self,
+        user_message: str,
+        session_id: str
+    ) -> tuple[str, Optional[RAGContext]]:
+        """RAG 컨텍스트로 사용자 메시지 보강
+
+        벡터 검색을 통해 관련 코드를 찾고 메시지에 추가합니다.
+
+        Args:
+            user_message: 원본 사용자 메시지
+            session_id: 세션 ID
+
+        Returns:
+            tuple[str, Optional[RAGContext]]: (보강된 메시지, RAG 컨텍스트)
+        """
+        try:
+            rag_builder = get_rag_builder(session_id)
+            enriched_message, rag_context = rag_builder.enrich_query(
+                user_message,
+                n_results=5,
+                min_relevance=0.5
+            )
+            return enriched_message, rag_context
+        except Exception as e:
+            logger.warning(f"RAG enrichment failed: {e}")
+            return user_message, None
 
     async def _stream_response(
         self,
@@ -193,17 +241,24 @@ class UnifiedAgentManager:
         Yields:
             StreamUpdate: 스트리밍 업데이트
         """
+        # RAG 컨텍스트 정보
+        rag_info = analysis.get("rag_context", {})
+        rag_message = ""
+        if rag_info.get("results_count", 0) > 0:
+            rag_message = f"\n- RAG 검색: {rag_info['results_count']}개 관련 코드 발견"
+
         # Supervisor 분석 결과 전송
         yield StreamUpdate(
             agent="Supervisor",
             update_type="analysis",
             status="completed",
             message=f"분석 완료: {analysis.get('response_type', 'unknown')}",
-            streaming_content=f"요청 분석 결과:\n- 응답 유형: {analysis.get('response_type', 'unknown')}\n- 복잡도: {analysis.get('complexity', 'unknown')}\n- 작업 유형: {analysis.get('task_type', 'unknown')}",
+            streaming_content=f"요청 분석 결과:\n- 응답 유형: {analysis.get('response_type', 'unknown')}\n- 복잡도: {analysis.get('complexity', 'unknown')}\n- 작업 유형: {analysis.get('task_type', 'unknown')}{rag_message}",
             data={
                 "response_type": analysis.get("response_type"),
                 "complexity": analysis.get("complexity"),
-                "task_type": analysis.get("task_type")
+                "task_type": analysis.get("task_type"),
+                "rag_context": rag_info if rag_info else None
             }
         )
 
