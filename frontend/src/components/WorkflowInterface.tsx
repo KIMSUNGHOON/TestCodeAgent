@@ -533,31 +533,33 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
     // ALWAYS update live outputs for agent status changes (not just when streaming_content exists)
     // This ensures running indicators update correctly when agents complete
+    // Note: Don't require agentInfo to exist - it may not be added yet due to React state timing
     const agentInfo = agentProgress.find(a => a.name === nodeName);
-    if (agentInfo) {
-      setLiveOutputs(prev => {
-        const newMap = new Map(prev);
-        const existing = prev.get(nodeName);
+    const { title: agentTitle } = getAgentInfo(nodeName);  // Fallback to generated title
 
-        // Only update if status changed or new content available
-        // Check both direct streaming_content and updates.streaming_content
-        const newContent = streamingContent || existing?.content || '';
-        const shouldUpdate = !existing ||
-          existing.status !== status ||
-          streamingContent;
+    // Always update liveOutputs for any agent (including Unified API handlers)
+    setLiveOutputs(prev => {
+      const newMap = new Map(prev);
+      const existing = prev.get(nodeName);
 
-        if (shouldUpdate) {
-          newMap.set(nodeName, {
-            agentName: nodeName,
-            agentTitle: event.agent_title || agentInfo.title,
-            content: newContent,
-            status: status,
-            timestamp: Date.now(),
-          });
-        }
-        return newMap;
-      });
-    }
+      // Only update if status changed or new content available
+      // Check both direct streaming_content and updates.streaming_content
+      const newContent = streamingContent || existing?.content || '';
+      const shouldUpdate = !existing ||
+        existing.status !== status ||
+        streamingContent;
+
+      if (shouldUpdate) {
+        newMap.set(nodeName, {
+          agentName: nodeName,
+          agentTitle: event.agent_title || agentInfo?.title || agentTitle,
+          content: newContent,
+          status: status,
+          timestamp: Date.now(),
+        });
+      }
+      return newMap;
+    });
 
     // Handle parallel file progress info
     if (event.updates?.batch_info) {
@@ -689,6 +691,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
         workspace: workspace,
       })) {
         // Convert UnifiedStreamUpdate to WorkflowUpdate
+        // IMPORTANT: Include streaming_content in initial object for real-time updates
         const workflowUpdate: WorkflowUpdate = {
           agent: update.agent,
           agent_title: update.agent,
@@ -697,6 +700,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
           message: update.message,
           type: update.update_type,
           timestamp: update.timestamp || new Date().toISOString(),
+          // Always include streaming_content when available for real-time display
+          streaming_content: update.streaming_content || undefined,
         };
 
         // Handle different update types

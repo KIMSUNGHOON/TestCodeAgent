@@ -531,14 +531,55 @@ async def execute_workflow(request: ChatRequest):
         if context_str:
             full_request = f"{context_str}\n<current_request>\n{request.message}\n</current_request>"
 
+        # Helper to get versioned path when file exists
+        def get_versioned_path(file_path: Path) -> Path:
+            """Get versioned path if file exists (e.g., file_v2.py)."""
+            import re as regex
+            stem = file_path.stem
+            suffix = file_path.suffix
+            parent = file_path.parent
+
+            version_match = regex.match(r'^(.+)_v(\d+)$', stem)
+            if version_match:
+                base_stem = version_match.group(1)
+                current_version = int(version_match.group(2))
+            else:
+                base_stem = stem
+                current_version = 1
+
+            version = current_version + 1
+            new_path = parent / f"{base_stem}_v{version}{suffix}"
+
+            while new_path.exists():
+                version += 1
+                new_path = parent / f"{base_stem}_v{version}{suffix}"
+                if version > 100:
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    new_path = parent / f"{base_stem}_{timestamp}{suffix}"
+                    break
+
+            return new_path
+
         # Helper to write artifact to workspace (async)
         async def write_artifact_to_workspace(artifact: dict) -> dict:
-            """Write artifact to workspace and return save status."""
+            """Write artifact to workspace and return save status.
+
+            If file exists with same content, skip. If different content, version it.
+            """
             import aiofiles
             from datetime import datetime
             try:
                 filename = artifact.get("filename", "code.py")
                 content = artifact.get("content", "")
+
+                if not content:
+                    return {
+                        "saved": False,
+                        "saved_path": None,
+                        "saved_at": None,
+                        "error": "Empty content",
+                        "action": None
+                    }
 
                 # Sanitize path to prevent traversal attacks
                 file_path = sanitize_path(filename, workspace, allow_creation=True)
@@ -546,16 +587,46 @@ async def execute_workflow(request: ChatRequest):
                 # Create parent directories if needed
                 file_path.parent.mkdir(parents=True, exist_ok=True)
 
+                action = "created"
+
+                # Handle existing files
+                if file_path.exists():
+                    try:
+                        async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                            existing_content = await f.read()
+
+                        # Skip if content is identical
+                        if existing_content.strip() == content.strip():
+                            logger.info(f"Skipped duplicate artifact: {file_path}")
+                            return {
+                                "saved": True,
+                                "saved_path": str(file_path),
+                                "saved_at": datetime.now().isoformat(),
+                                "error": None,
+                                "action": "skipped_duplicate"
+                            }
+
+                        # Version the file if content differs
+                        file_path = get_versioned_path(file_path)
+                        action = "created_new_version"
+                        logger.info(f"Creating new version: {file_path}")
+
+                    except Exception as read_error:
+                        logger.warning(f"Could not read existing file: {read_error}")
+                        file_path = get_versioned_path(file_path)
+                        action = "created_new_version"
+
                 # Write file asynchronously
                 async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
                     await f.write(content)
 
-                logger.info(f"Auto-saved artifact to: {file_path}")
+                logger.info(f"Auto-saved artifact to: {file_path} (action: {action})")
                 return {
                     "saved": True,
                     "saved_path": str(file_path),
                     "saved_at": datetime.now().isoformat(),
-                    "error": None
+                    "error": None,
+                    "action": action
                 }
             except SecurityError as e:
                 logger.warning(f"Security violation in artifact save: {e}")
@@ -563,7 +634,8 @@ async def execute_workflow(request: ChatRequest):
                     "saved": False,
                     "saved_path": None,
                     "saved_at": None,
-                    "error": f"Invalid path: {artifact.get('filename', 'unknown')}"
+                    "error": f"Invalid path: {artifact.get('filename', 'unknown')}",
+                    "action": None
                 }
             except Exception as e:
                 logger.error(f"Failed to auto-save artifact: {e}")
@@ -571,7 +643,8 @@ async def execute_workflow(request: ChatRequest):
                     "saved": False,
                     "saved_path": None,
                     "saved_at": None,
-                    "error": str(e)
+                    "error": str(e),
+                    "action": None
                 }
 
         # Create streaming response

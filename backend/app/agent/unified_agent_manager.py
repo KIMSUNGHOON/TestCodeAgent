@@ -281,12 +281,16 @@ class UnifiedAgentManager:
     ) -> Dict[str, Any]:
         """Artifact를 워크스페이스에 저장
 
+        동일한 파일이 존재할 경우 내용 비교 후:
+        - 동일 내용: 덮어쓰지 않고 기존 파일 유지
+        - 다른 내용: 버전 번호를 붙여서 새 파일로 저장 (예: file_v2.py)
+
         Args:
             artifact: 저장할 artifact 정보 (filename, content, language)
             workspace: 워크스페이스 경로
 
         Returns:
-            Dict: 저장 결과 (saved, saved_path, saved_at, error)
+            Dict: 저장 결과 (saved, saved_path, saved_at, error, action)
         """
         try:
             filename = artifact.get("filename", "code.py")
@@ -297,7 +301,8 @@ class UnifiedAgentManager:
                     "saved": False,
                     "saved_path": None,
                     "saved_at": None,
-                    "error": "Empty content"
+                    "error": "Empty content",
+                    "action": None
                 }
 
             # 경로 정리 (보안: 경로 탈출 방지)
@@ -316,17 +321,49 @@ class UnifiedAgentManager:
             # 부모 디렉토리 생성
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
+            action = "created"  # 기본 액션
+
+            # 파일이 이미 존재하는 경우 처리
+            if file_path.exists():
+                try:
+                    # 기존 파일 내용 읽기
+                    async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                        existing_content = await f.read()
+
+                    # 내용이 동일하면 저장 건너뛰기
+                    if existing_content.strip() == content.strip():
+                        logger.info(f"Skipped duplicate artifact: {file_path}")
+                        return {
+                            "saved": True,
+                            "saved_path": str(file_path),
+                            "saved_at": datetime.now().isoformat(),
+                            "error": None,
+                            "action": "skipped_duplicate"
+                        }
+
+                    # 내용이 다르면 버전 번호 추가
+                    file_path = self._get_versioned_path(file_path)
+                    action = "created_new_version"
+                    logger.info(f"Creating new version: {file_path}")
+
+                except Exception as read_error:
+                    logger.warning(f"Could not read existing file for comparison: {read_error}")
+                    # 읽기 실패 시 버전 번호 추가하여 안전하게 저장
+                    file_path = self._get_versioned_path(file_path)
+                    action = "created_new_version"
+
             # 파일 저장
             async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
                 await f.write(content)
 
-            logger.info(f"Saved artifact to: {file_path}")
+            logger.info(f"Saved artifact to: {file_path} (action: {action})")
 
             return {
                 "saved": True,
                 "saved_path": str(file_path),
                 "saved_at": datetime.now().isoformat(),
-                "error": None
+                "error": None,
+                "action": action
             }
 
         except Exception as e:
@@ -335,8 +372,53 @@ class UnifiedAgentManager:
                 "saved": False,
                 "saved_path": None,
                 "saved_at": None,
-                "error": str(e)
+                "error": str(e),
+                "action": None
             }
+
+    def _get_versioned_path(self, file_path: Path) -> Path:
+        """파일이 이미 존재할 경우 버전 번호가 포함된 새 경로 생성
+
+        크로스 플랫폼 호환: Windows/Linux/MacOS 모두 지원
+
+        Args:
+            file_path: 원본 파일 경로
+
+        Returns:
+            Path: 버전 번호가 포함된 새 파일 경로 (예: file_v2.py)
+        """
+        stem = file_path.stem  # 확장자 제외한 파일명
+        suffix = file_path.suffix  # 확장자
+        parent = file_path.parent
+
+        # 버전 번호 찾기 (file_v2.py 형식 지원)
+        import re
+        version_match = re.match(r'^(.+)_v(\d+)$', stem)
+
+        if version_match:
+            base_stem = version_match.group(1)
+            current_version = int(version_match.group(2))
+        else:
+            base_stem = stem
+            current_version = 1
+
+        # 다음 버전 번호로 새 경로 생성
+        version = current_version + 1
+        new_path = parent / f"{base_stem}_v{version}{suffix}"
+
+        # 해당 버전도 존재하면 다음 버전 찾기
+        while new_path.exists():
+            version += 1
+            new_path = parent / f"{base_stem}_v{version}{suffix}"
+
+            # 무한 루프 방지 (최대 100개 버전)
+            if version > 100:
+                # 타임스탬프 기반 fallback
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                new_path = parent / f"{base_stem}_{timestamp}{suffix}"
+                break
+
+        return new_path
 
     async def get_context(self, session_id: str) -> ConversationContext:
         """세션 컨텍스트 조회

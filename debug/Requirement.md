@@ -465,3 +465,88 @@ clean_text = re.sub(r'</?think>', '', clean_text, flags=re.IGNORECASE)
 | 6 | `frontend/src/types/api.ts` | 타입 확장 |
 | 7 | `frontend/src/components/WorkflowInterface.tsx` | streaming_content 처리 |
 | 8 | `frontend/src/components/TerminalOutput.tsx` | 에이전트별 상태 메시지, artifact 표시 |
+
+### 24. Artifact 동일 이름 덮어쓰기 문제 해결 (2026-01-07)
+- **문제**: 동일한 파일명으로 artifact 저장 시 기존 파일이 덮어쓰기됨 (데이터 손실 위험)
+- **원인**: `_save_artifact_to_workspace()`에서 `'w'` 모드로 파일을 열어 무조건 덮어씀
+- **해결**: 버전닝 및 중복 체크 로직 추가
+
+#### Backend 수정:
+1. **`backend/app/agent/unified_agent_manager.py`**
+   - `_save_artifact_to_workspace()` 메서드 개선:
+     - 파일 존재 시 내용 비교
+     - 동일 내용: 저장 건너뛰기 (`action: "skipped_duplicate"`)
+     - 다른 내용: 버전 번호 추가 (`file_v2.py`, `file_v3.py` 등)
+   - `_get_versioned_path()` 헬퍼 메서드 추가:
+     - 크로스 플랫폼 호환 (Windows/Linux/MacOS)
+     - 기존 버전 번호 인식 (`file_v2.py` → `file_v3.py`)
+     - 최대 100개 버전 후 타임스탬프 fallback
+
+2. **`backend/app/api/main_routes.py`**
+   - `write_artifact_to_workspace()` 함수 동일 로직 적용
+   - `get_versioned_path()` 헬퍼 함수 추가
+
+#### 로직 동작:
+```
+1. 파일 존재 여부 확인
+2. 존재 시 → 기존 내용과 비교
+   - 동일: skip (action: "skipped_duplicate")
+   - 다름: 버전 번호 추가 (action: "created_new_version")
+3. 존재하지 않음 → 새 파일 생성 (action: "created")
+```
+
+#### 테스트 결과:
+```
+✓ /tmp/code.py -> /tmp/code_v2.py
+✓ /tmp/code_v2.py -> /tmp/code_v3.py
+✓ /tmp/app.tsx -> /tmp/app_v2.tsx
+✓ /tmp/test_v5.js -> /tmp/test_v6.js
+```
+
+### 25. Streaming UI 실시간 업데이트 문제 해결 (2026-01-07)
+- **문제**: Conversations UI에서 "실행 중..." 만 표시되고 streaming 내용이 보이지 않음
+- **원인 1**: `workflowUpdate` 객체 생성 시 `streaming_content`가 포함되지 않음
+- **원인 2**: `liveOutputs` 업데이트가 `agentProgress`에 agent가 있을 때만 동작
+
+#### Frontend 수정:
+1. **`frontend/src/components/WorkflowInterface.tsx`**
+   - 초기 `workflowUpdate` 객체에 `streaming_content` 필드 추가 (Line 701-702)
+   - `updateAgentProgress()`에서 `agentInfo` 존재 여부와 무관하게 `liveOutputs` 업데이트 (Lines 537-562)
+   - `getAgentInfo()` 폴백으로 agent title 자동 생성
+
+#### 수정 내용:
+```typescript
+// Before
+const workflowUpdate: WorkflowUpdate = {
+  agent: update.agent,
+  // ... streaming_content 없음
+};
+
+// After
+const workflowUpdate: WorkflowUpdate = {
+  agent: update.agent,
+  streaming_content: update.streaming_content || undefined,
+  // ...
+};
+```
+
+```typescript
+// Before - agentInfo 있을 때만 업데이트
+const agentInfo = agentProgress.find(a => a.name === nodeName);
+if (agentInfo) {
+  setLiveOutputs(...);
+}
+
+// After - 항상 업데이트 (폴백 title 사용)
+const agentInfo = agentProgress.find(a => a.name === nodeName);
+const { title: agentTitle } = getAgentInfo(nodeName);  // Fallback
+setLiveOutputs(...);  // 조건 없이 항상 실행
+```
+
+## 수정 파일 목록 (Issue 24 & 25)
+
+| 순서 | 파일 | 변경 내용 |
+|-----|------|---------|
+| 1 | `backend/app/agent/unified_agent_manager.py` | 버전닝 로직, _get_versioned_path() 추가 |
+| 2 | `backend/app/api/main_routes.py` | 버전닝 로직, get_versioned_path() 추가 |
+| 3 | `frontend/src/components/WorkflowInterface.tsx` | streaming_content 전달, liveOutputs 업데이트 개선 |
