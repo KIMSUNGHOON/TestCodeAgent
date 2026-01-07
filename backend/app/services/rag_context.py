@@ -1,13 +1,14 @@
 """RAG Context Builder - 질의에 맞는 컨텍스트 구성
 
-사용자 질문에 관련된 코드를 벡터 검색하여
+사용자 질문에 관련된 코드와 이전 대화를 벡터 검색하여
 LLM에게 제공할 컨텍스트를 구성합니다.
 """
 import logging
 from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app.services.vector_db import vector_db, SearchResult
+from app.services.conversation_indexer import get_conversation_indexer, ConversationSearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ class RAGContext:
     files_referenced: List[str]
     avg_relevance: float
     search_query: str
+    # 대화 컨텍스트 (Phase 3-D)
+    conversation_results: int = 0
+    conversation_context: str = ""
 
 
 class RAGContextBuilder:
@@ -185,30 +189,100 @@ class RAGContextBuilder:
             return parts[-1]  # 마지막 부분이 코드
         return document
 
+    def search_conversation(
+        self,
+        query: str,
+        n_results: int = 3,
+        min_relevance: float = 0.4
+    ) -> Tuple[str, List[ConversationSearchResult]]:
+        """이전 대화에서 관련 내용 검색
+
+        Args:
+            query: 검색 쿼리
+            n_results: 최대 결과 수
+            min_relevance: 최소 관련성
+
+        Returns:
+            Tuple[str, List]: (포맷된 컨텍스트, 검색 결과)
+        """
+        try:
+            indexer = get_conversation_indexer(self.session_id)
+            results = indexer.search_conversation(
+                query=query,
+                n_results=n_results,
+                min_relevance=min_relevance
+            )
+
+            if not results:
+                return "", []
+
+            formatted = indexer.format_search_results(results)
+            return formatted, results
+
+        except Exception as e:
+            self.logger.warning(f"Conversation search failed: {e}")
+            return "", []
+
     def enrich_query(
         self,
         user_request: str,
         n_results: int = DEFAULT_N_RESULTS,
-        min_relevance: float = DEFAULT_MIN_RELEVANCE
+        min_relevance: float = DEFAULT_MIN_RELEVANCE,
+        include_conversation: bool = True
     ) -> Tuple[str, RAGContext]:
         """사용자 요청을 RAG 컨텍스트로 보강
+
+        코드 검색과 대화 검색을 모두 수행하여
+        관련 컨텍스트를 사용자 요청에 추가합니다.
 
         Args:
             user_request: 원본 사용자 요청
             n_results: 최대 결과 수
             min_relevance: 최소 관련성
+            include_conversation: 대화 검색 포함 여부
 
         Returns:
             Tuple[str, RAGContext]: (보강된 요청, RAG 컨텍스트)
         """
+        # 1. 코드 검색
         rag_context = self.build_context(
             query=user_request,
             n_results=n_results,
             min_relevance=min_relevance
         )
 
+        # 2. 대화 검색 (선택적)
+        conv_context = ""
+        conv_results = 0
+        if include_conversation:
+            conv_context, conv_search_results = self.search_conversation(
+                query=user_request,
+                n_results=3,
+                min_relevance=0.4
+            )
+            conv_results = len(conv_search_results)
+
+            # RAGContext에 대화 정보 추가
+            rag_context.conversation_results = conv_results
+            rag_context.conversation_context = conv_context
+
+        # 3. 컨텍스트 결합
+        context_parts = []
+
         if rag_context.formatted_context:
-            enriched_request = f"{user_request}\n\n{rag_context.formatted_context}"
+            context_parts.append(rag_context.formatted_context)
+
+        if conv_context:
+            context_parts.append(conv_context)
+
+        if context_parts:
+            combined_context = "\n\n".join(context_parts)
+            enriched_request = f"{user_request}\n\n{combined_context}"
+
+            self.logger.info(
+                f"Query enriched: {rag_context.results_count} code results, "
+                f"{conv_results} conversation results"
+            )
             return enriched_request, rag_context
 
         return user_request, rag_context

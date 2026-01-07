@@ -16,6 +16,9 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.db.database import SessionLocal, get_db_context
 from app.db.models import Conversation, Message, Artifact
 
+# RAG imports
+from app.services.conversation_indexer import get_conversation_indexer
+
 logger = logging.getLogger(__name__)
 
 # 최대 메시지 수 (컨텍스트 오버플로우 방지)
@@ -233,7 +236,37 @@ class ContextStore:
         # DB 저장 (비동기, 향후 구현)
         await self._save_to_db(context)
 
+        # RAG: 대화 내용 벡터 색인
+        await self._index_conversation(session_id, user_message, assistant_response)
+
         logger.debug(f"Context saved: {session_id}, messages={len(context.messages)}")
+
+    async def _index_conversation(
+        self,
+        session_id: str,
+        user_message: str,
+        assistant_response: str
+    ):
+        """대화 내용을 벡터DB에 색인
+
+        Args:
+            session_id: 세션 ID
+            user_message: 사용자 메시지
+            assistant_response: 어시스턴트 응답
+        """
+        try:
+            indexer = get_conversation_indexer(session_id)
+
+            # 사용자 메시지 색인
+            indexer.index_message(user_message, role="user")
+
+            # 어시스턴트 응답 색인
+            indexer.index_message(assistant_response, role="assistant")
+
+            logger.debug(f"Conversation indexed for session: {session_id}")
+        except Exception as e:
+            # 색인 실패해도 메인 로직은 계속 진행
+            logger.warning(f"Conversation indexing failed: {e}")
 
     async def update_workspace(self, session_id: str, workspace: str):
         """워크스페이스 경로 업데이트

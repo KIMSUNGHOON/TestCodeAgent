@@ -180,14 +180,16 @@ class UnifiedAgentManager:
         analysis = self.supervisor.analyze_request(enriched_message, context_dict)
 
         # RAG 정보를 분석 결과에 추가
-        if rag_context and rag_context.results_count > 0:
+        if rag_context and (rag_context.results_count > 0 or rag_context.conversation_results > 0):
             analysis["rag_context"] = {
                 "results_count": rag_context.results_count,
                 "files_referenced": rag_context.files_referenced,
-                "avg_relevance": rag_context.avg_relevance
+                "avg_relevance": rag_context.avg_relevance,
+                "conversation_results": rag_context.conversation_results
             }
             logger.info(
-                f"RAG enriched request with {rag_context.results_count} results "
+                f"RAG enriched request with {rag_context.results_count} code results, "
+                f"{rag_context.conversation_results} conversation results "
                 f"(avg relevance: {rag_context.avg_relevance:.1%})"
             )
 
@@ -244,8 +246,15 @@ class UnifiedAgentManager:
         # RAG 컨텍스트 정보
         rag_info = analysis.get("rag_context", {})
         rag_message = ""
-        if rag_info.get("results_count", 0) > 0:
-            rag_message = f"\n- RAG 검색: {rag_info['results_count']}개 관련 코드 발견"
+        code_count = rag_info.get("results_count", 0)
+        conv_count = rag_info.get("conversation_results", 0)
+        if code_count > 0 or conv_count > 0:
+            parts = []
+            if code_count > 0:
+                parts.append(f"{code_count}개 관련 코드")
+            if conv_count > 0:
+                parts.append(f"{conv_count}개 관련 대화")
+            rag_message = f"\n- RAG 검색: {', '.join(parts)} 발견"
 
         # Supervisor 분석 결과 전송
         yield StreamUpdate(
