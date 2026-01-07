@@ -846,14 +846,19 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               saved: a.saved || false,
               saved_at: a.saved_at,
               error: a.error,
-              action: a.saved ? 'created' : (a.action || undefined),
+              // Preserve backend action, default to 'created' only if not specified
+              action: a.action || (a.saved ? 'created' : undefined),
             }));
             setSavedFiles(prev => {
-              // 중복 제거 후 병합
-              const newArtifacts = workflowUpdate.artifacts!.filter(
-                newA => !prev.some(existing => existing.filename === newA.filename)
-              );
-              return [...prev, ...newArtifacts];
+              // Use Map for last-wins merge (update existing files, add new ones)
+              const artifactMap = new Map<string, Artifact>();
+              for (const artifact of prev) {
+                artifactMap.set(artifact.filename, artifact);
+              }
+              for (const artifact of workflowUpdate.artifacts!) {
+                artifactMap.set(artifact.filename, artifact);  // Later versions overwrite
+              }
+              return Array.from(artifactMap.values());
             });
             console.log(`[completed] Added ${workflowUpdate.artifacts.length} artifacts`);
           }
