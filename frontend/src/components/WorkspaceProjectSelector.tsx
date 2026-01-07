@@ -138,9 +138,28 @@ const WorkspaceProjectSelector = ({
   };
 
   // Extract project name from current workspace
-  const displayProjectName = currentProject
-    ? currentProject.split('/').pop()
-    : currentWorkspace.split('/').pop() || 'workspace';
+  // Try multiple sources: currentProject > last path segment > session-based name
+  const extractWorkspaceName = (): string => {
+    if (currentProject) {
+      return currentProject.split('/').pop() || 'project';
+    }
+
+    const workspaceSegments = currentWorkspace.split('/').filter(s => s);
+    if (workspaceSegments.length > 0) {
+      // Get the last segment which is usually the project name or session-id/project-name
+      const lastName = workspaceSegments[workspaceSegments.length - 1];
+      // If it looks like a session ID (contains session- prefix), get the one before it
+      if (lastName.startsWith('session-') && workspaceSegments.length > 1) {
+        return workspaceSegments[workspaceSegments.length - 2];
+      }
+      return lastName;
+    }
+
+    // Fallback to session ID if available
+    return sessionId ? `session-${sessionId.slice(0, 8)}` : 'workspace';
+  };
+
+  const displayProjectName = extractWorkspaceName();
 
   return (
     <div className="relative">
