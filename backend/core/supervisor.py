@@ -508,7 +508,36 @@ class SupervisorAgent:
         """
         request_lower = request.lower()
 
-        # 1. Q&A patterns - simple questions that don't need code
+        # Check each response type in priority order
+        if self._is_quick_qa_request(request_lower):
+            return ResponseType.QUICK_QA
+
+        if self._is_planning_request(request_lower):
+            return ResponseType.PLANNING
+
+        if self._is_code_review_request(request_lower):
+            return ResponseType.CODE_REVIEW
+
+        if self._is_debugging_request(request_lower):
+            return ResponseType.DEBUGGING
+
+        if self._is_code_generation_request(request_lower):
+            return ResponseType.CODE_GENERATION
+
+        # Default: If unclear, use planning to clarify
+        return ResponseType.PLANNING
+
+    def _is_quick_qa_request(self, request_lower: str) -> bool:
+        """Check if request is a simple Q&A question
+
+        Simple questions that don't need code generation.
+
+        Args:
+            request_lower: Lowercase user request
+
+        Returns:
+            True if this is a Q&A request
+        """
         qa_patterns = [
             # Korean
             "뭐야", "뭔가요", "무엇", "알려줘", "설명해", "어떻게 동작",
@@ -518,10 +547,19 @@ class SupervisorAgent:
             "difference between", "compare", "pros and cons",
             "recommend", "advice", "tell me about",
         ]
-        if any(p in request_lower for p in qa_patterns) and not self._has_code_intent(request_lower):
-            return ResponseType.QUICK_QA
+        return any(p in request_lower for p in qa_patterns) and not self._has_code_intent(request_lower)
 
-        # 2. Planning/Design patterns - detailed analysis, no code yet
+    def _is_planning_request(self, request_lower: str) -> bool:
+        """Check if request is for planning/design
+
+        Detailed analysis or design without code generation.
+
+        Args:
+            request_lower: Lowercase user request
+
+        Returns:
+            True if this is a planning request
+        """
         planning_patterns = [
             # Korean
             "계획", "설계", "아키텍처", "구조", "방법론", "전략",
@@ -530,21 +568,40 @@ class SupervisorAgent:
             "plan", "design", "architecture", "structure", "strategy",
             "how should i", "how would you", "approach", "methodology",
         ]
-        if any(p in request_lower for p in planning_patterns):
-            return ResponseType.PLANNING
+        return any(p in request_lower for p in planning_patterns)
 
-        # 3. Code Review patterns
+    def _is_code_review_request(self, request_lower: str) -> bool:
+        """Check if request is for code review
+
+        Review, analyze, or improve existing code.
+
+        Args:
+            request_lower: Lowercase user request
+
+        Returns:
+            True if this is a code review request
+        """
         review_patterns = [
             # Korean
             "리뷰", "검토", "분석해", "확인해", "문제 있", "개선",
             # English
             "review", "check", "analyze", "look at", "improve", "refactor",
         ]
-        # Fixed: Proper operator precedence with parentheses
-        if any(p in request_lower for p in review_patterns) and ("코드" in request_lower or "code" in request_lower):
-            return ResponseType.CODE_REVIEW
+        has_review_pattern = any(p in request_lower for p in review_patterns)
+        has_code_keyword = "코드" in request_lower or "code" in request_lower
+        return has_review_pattern and has_code_keyword
 
-        # 4. Debugging patterns
+    def _is_debugging_request(self, request_lower: str) -> bool:
+        """Check if request is for debugging
+
+        Fix errors, bugs, or issues.
+
+        Args:
+            request_lower: Lowercase user request
+
+        Returns:
+            True if this is a debugging request
+        """
         debug_patterns = [
             # Korean
             "오류", "에러", "버그", "수정", "안돼", "안됨", "왜 안",
@@ -553,13 +610,21 @@ class SupervisorAgent:
             "error", "bug", "fix", "doesn't work", "not working", "debug",
             "issue", "problem", "broken",
         ]
-        if any(p in request_lower for p in debug_patterns):
-            return ResponseType.DEBUGGING
+        return any(p in request_lower for p in debug_patterns)
 
-        # 5. Code Generation - explicit code creation requests
+    def _is_code_generation_request(self, request_lower: str) -> bool:
+        """Check if request is for code generation
+
+        Explicit code creation requests.
+
+        Args:
+            request_lower: Lowercase user request
+
+        Returns:
+            True if this is a code generation request
+        """
         code_patterns = [
             # Korean - verb stems to match various conjugations
-            # 만들다: 만들어, 만들고, 만드는, 만들 -> use "만들" or "만드"
             "만들", "만드",  # covers 만들어, 만들고, 만드는, etc.
             "구현",  # covers 구현해, 구현하고, 구현할
             "작성",  # covers 작성해, 작성하고, 작성할
@@ -574,11 +639,7 @@ class SupervisorAgent:
             "create", "implement", "write", "develop", "code",
             "generate", "build", "make",
         ]
-        if any(p in request_lower for p in code_patterns):
-            return ResponseType.CODE_GENERATION
-
-        # Default: If unclear, use planning to clarify
-        return ResponseType.PLANNING
+        return any(p in request_lower for p in code_patterns)
 
     def _has_code_intent(self, request_lower: str) -> bool:
         """Check if request has intent to generate code

@@ -108,12 +108,7 @@ class CodeGenerationHandler(BaseHandler):
             )
 
         except Exception as e:
-            self.logger.error(f"Code generation error: {e}")
-            return HandlerResult(
-                content="",
-                success=False,
-                error=str(e)
-            )
+            return self._create_error_result(e)
 
     async def execute_stream(
         self,
@@ -131,12 +126,7 @@ class CodeGenerationHandler(BaseHandler):
         Yields:
             StreamUpdate: 스트리밍 업데이트
         """
-        yield StreamUpdate(
-            agent="CodeGenerationHandler",
-            update_type="progress",
-            status="running",
-            message="코드 생성 워크플로우를 시작합니다..."
-        )
+        yield self._create_progress_update("코드 생성 워크플로우를 시작합니다...")
 
         try:
             workspace = None
@@ -211,13 +201,7 @@ class CodeGenerationHandler(BaseHandler):
             )
 
         except Exception as e:
-            self.logger.error(f"Code generation stream error: {e}")
-            yield StreamUpdate(
-                agent="CodeGenerationHandler",
-                update_type="error",
-                status="error",
-                message=str(e)
-            )
+            yield self._create_error_update(e)
 
     async def _get_workflow(self, context: Any):
         """워크플로우 인스턴스 가져오기
