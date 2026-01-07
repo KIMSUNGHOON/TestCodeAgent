@@ -24,6 +24,80 @@ import PlanFileViewer from './PlanFileViewer';
 import apiClient from '../api/client';
 import { getDefaultWorkspace, getDefaultWorkspacePlaceholder } from '../utils/workspace';
 
+// 확장/축소 가능한 콘텐츠 컴포넌트
+const ExpandableContent = ({
+  content,
+  maxLines = 5,
+  children
+}: {
+  content: string;
+  maxLines?: number;
+  children: React.ReactNode;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [needsExpansion, setNeedsExpansion] = useState(false);
+
+  useEffect(() => {
+    // 콘텐츠가 maxLines를 초과하는지 확인
+    const lineCount = content.split('\n').length;
+    const charThreshold = maxLines * 80; // 대략적인 문자 수 기준
+    setNeedsExpansion(lineCount > maxLines || content.length > charThreshold);
+  }, [content, maxLines]);
+
+  // 중요 콘텐츠 추출 (첫 번째 단락 또는 제목)
+  const getImportantContent = () => {
+    const lines = content.split('\n');
+    const importantLines: string[] = [];
+    let foundImportant = false;
+
+    for (let i = 0; i < Math.min(lines.length, maxLines); i++) {
+      const line = lines[i];
+      // 제목, 요약, 결과 등 중요 라인 감지
+      if (line.startsWith('#') || line.startsWith('##') ||
+          line.includes('완료') || line.includes('생성') ||
+          line.includes('결과') || line.includes('요약') ||
+          line.includes('✓') || line.includes('✅')) {
+        importantLines.push(line);
+        foundImportant = true;
+      } else if (!foundImportant && line.trim()) {
+        importantLines.push(line);
+      }
+    }
+    return importantLines.join('\n');
+  };
+
+  if (!needsExpansion) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="relative">
+      <div
+        ref={contentRef}
+        className={`overflow-hidden transition-all duration-300 ${
+          isExpanded ? 'max-h-none' : 'max-h-32'
+        }`}
+        style={!isExpanded ? {
+          maskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)'
+        } : undefined}
+      >
+        {children}
+      </div>
+
+      {/* 확장/축소 버튼 */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="mt-1 flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
+      >
+        <span>{isExpanded ? '▲' : '▼'}</span>
+        <span>{isExpanded ? '접기' : `더 보기 (${content.split('\n').length}줄)`}</span>
+      </button>
+    </div>
+  );
+};
+
 // Agent status for progress tracking
 interface AgentProgressStatus {
   name: string;
@@ -1583,43 +1657,46 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
                           복사
                         </button>
                       </div>
-                      <div className="prose prose-sm prose-invert max-w-none
-                        prose-headings:text-gray-300 prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1
-                        prose-p:text-gray-400 prose-p:my-1
-                        prose-li:text-gray-400 prose-li:my-0.5
-                        prose-code:text-green-400 prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkBreaks]}
-                          components={{
-                            code(props) {
-                              const { children, className, ...rest } = props;
-                              const match = /language-(\w+)/.exec(className || '');
-                              return match ? (
-                                <SyntaxHighlighter
-                                  style={oneDark}
-                                  language={match[1]}
-                                  PreTag="div"
-                                  customStyle={{
-                                    borderRadius: '8px',
-                                    padding: '12px',
-                                    margin: '8px 0',
-                                    fontSize: '11px',
-                                  }}
-                                >
-                                  {String(children).replace(/\n$/, '')}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <code className={`${className || ''} bg-gray-800 px-1 py-0.5 rounded text-green-400 text-[10px]`} {...rest}>
-                                  {children}
-                                </code>
-                              );
-                            },
-                          }}
-                        >
-                          {turn.content}
-                        </ReactMarkdown>
-                      </div>
-                      {/* 생성/수정된 파일 - FileTreeViewer 사용 */}
+                      {/* 확장/축소 가능한 응답 콘텐츠 */}
+                      <ExpandableContent content={turn.content} maxLines={5}>
+                        <div className="prose prose-sm prose-invert max-w-none
+                          prose-headings:text-gray-300 prose-headings:font-semibold prose-headings:mt-2 prose-headings:mb-1
+                          prose-p:text-gray-400 prose-p:my-1
+                          prose-li:text-gray-400 prose-li:my-0.5
+                          prose-code:text-green-400 prose-code:bg-gray-800 prose-code:px-1 prose-code:rounded">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkBreaks]}
+                            components={{
+                              code(props) {
+                                const { children, className, ...rest } = props;
+                                const match = /language-(\w+)/.exec(className || '');
+                                return match ? (
+                                  <SyntaxHighlighter
+                                    style={oneDark}
+                                    language={match[1]}
+                                    PreTag="div"
+                                    customStyle={{
+                                      borderRadius: '8px',
+                                      padding: '12px',
+                                      margin: '8px 0',
+                                      fontSize: '11px',
+                                    }}
+                                  >
+                                    {String(children).replace(/\n$/, '')}
+                                  </SyntaxHighlighter>
+                                ) : (
+                                  <code className={`${className || ''} bg-gray-800 px-1 py-0.5 rounded text-green-400 text-[10px]`} {...rest}>
+                                    {children}
+                                  </code>
+                                );
+                              },
+                            }}
+                          >
+                            {turn.content}
+                          </ReactMarkdown>
+                        </div>
+                      </ExpandableContent>
+                      {/* 생성/수정된 파일 - FileTreeViewer 항상 표시 (중요 콘텐츠) */}
                       {turn.artifacts && turn.artifacts.length > 0 && (
                         <div className="mt-2">
                           <FileTreeViewer
