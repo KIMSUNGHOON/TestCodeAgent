@@ -8,6 +8,7 @@ import remarkGfm from 'remark-gfm';
 import { WorkflowUpdate, Artifact } from '../types/api';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import FileTreeViewer from './FileTreeViewer';
 
 interface TerminalOutputProps {
   updates: WorkflowUpdate[];
@@ -20,6 +21,8 @@ interface TerminalOutputProps {
     timestamp: number;
   }>;
   savedFiles?: Artifact[];
+  onDownloadZip?: () => void;
+  isDownloadingZip?: boolean;
 }
 
 interface ArtifactViewerProps {
@@ -180,7 +183,7 @@ const getAgentStatusMessage = (agentName: string, status: string): string => {
   return statusKoreanMessages[status] || status;
 };
 
-const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [] }: TerminalOutputProps) => {
+const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [], onDownloadZip, isDownloadingZip }: TerminalOutputProps) => {
   const [showAllUpdates, setShowAllUpdates] = useState(false);
 
   // Filter updates to show only significant ones (hide progress/streaming noise)
@@ -249,10 +252,6 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [] }: Te
   const sortedLiveOutputs = Array.from(liveOutputs.values())
     .sort((a, b) => a.timestamp - b.timestamp);
 
-  // 생성된 파일 수
-  const createdCount = savedFiles.filter(f => f.action === 'created').length;
-  const modifiedCount = savedFiles.filter(f => f.action === 'modified').length;
-
   return (
     <div className="font-mono text-xs bg-gray-950 text-gray-300 p-2 sm:p-3 rounded-lg border border-gray-800 min-h-[150px] sm:min-h-[200px] max-h-[50vh] sm:max-h-[60vh] overflow-y-auto">
       {/* 터미널 프롬프트 헤더 */}
@@ -267,25 +266,14 @@ const TerminalOutput = ({ updates, isRunning, liveOutputs, savedFiles = [] }: Te
         </div>
       )}
 
-      {/* 실시간 파일 목록 - 워크플로우 실행 중 표시 */}
-      {isRunning && savedFiles.length > 0 && (
-        <div className="mb-3 border border-gray-800 rounded p-2 bg-gray-900/50">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-green-400">📁</span>
-            <span className="text-gray-400">생성된 파일</span>
-            <span className="px-1.5 py-0.5 bg-gray-700 rounded text-[10px]">{savedFiles.length}</span>
-            {createdCount > 0 && (
-              <span className="px-1 py-0.5 bg-green-500/20 text-green-400 rounded text-[10px]">+{createdCount} 생성</span>
-            )}
-            {modifiedCount > 0 && (
-              <span className="px-1 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-[10px]">{modifiedCount} 수정</span>
-            )}
-          </div>
-          <div className="max-h-32 overflow-y-auto space-y-0.5">
-            {savedFiles.map((file, i) => (
-              <ArtifactViewer key={`${file.filename}-${i}`} artifact={file} compact />
-            ))}
-          </div>
+      {/* 파일 트리 뷰어 - 워크플로우 실행 중/완료 후 표시 */}
+      {savedFiles.length > 0 && (
+        <div className="mb-3">
+          <FileTreeViewer
+            files={savedFiles}
+            onDownloadZip={onDownloadZip}
+            isDownloading={isDownloadingZip}
+          />
         </div>
       )}
 

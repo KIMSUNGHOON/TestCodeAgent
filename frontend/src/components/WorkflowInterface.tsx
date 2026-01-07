@@ -184,6 +184,7 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
   const [currentStreamingFile, setCurrentStreamingFile] = useState<string | null>(null);
   const [currentStreamingContent, setCurrentStreamingContent] = useState<string>('');
   const [savedFiles, setSavedFiles] = useState<Artifact[]>([]);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   // Unified API response state (Next Actions, Plan File)
   const [nextActions, setNextActions] = useState<string[]>([]);
@@ -869,6 +870,20 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
 
     setShowSaveDialog(false);
     setPendingSaveData(null);
+  };
+
+  // Handle ZIP download of workspace
+  const handleDownloadZip = async () => {
+    if (!workspace || isDownloadingZip) return;
+
+    setIsDownloadingZip(true);
+    try {
+      await apiClient.downloadWorkspaceZip(workspace);
+    } catch (error) {
+      console.error('Failed to download workspace:', error);
+    } finally {
+      setIsDownloadingZip(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1580,6 +1595,8 @@ const WorkflowInterface = ({ sessionId, initialUpdates, workspace: workspaceProp
               isRunning={isRunning}
               liveOutputs={liveOutputs}
               savedFiles={savedFiles}
+              onDownloadZip={handleDownloadZip}
+              isDownloadingZip={isDownloadingZip}
             />
           )}
 

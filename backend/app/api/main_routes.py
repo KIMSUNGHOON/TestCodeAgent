@@ -606,15 +606,13 @@ async def execute_workflow(request: ChatRequest):
                                 "action": "skipped_duplicate"
                             }
 
-                        # Version the file if content differs
-                        file_path = get_versioned_path(file_path)
-                        action = "created_new_version"
-                        logger.info(f"Creating new version: {file_path}")
+                        # Modify existing file if content differs (no versioning)
+                        action = "modified"
+                        logger.info(f"Modifying existing file: {file_path}")
 
                     except Exception as read_error:
                         logger.warning(f"Could not read existing file: {read_error}")
-                        file_path = get_versioned_path(file_path)
-                        action = "created_new_version"
+                        action = "modified"
 
                 # Write file asynchronously
                 async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:

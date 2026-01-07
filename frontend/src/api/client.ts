@@ -644,6 +644,47 @@ class ApiClient {
     }
   }
 
+  /**
+   * Download workspace as ZIP file
+   */
+  async downloadWorkspaceZip(workspacePath: string): Promise<void> {
+    try {
+      const baseURL = this.client.defaults.baseURL || '/api';
+      const url = `${baseURL}/workspace/download?path=${encodeURIComponent(workspacePath)}&format=zip`;
+
+      // Create a hidden anchor and trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = ''; // Let the server determine the filename
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to download workspace:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Download session workspace as ZIP file
+   */
+  async downloadSessionWorkspaceZip(sessionId: string): Promise<void> {
+    try {
+      const baseURL = this.client.defaults.baseURL || '/api';
+      const url = `${baseURL}/sessions/${sessionId}/download?format=zip`;
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = '';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to download session workspace:', err);
+      throw err;
+    }
+  }
+
   // ==================== Shell/Terminal ====================
 
   /**

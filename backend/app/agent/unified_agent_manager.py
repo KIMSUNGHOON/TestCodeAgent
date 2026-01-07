@@ -281,9 +281,9 @@ class UnifiedAgentManager:
     ) -> Dict[str, Any]:
         """Artifact를 워크스페이스에 저장
 
-        동일한 파일이 존재할 경우 내용 비교 후:
-        - 동일 내용: 덮어쓰지 않고 기존 파일 유지
-        - 다른 내용: 버전 번호를 붙여서 새 파일로 저장 (예: file_v2.py)
+        동일한 파일이 존재할 경우:
+        - 동일 내용: 저장 건너뛰기 (skip)
+        - 다른 내용: 기존 파일 덮어쓰기 (modify)
 
         Args:
             artifact: 저장할 artifact 정보 (filename, content, language)
@@ -341,16 +341,14 @@ class UnifiedAgentManager:
                             "action": "skipped_duplicate"
                         }
 
-                    # 내용이 다르면 버전 번호 추가
-                    file_path = self._get_versioned_path(file_path)
-                    action = "created_new_version"
-                    logger.info(f"Creating new version: {file_path}")
+                    # 내용이 다르면 기존 파일 수정 (덮어쓰기)
+                    action = "modified"
+                    logger.info(f"Modifying existing file: {file_path}")
 
                 except Exception as read_error:
                     logger.warning(f"Could not read existing file for comparison: {read_error}")
-                    # 읽기 실패 시 버전 번호 추가하여 안전하게 저장
-                    file_path = self._get_versioned_path(file_path)
-                    action = "created_new_version"
+                    # 읽기 실패 시에도 덮어쓰기 진행
+                    action = "modified"
 
             # 파일 저장
             async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
