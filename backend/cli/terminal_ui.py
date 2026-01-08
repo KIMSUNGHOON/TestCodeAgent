@@ -216,9 +216,21 @@ class TerminalUI:
                         response = update.get("content", "")
                         summary = update.get("summary", "")
 
+                        # Try to parse JSON response (in case LLM didn't use tool calling properly)
+                        import json as json_module
+                        if response.strip().startswith("{") and "response" in response:
+                            try:
+                                parsed = json_module.loads(response)
+                                if "response" in parsed:
+                                    response = parsed["response"]
+                                if "summary" in parsed and not summary:
+                                    summary = parsed["summary"]
+                            except:
+                                pass  # Keep original response if parsing fails
+
                         progress.stop()
                         self.console.print("\n[bold green]✅ Task Complete[/bold green]")
-                        if summary:
+                        if summary and summary != "Completed without additional tools":
                             self.console.print(f"[dim]{summary}[/dim]\n")
                         if response:
                             self.console.print(Markdown(response))
