@@ -157,72 +157,42 @@ class TerminalUI:
 
             try:
                 async for update in self.session_mgr.execute_streaming_workflow(user_request):
-                    update_type = update.get("type")
+                    # DynamicWorkflow uses 'node' and 'status' fields, not 'type'
+                    node = update.get("node")
+                    status = update.get("status")
+                    updates_data = update.get("updates", {})
+                    agent_title = update.get("agent_title", node)
 
-                    if update_type == "agent_start":
-                        current_agent = update.get("agent")
+                    # Handle node status changes
+                    if node and status:
+                        if status == "starting":
+                            # Agent starting
+                            status_msg = agent_status_map.get(node, f"{agent_title} working...")
+                            progress.update(task, description=f"[cyan]{status_msg}")
 
-                        # Get agent-specific status message
-                        status_msg = agent_status_map.get(current_agent, f"{current_agent} working...")
-                        progress.update(task, description=f"[cyan]{status_msg}")
+                        elif status == "completed":
+                            # Agent completed - check for streaming_content
+                            streaming_content = updates_data.get("streaming_content", "")
+                            artifacts_list = updates_data.get("artifacts", [])
 
-                        # Reset content for new agent
-                        current_content = ""
-
-                    elif update_type == "agent_stream":
-                        # Accumulate and update streaming content
-                        chunk = update.get("content", "")
-                        current_content += chunk
-
-                        # Update progress with content length indicator
-                        char_count = len(current_content)
-                        if char_count > 0:
-                            status_msg = agent_status_map.get(current_agent, current_agent)
-                            progress.update(
-                                task,
-                                description=f"[cyan]{status_msg} ({char_count} chars)"
-                            )
-
-                    elif update_type == "agent_end":
-                        # Display accumulated content with Live rendering
-                        if current_content:
-                            # Stop progress to display content
-                            progress.stop()
-                            self._display_agent_response(current_agent, current_content)
-                            # Resume progress
-                            progress.start()
-                            current_content = ""
-
-                    elif update_type == "artifact":
-                        # Store artifact for later display
-                        artifacts.append(update)
-
-                    elif update_type == "workflow":
-                        # Handle workflow completion (e.g., QUICK_QA)
-                        status = update.get("status")
-                        if status == "completed":
-                            # Check for streaming_content (used by QUICK_QA)
-                            streaming_content = update.get("streaming_content", "")
+                            # Display streaming content if available
                             if streaming_content:
                                 progress.stop()
-                                self.console.print("\n[bold green]✅ Complete![/bold green]")
+                                self.console.print(f"\n[bold magenta]{agent_title}:[/bold magenta]")
                                 self.console.print(Markdown(streaming_content))
                                 progress.start()
 
-                    elif update_type == "final_response":
-                        # Display final response
-                        final_content = update.get("content", "")
-                        if final_content and final_content != current_content:
-                            progress.stop()
-                            self.console.print("\n[bold green]✅ Complete![/bold green]")
-                            self.console.print(Markdown(final_content))
-                            progress.start()
+                            # Collect artifacts
+                            if artifacts_list:
+                                for artifact in artifacts_list:
+                                    artifacts.append({"action": "created", **artifact})
 
-                    elif update_type == "error":
-                        error_msg = update.get("message", "Unknown error")
-                        progress.stop()
-                        self.console.print(f"\n[bold red]❌ Error:[/bold red] {error_msg}")
-                        progress.start()
+                        elif status == "error":
+                            # Agent error
+                            error_msg = updates_data.get("message", "Unknown error")
+                            progress.stop()
+                            self.console.print(f"\n[bold red]❌ {agent_title} Error:[/bold red] {error_msg}")
+                            progress.start()
 
             except Exception as e:
                 self.console.print(f"\n[bold red]❌ Execution Error:[/bold red] {str(e)}")
