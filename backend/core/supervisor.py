@@ -222,10 +222,15 @@ class SupervisorAgent:
         return clean.strip()
 
     def _format_context_harmony(self, context: Dict) -> str:
-        """Format context in Harmony-style structured format
+        """Format context in Harmony-style structured format (Phase 6 Enhanced)
 
         OpenAI Harmony format emphasizes structured, hierarchical context presentation
         for better LLM comprehension, especially for GPT-OSS models.
+
+        Phase 6 Enhancements:
+        - Expanded message content limit: 1000 → 4000 chars
+        - Context compression support for long histories
+        - Token budget awareness
 
         Args:
             context: Context dictionary with conversation_history, system_prompt, etc.
@@ -238,29 +243,52 @@ class SupervisorAgent:
 
         formatted_parts = []
 
+        # Phase 6: Check if context is already compressed
+        is_compressed = context.get("compressed", False)
+        original_count = context.get("original_message_count", 0)
+
         # Add system context if available
         if context.get("system_prompt"):
             formatted_parts.append(f"### System Context\n{context['system_prompt']}\n")
 
-        # Format conversation history (EXPANDED from 6 to 20 messages)
+        # Format conversation history (Phase 6: Expanded from 6 to 20 messages, 1000 → 4000 chars)
         if context.get("conversation_history"):
             history = context["conversation_history"]
-            formatted_parts.append(f"### Conversation History ({len(history)} messages)\n")
 
-            # Take recent messages (already expanded in dynamic_workflow.py)
+            # Phase 6: Add compression indicator if applicable
+            if is_compressed:
+                formatted_parts.append(f"### Conversation History (Compressed: {original_count} → {len(history)} messages)\n")
+            else:
+                formatted_parts.append(f"### Conversation History ({len(history)} messages)\n")
+
+            # Take recent messages
             for i, msg in enumerate(history, 1):
                 role = "USER" if msg.get("role") == "user" else "ASSISTANT"
                 content = msg.get("content", "")
 
-                # Truncate if too long (already expanded to 1000 chars)
-                if len(content) > 1000:
-                    content = content[:1000] + "..."
+                # Check for compressed history marker
+                if msg.get("is_compressed"):
+                    formatted_parts.append(f"**[Compressed History]**:\n{content}\n")
+                    continue
+
+                # Phase 6: Expanded content limit (1000 → 4000 chars)
+                if len(content) > 4000:
+                    content = content[:4000] + "...[truncated]"
 
                 formatted_parts.append(f"**[{i}] {role}**: {content}\n")
 
         # Add turn count
         if context.get("turn_count"):
             formatted_parts.append(f"\n**Total Turns**: {context['turn_count']}\n")
+
+        # Phase 6: Add artifact summary if available
+        if context.get("artifacts"):
+            artifacts = context["artifacts"]
+            formatted_parts.append(f"\n### Referenced Artifacts ({len(artifacts)} files)\n")
+            for art in artifacts[:10]:  # Limit to 10 artifacts in summary
+                filename = art.get("filename", "unknown")
+                language = art.get("language", "text")
+                formatted_parts.append(f"- {filename} ({language})\n")
 
         return "\n".join(formatted_parts) if formatted_parts else "No previous context available."
 

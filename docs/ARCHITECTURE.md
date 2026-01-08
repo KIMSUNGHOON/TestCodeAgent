@@ -1,7 +1,7 @@
 # Agentic Coder 시스템 아키텍처
 
-**버전**: 2.1
-**최종 업데이트**: 2026-01-08
+**버전**: 2.2
+**최종 업데이트**: 2026-01-09
 
 ---
 
@@ -408,7 +408,103 @@ User Request
 
 ---
 
-## 10. 관련 문서
+## 10. Context Management 아키텍처 (Phase 6)
+
+### 10.1 Context Management 개요
+
+Phase 6에서 구현된 컨텍스트 관리 시스템은 대규모 코드베이스와 긴 대화에서 효율적인 컨텍스트 처리를 제공합니다.
+
+```
+User Message
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│         Context Store                    │
+│  - MAX_MESSAGES: 100                    │
+│  - RECENT_MESSAGES_FOR_LLM: 30          │
+│  - RECENT_MESSAGES_FOR_CONTEXT: 20      │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│         Context Compressor               │
+│  - Sliding window (20 recent msgs)      │
+│  - Important content extraction         │
+│  - ~34% token savings                   │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│         Token Budget Manager             │
+│  - Model-specific limits                │
+│  - Context utilization tracking         │
+│  - Overflow warnings                    │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│         RAG Context Builder              │
+│  - 7 code search results                │
+│  - 5 conversation search results        │
+│  - Compressed history integration       │
+└─────────────────────────────────────────┘
+```
+
+### 10.2 주요 컴포넌트
+
+| 컴포넌트 | 파일 | 설명 |
+|----------|------|------|
+| Token Utils | `shared/utils/token_utils.py` | 정확한 토큰 카운팅, 버짓 관리 |
+| Context Compressor | `backend/core/context_compressor.py` | 스마트 컨텍스트 압축 |
+| Context Store | `backend/core/context_store.py` | 확장된 컨텍스트 윈도우 |
+| RAG Builder | `backend/app/services/rag_context.py` | RAG 통합 강화 |
+
+### 10.3 압축 알고리즘
+
+```python
+# Context Compressor 동작 방식
+입력: [msg1, msg2, ..., msg100]
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│ 1. 최근 20개 메시지 유지                 │
+│    [msg81, msg82, ..., msg100]          │
+└─────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│ 2. 나머지 메시지 분석                    │
+│    - 코드 블록 추출 (CRITICAL)          │
+│    - 파일명/경로 추출 (HIGH)            │
+│    - 오류 메시지 추출 (CRITICAL)        │
+│    - 결정 사항 추출 (MEDIUM)            │
+└─────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────┐
+│ 3. 요약 메시지 생성                      │
+│    [summary_msg] + [recent 20]          │
+│    ~34% 토큰 절감                       │
+└─────────────────────────────────────────┘
+```
+
+### 10.4 확장된 설정값
+
+| 설정 | Phase 5 | Phase 6 | 개선율 |
+|------|---------|---------|--------|
+| MAX_MESSAGES | 50 | 100 | 100% |
+| RECENT_MESSAGES_FOR_LLM | 20 | 30 | 50% |
+| RECENT_MESSAGES_FOR_CONTEXT | 10 | 20 | 100% |
+| MAX_ARTIFACTS | 20 | 50 | 150% |
+| Handler content limit | 200 chars | 2000 chars | 900% |
+| Supervisor content limit | 1000 chars | 4000 chars | 300% |
+| RAG code results | 5 | 7 | 40% |
+| RAG conversation results | 3 | 5 | 67% |
+| RAG MAX_CONTEXT_LENGTH | 8000 | 12000 | 50% |
+
+---
+
+## 11. 관련 문서
 
 | 문서 | 설명 |
 |------|------|

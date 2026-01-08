@@ -1,10 +1,15 @@
-"""Context Store - 대화 컨텍스트 영속성 관리.
+"""Context Store - 대화 컨텍스트 영속성 관리 (Phase 6 Enhanced).
 
 이 모듈은 세션별 대화 컨텍스트를 관리하고
 DB와 메모리 캐시 간의 동기화를 담당합니다.
 
 SQLAlchemy를 통해 DB 영속성을 제공하며,
 메모리 캐시로 빠른 접근을 지원합니다.
+
+Phase 6 Enhancement:
+- 확장된 컨텍스트 윈도우 (20→30 메시지)
+- 스마트 컨텍스트 압축 지원
+- 토큰 버짓 관리
 """
 import logging
 from dataclasses import dataclass, field
@@ -19,16 +24,39 @@ from app.db.models import Conversation, Message, Artifact
 # RAG imports
 from app.services.conversation_indexer import get_conversation_indexer
 
+# Phase 6: Context Compressor (lazy import to avoid circular dependency)
+_compressor = None
+
+def get_context_compressor():
+    """Lazy load context compressor."""
+    global _compressor
+    if _compressor is None:
+        try:
+            from core.context_compressor import get_compressor
+            _compressor = get_compressor()
+        except ImportError:
+            _compressor = None
+    return _compressor
+
 logger = logging.getLogger(__name__)
 
+# ========== Phase 6: 확장된 컨텍스트 윈도우 ==========
 # 최대 메시지 수 (컨텍스트 오버플로우 방지)
-MAX_MESSAGES = 50
+MAX_MESSAGES = 100              # Phase 6: 50 → 100
 # LLM에 전달할 최근 메시지 수
-RECENT_MESSAGES_FOR_LLM = 20
+RECENT_MESSAGES_FOR_LLM = 30    # Phase 6: 20 → 30
 # 컨텍스트 요약용 최근 메시지 수
-RECENT_MESSAGES_FOR_CONTEXT = 10
+RECENT_MESSAGES_FOR_CONTEXT = 20  # Phase 6: 10 → 20
 # 최대 아티팩트 수
-MAX_ARTIFACTS = 20
+MAX_ARTIFACTS = 50              # Phase 6: 20 → 50
+# 아티팩트 컨텍스트용 최근 수
+RECENT_ARTIFACTS_FOR_CONTEXT = 20  # Phase 6: 5 → 20
+
+# ========== Phase 6: 압축 설정 ==========
+# 압축 활성화 여부
+ENABLE_COMPRESSION = True
+# 압축 시작 임계값 (메시지 수)
+COMPRESSION_THRESHOLD = 50
 
 
 @dataclass
@@ -104,22 +132,44 @@ class ConversationContext:
 
         return messages
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, compress: bool = False) -> Dict[str, Any]:
         """딕셔너리로 변환 (Supervisor 컨텍스트용)
+
+        Args:
+            compress: Phase 6 - 압축 활성화 여부
 
         Returns:
             Dict: 컨텍스트 딕셔너리
         """
+        # Phase 6: 컨텍스트 압축 지원
+        if compress and ENABLE_COMPRESSION and len(self.messages) > COMPRESSION_THRESHOLD:
+            compressor = get_context_compressor()
+            if compressor:
+                compressed_messages = compressor.compress(self.messages)
+                return {
+                    "session_id": self.session_id,
+                    "messages": compressed_messages,
+                    "artifacts": self.artifacts[-RECENT_ARTIFACTS_FOR_CONTEXT:],
+                    "workspace": self.workspace,
+                    "last_analysis": self.last_analysis,
+                    "compressed": True,
+                    "original_message_count": len(self.messages)
+                }
+
+        # Phase 6: 확장된 컨텍스트 (20개 메시지, 20개 아티팩트)
         return {
             "session_id": self.session_id,
             "messages": self.messages[-RECENT_MESSAGES_FOR_CONTEXT:],
-            "artifacts": self.artifacts[-5:],
+            "artifacts": self.artifacts[-RECENT_ARTIFACTS_FOR_CONTEXT:],
             "workspace": self.workspace,
             "last_analysis": self.last_analysis
         }
 
-    def get_conversation_summary(self) -> str:
-        """대화 요약 생성
+    def get_conversation_summary(self, max_messages: int = 10) -> str:
+        """대화 요약 생성 (Phase 6 Enhanced)
+
+        Args:
+            max_messages: 요약에 포함할 최대 메시지 수
 
         Returns:
             str: 대화 요약 문자열
@@ -127,13 +177,21 @@ class ConversationContext:
         if not self.messages:
             return "새 대화입니다."
 
-        recent = self.messages[-5:]
+        # Phase 6: 더 많은 메시지 포함 (5 → 10)
+        recent = self.messages[-max_messages:]
         summary_parts = []
+
+        # 대화 통계 추가
+        total_msgs = len(self.messages)
+        user_msgs = sum(1 for m in self.messages if m.get("role") == "user")
+        summary_parts.append(f"[대화 통계: 총 {total_msgs}개 메시지, 사용자 {user_msgs}개]")
+        summary_parts.append("")
 
         for msg in recent:
             role = msg.get("role", "unknown")
-            content = msg.get("content", "")[:100]  # 처음 100자만
-            if len(msg.get("content", "")) > 100:
+            # Phase 6: 내용 제한 확장 (100 → 300자)
+            content = msg.get("content", "")[:300]
+            if len(msg.get("content", "")) > 300:
                 content += "..."
             summary_parts.append(f"[{role}] {content}")
 

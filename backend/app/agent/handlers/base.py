@@ -324,7 +324,13 @@ class BaseHandler(ABC):
         )
 
     def _build_enriched_message(self, user_message: str, context: Any) -> str:
-        """컨텍스트를 포함한 enriched 메시지 생성
+        """컨텍스트를 포함한 enriched 메시지 생성 (Phase 6 Enhanced)
+
+        Phase 6 Enhancements:
+        - Expanded from 6 to 15 recent messages
+        - Expanded content limit from 200 to 2000 chars
+        - Added artifact references
+        - Smarter context extraction
 
         Args:
             user_message: 원본 사용자 메시지
@@ -338,16 +344,43 @@ class BaseHandler(ABC):
 
         enriched_parts = [user_message]
 
-        # 이전 대화 참조가 있으면 추가
+        # Phase 6: 이전 대화 참조 확장 (6 → 15개 메시지, 200 → 2000자)
         if hasattr(context, 'conversation_history') and context.conversation_history:
             history = context.conversation_history
             if len(history) > 2:
-                # 최근 대화 요약 추가
-                recent = history[-6:]  # 최근 6개
-                context_summary = "\n".join([
-                    f"{'User' if m.get('role') == 'user' else 'AI'}: {m.get('content', '')[:200]}..."
-                    for m in recent
-                ])
-                enriched_parts.append(f"\n[Previous conversation context]\n{context_summary}")
+                # Phase 6: 최근 15개 메시지로 확장
+                recent = history[-15:]
+                context_lines = []
+
+                for m in recent:
+                    role = 'User' if m.get('role') == 'user' else 'AI'
+                    content = m.get('content', '')
+
+                    # Phase 6: 내용 제한 확장 (200 → 2000자)
+                    if len(content) > 2000:
+                        content = content[:2000] + "...[truncated]"
+
+                    context_lines.append(f"[{role}]: {content}")
+
+                context_summary = "\n".join(context_lines)
+                enriched_parts.append(f"\n[Previous conversation context ({len(recent)} messages)]\n{context_summary}")
+
+        # Phase 6: 아티팩트 참조 추가
+        if hasattr(context, 'artifacts') and context.artifacts:
+            recent_artifacts = context.artifacts[-10:]  # 최근 10개 아티팩트
+            if recent_artifacts:
+                artifact_lines = ["[Referenced files]"]
+                for art in recent_artifacts:
+                    filename = art.get('filename', 'unknown')
+                    language = art.get('language', 'text')
+                    artifact_lines.append(f"- {filename} ({language})")
+                enriched_parts.append("\n".join(artifact_lines))
+
+        # Phase 6: 마지막 분석 결과 참조
+        if hasattr(context, 'last_analysis') and context.last_analysis:
+            analysis = context.last_analysis
+            task_type = analysis.get('task_type', 'general')
+            complexity = analysis.get('complexity', 'unknown')
+            enriched_parts.append(f"\n[Last analysis: task_type={task_type}, complexity={complexity}]")
 
         return "\n".join(enriched_parts)

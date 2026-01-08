@@ -1,7 +1,13 @@
-"""RAG Context Builder - 질의에 맞는 컨텍스트 구성
+"""RAG Context Builder - 질의에 맞는 컨텍스트 구성 (Phase 6 Enhanced)
 
 사용자 질문에 관련된 코드와 이전 대화를 벡터 검색하여
 LLM에게 제공할 컨텍스트를 구성합니다.
+
+Phase 6 Enhancements:
+- 확장된 대화 검색 결과 (3 → 5개)
+- 압축된 히스토리 통합
+- 토큰 버짓 인식
+- MAX_CONTEXT_LENGTH 증가
 """
 import logging
 from typing import List, Dict, Optional, Tuple
@@ -15,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RAGContext:
-    """RAG 검색 결과 컨텍스트"""
+    """RAG 검색 결과 컨텍스트 (Phase 6 Enhanced)"""
     formatted_context: str
     results_count: int
     files_referenced: List[str]
@@ -24,19 +30,28 @@ class RAGContext:
     # 대화 컨텍스트 (Phase 3-D)
     conversation_results: int = 0
     conversation_context: str = ""
+    # Phase 6: 토큰 정보
+    estimated_tokens: int = 0
+    compressed_history: Optional[str] = None
 
 
 class RAGContextBuilder:
-    """사용자 질문에 맞는 RAG 컨텍스트를 구성하는 서비스
+    """사용자 질문에 맞는 RAG 컨텍스트를 구성하는 서비스 (Phase 6 Enhanced)
 
     벡터 검색을 통해 관련 코드를 찾고,
     LLM이 이해하기 쉬운 형태로 포맷팅합니다.
+
+    Phase 6 Enhancements:
+    - Expanded conversation search (3 → 5 results)
+    - Compressed history integration
+    - Token budget awareness
     """
 
-    # 기본 설정
-    DEFAULT_N_RESULTS: int = 5
-    DEFAULT_MIN_RELEVANCE: float = 0.5  # 최소 관련성 (cosine distance 기준)
-    MAX_CONTEXT_LENGTH: int = 8000  # 최대 컨텍스트 길이 (토큰 절약)
+    # Phase 6: 확장된 기본 설정
+    DEFAULT_N_RESULTS: int = 7              # Phase 6: 5 → 7
+    DEFAULT_CONVERSATION_RESULTS: int = 5   # Phase 6: 3 → 5
+    DEFAULT_MIN_RELEVANCE: float = 0.5      # 최소 관련성 (cosine distance 기준)
+    MAX_CONTEXT_LENGTH: int = 12000         # Phase 6: 8000 → 12000 (토큰 절약)
 
     def __init__(self, session_id: str):
         """RAGContextBuilder 초기화
@@ -192,19 +207,25 @@ class RAGContextBuilder:
     def search_conversation(
         self,
         query: str,
-        n_results: int = 3,
+        n_results: int = None,  # Phase 6: Use DEFAULT_CONVERSATION_RESULTS
         min_relevance: float = 0.4
     ) -> Tuple[str, List[ConversationSearchResult]]:
-        """이전 대화에서 관련 내용 검색
+        """이전 대화에서 관련 내용 검색 (Phase 6 Enhanced)
+
+        Phase 6: 기본 결과 수 3 → 5개로 확장
 
         Args:
             query: 검색 쿼리
-            n_results: 최대 결과 수
+            n_results: 최대 결과 수 (기본: 5)
             min_relevance: 최소 관련성
 
         Returns:
             Tuple[str, List]: (포맷된 컨텍스트, 검색 결과)
         """
+        # Phase 6: 기본값 적용
+        if n_results is None:
+            n_results = self.DEFAULT_CONVERSATION_RESULTS
+
         try:
             indexer = get_conversation_indexer(self.session_id)
             results = indexer.search_conversation(
@@ -226,24 +247,37 @@ class RAGContextBuilder:
     def enrich_query(
         self,
         user_request: str,
-        n_results: int = DEFAULT_N_RESULTS,
-        min_relevance: float = DEFAULT_MIN_RELEVANCE,
-        include_conversation: bool = True
+        n_results: int = None,  # Phase 6: Use class default
+        min_relevance: float = None,
+        include_conversation: bool = True,
+        compressed_history: Optional[List[Dict]] = None  # Phase 6: 압축된 히스토리
     ) -> Tuple[str, RAGContext]:
-        """사용자 요청을 RAG 컨텍스트로 보강
+        """사용자 요청을 RAG 컨텍스트로 보강 (Phase 6 Enhanced)
 
         코드 검색과 대화 검색을 모두 수행하여
         관련 컨텍스트를 사용자 요청에 추가합니다.
 
+        Phase 6 Enhancements:
+        - 확장된 대화 검색 (3 → 5개)
+        - 압축된 히스토리 통합 지원
+        - 토큰 추정 추가
+
         Args:
             user_request: 원본 사용자 요청
-            n_results: 최대 결과 수
-            min_relevance: 최소 관련성
+            n_results: 최대 결과 수 (기본: 7)
+            min_relevance: 최소 관련성 (기본: 0.5)
             include_conversation: 대화 검색 포함 여부
+            compressed_history: Phase 6 - 압축된 대화 히스토리
 
         Returns:
             Tuple[str, RAGContext]: (보강된 요청, RAG 컨텍스트)
         """
+        # Phase 6: 기본값 적용
+        if n_results is None:
+            n_results = self.DEFAULT_N_RESULTS
+        if min_relevance is None:
+            min_relevance = self.DEFAULT_MIN_RELEVANCE
+
         # 1. 코드 검색
         rag_context = self.build_context(
             query=user_request,
@@ -251,13 +285,13 @@ class RAGContextBuilder:
             min_relevance=min_relevance
         )
 
-        # 2. 대화 검색 (선택적)
+        # 2. 대화 검색 (선택적) - Phase 6: 확장된 결과 수 (3 → 5)
         conv_context = ""
         conv_results = 0
         if include_conversation:
             conv_context, conv_search_results = self.search_conversation(
                 query=user_request,
-                n_results=3,
+                n_results=self.DEFAULT_CONVERSATION_RESULTS,  # Phase 6: 5개
                 min_relevance=0.4
             )
             conv_results = len(conv_search_results)
@@ -269,6 +303,13 @@ class RAGContextBuilder:
         # 3. 컨텍스트 결합
         context_parts = []
 
+        # Phase 6: 압축된 히스토리 추가
+        if compressed_history:
+            compressed_content = self._format_compressed_history(compressed_history)
+            if compressed_content:
+                context_parts.append(compressed_content)
+                rag_context.compressed_history = compressed_content
+
         if rag_context.formatted_context:
             context_parts.append(rag_context.formatted_context)
 
@@ -279,13 +320,44 @@ class RAGContextBuilder:
             combined_context = "\n\n".join(context_parts)
             enriched_request = f"{user_request}\n\n{combined_context}"
 
+            # Phase 6: 토큰 추정
+            rag_context.estimated_tokens = len(combined_context) // 4  # 대략적 추정
+
             self.logger.info(
                 f"Query enriched: {rag_context.results_count} code results, "
-                f"{conv_results} conversation results"
+                f"{conv_results} conversation results, "
+                f"~{rag_context.estimated_tokens} tokens"
             )
             return enriched_request, rag_context
 
         return user_request, rag_context
+
+    def _format_compressed_history(self, compressed_history: List[Dict]) -> str:
+        """압축된 히스토리를 포맷팅 (Phase 6)
+
+        Args:
+            compressed_history: 압축된 메시지 리스트
+
+        Returns:
+            str: 포맷된 히스토리 문자열
+        """
+        if not compressed_history:
+            return ""
+
+        parts = ["## Compressed Conversation History\n"]
+
+        for msg in compressed_history:
+            if msg.get("is_compressed"):
+                # 압축된 요약 메시지
+                parts.append(msg.get("content", ""))
+            else:
+                role = "User" if msg.get("role") == "user" else "Assistant"
+                content = msg.get("content", "")[:500]  # 제한된 미리보기
+                if len(msg.get("content", "")) > 500:
+                    content += "..."
+                parts.append(f"**{role}**: {content}\n")
+
+        return "\n".join(parts)
 
 
 # 캐시된 빌더 인스턴스
