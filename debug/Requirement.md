@@ -2357,3 +2357,165 @@ Total: 2 files (1 created, 1 modified)
 
 - `docs/CLI_README.md` - CLI 사용 가이드 (업데이트 필요)
 - `docs/CLI_IMPLEMENTATION_TODOS.md` - Phase 2 tasks (완료)
+
+---
+
+## CLI Tools Analysis & Phase 3 Planning (2026-01-08)
+
+### 개요
+CLI 구현을 위한 도구들을 체계적으로 조사하고, 현재 구현 상태를 분석하여 Phase 3 계획을 수립했습니다.
+
+### 완료된 분석 작업
+
+#### 1. CLI 프레임워크 조사 (argparse vs Click vs Typer)
+
+**조사 결과**:
+- **argparse**: Python stdlib, verbose하지만 의존성 없음, 복잡한 CLI에 적합
+- **Click**: Decorator 기반, 아름다운 help pages, Flask에서 사용
+- **Typer**: Type hints 활용, 최소 boilerplate, Click 기반
+
+**현재 사용**: argparse ✅
+**결론**: 현재 구현으로 충분, 마이그레이션 불필요
+
+#### 2. Terminal UI 라이브러리 조사 (Rich vs Textual vs prompt_toolkit)
+
+**조사 결과**:
+
+| 라이브러리 | 목적 | 성능 | 복잡도 |
+|-----------|------|------|--------|
+| **Rich** | 출력 포맷팅 | 우수 | 낮음 |
+| **Textual** | 전체 TUI 프레임워크 | 매우 우수 (120 FPS) | 높음 |
+| **prompt_toolkit** | 대화형 입력 | 우수 | 중간 |
+
+**현재 사용**: Rich ✅
+**권장 추가**: prompt_toolkit (히스토리, 자동완성)
+**보류**: Textual (현재 필요 없음, 과도한 복잡도)
+
+#### 3. 현재 구현 상태 분석
+
+**코드 통계**:
+- 총 1,195 라인 (6개 파일)
+- Phase 1 (Basic Structure): ✅ 완료
+- Phase 2 (Streaming UI): ✅ 완료
+
+**구현된 기능**:
+- ✅ argparse 기반 CLI
+- ✅ Rich Console UI
+- ✅ 9개 slash commands
+- ✅ Session persistence
+- ✅ Syntax highlighting (30+ 언어)
+- ✅ Progress bars with agent-specific messages
+
+**사용 중인 라이브러리**:
+```python
+argparse         # ✅ Stdlib
+rich >= 13.0.0   # ✅ 설치됨, 활발히 사용
+click >= 8.0.0   # ❌ requirements.txt에만 있음, 미사용
+prompt-toolkit   # ❌ requirements.txt에만 있음, 미사용
+```
+
+#### 4. Gap Analysis (미구현 기능)
+
+**Critical (P0)**:
+- ❌ Command history (↑↓ arrows) - prompt_toolkit 필요
+- ❌ Autocomplete for commands - prompt_toolkit 필요
+- ❌ Settings system (.testcodeagent/settings.json)
+
+**High Priority (P1)**:
+- ❌ `/diff <file>` command
+- ❌ `/tree` command (file tree view)
+- ❌ `/export` command (session to Markdown)
+
+**Medium Priority (P2)**:
+- ❌ `/search <query>` command
+- ❌ File path autocomplete
+- ❌ Session tagging
+
+### 작성된 문서
+
+| # | 문서 | 내용 | 라인 수 |
+|---|------|------|---------|
+| 1 | `docs/CLI_TOOLS_ANALYSIS_REPORT.md` | 종합 분석 보고서 | 900+ lines |
+| 2 | `docs/CLI_PHASE3_REVISED_PLAN.md` | Phase 3 재수립 계획 | 700+ lines |
+
+### Phase 3 Revised Plan 요약
+
+**목표**: Essential enhancements (15-20 hours, 2-3 days)
+
+**핵심 작업**:
+1. **prompt_toolkit 통합** (5 hours)
+   - Command history (↑↓ arrows)
+   - Autocomplete (Tab key)
+   - Auto-suggest from history
+
+2. **Settings System** (4 hours)
+   - CLIConfig 클래스
+   - `.testcodeagent/settings.json`
+   - `/config` slash command
+
+3. **Essential Commands** (8 hours)
+   - `/diff <file>` - 파일 변경 diff 표시
+   - `/tree` - 파일 트리 뷰
+   - `/export` - Markdown export
+
+4. **Testing & Docs** (3 hours)
+   - Phase 3 tests
+   - Documentation updates
+
+**Stack Decision**:
+- **Keep**: argparse + Rich (현재 스택 유지)
+- **Add**: prompt_toolkit (입력 강화)
+- **Defer**: Typer, Textual (현재 필요 없음)
+
+### 권장사항
+
+#### 즉시 적용 (Phase 3)
+1. ✅ prompt_toolkit 추가 - 명령 히스토리와 자동완성
+2. ✅ Settings 시스템 구현
+3. ✅ /diff, /tree, /export 명령어 추가
+
+#### 보류 (Phase 4 이후)
+1. ❌ Typer 마이그레이션 - argparse로 충분
+2. ❌ Textual TUI - 과도한 복잡도, 현재 필요 없음
+3. ❌ Interactive file browser - 우선순위 낮음
+
+### 기술적 결정 근거
+
+**argparse 유지 이유**:
+- Python 표준 라이브러리 (의존성 0)
+- 현재 구현으로 충분히 작동
+- 팀이 익숙함
+- 마이그레이션 비용 vs 이득 불균형
+
+**Rich 유지 이유**:
+- Phase 1-2에서 검증됨
+- 아름다운 출력, 높은 생산성
+- Textual은 과도한 기능 (TUI 위젯 미사용)
+
+**prompt_toolkit 추가 이유**:
+- Rich와 병행 사용 가능
+- 작은 코드 변경 (~50 lines)
+- 큰 UX 개선 (히스토리, 자동완성)
+- IPython, pgcli 등에서 검증됨
+
+### Web Sources
+
+**CLI Frameworks**:
+- [Comparing Python CLI Tools - CodeCut](https://codecut.ai/comparing-python-command-line-interface-tools-argparse-click-and-typer/)
+- [Python CLI Options Guide](https://www.python.digibeatrix.com/en/api-libraries/python-command-line-options-guide/)
+- [Typer Alternatives](https://typer.tiangolo.com/alternatives/)
+
+**Terminal UI Libraries**:
+- [Python Textual: Build Beautiful UIs - Real Python](https://realpython.com/python-textual/)
+- [10 Best Python TUI Libraries for 2025](https://medium.com/towards-data-engineering/10-best-python-text-user-interface-tui-libraries-for-2025-79f83b6ea16e)
+- [prompt-toolkit GitHub](https://github.com/prompt-toolkit/python-prompt-toolkit)
+
+### 다음 단계
+
+**Ready for Implementation**:
+1. Phase 3.1: prompt_toolkit 통합 (Day 1)
+2. Phase 3.2: Settings system (Day 1-2)
+3. Phase 3.3: Advanced commands (Day 2-3)
+4. Phase 3.4: Testing & docs (Day 3)
+
+---
