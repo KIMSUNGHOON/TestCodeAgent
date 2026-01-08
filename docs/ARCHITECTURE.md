@@ -1,4 +1,4 @@
-# TestCodeAgent 시스템 아키텍처
+# Agentic Coder 시스템 아키텍처
 
 **버전**: 2.0
 **최종 업데이트**: 2026-01-06
@@ -7,7 +7,7 @@
 
 ## 1. 시스템 개요
 
-TestCodeAgent는 **Claude Code / OpenAI Codex 방식**의 통합 워크플로우 아키텍처를 구현한 AI 코딩 어시스턴트입니다.
+Agentic Coder는 **Claude Code / OpenAI Codex 방식**의 통합 워크플로우 아키텍처를 구현한 AI 코딩 어시스턴트입니다.
 
 ### 1.1 핵심 설계 원칙
 
@@ -322,4 +322,4 @@ frontend/
 
 ---
 
-*이 문서는 TestCodeAgent의 핵심 아키텍처를 설명합니다.*
+*이 문서는 Agentic Coder의 핵심 아키텍처를 설명합니다.*

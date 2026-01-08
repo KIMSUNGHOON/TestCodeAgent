@@ -1,234 +1,411 @@
-# Coding Agent - Full Stack AI Assistant
+<div align="center">
 
-Claude Code / OpenAI Codex 방식의 **Unified Workflow Architecture**를 구현한 AI 코딩 어시스턴트입니다.
+# Agentic Coder
 
-## 🏗️ Architecture
+### Enterprise-Grade AI Coding Assistant
+
+[![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+**Production-ready AI coding assistant with Claude Code-style Unified Workflow Architecture**
+
+[Features](#-key-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Roadmap](#-roadmap)
+
+---
+
+[한국어 문서 (Korean)](README_KO.md)
+
+</div>
+
+---
+
+## Why Agentic Coder?
+
+Unlike simple code generation tools, Agentic Coder provides a **complete coding workflow** similar to Claude Code and GitHub Copilot Workspace.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### Unique Strengths
+
+- **Unified Workflow** - Intelligent request routing (Q&A, Planning, Code Gen, Review, Debug)
+- **20 Agent Tools** - File, Git, Code, Web, Sandbox operations
+- **Network Mode** - Online/Offline for air-gapped enterprise environments
+- **Multi-Model** - DeepSeek-R1, Qwen3-Coder, GPT-OSS
+- **Korean NLP** - Native Korean language support
+- **CLI + Web UI** - Both interfaces with full feature parity
+
+</td>
+<td width="50%" valign="top">
+
+### Enterprise Ready
+
+- **Air-Gapped Support** - Works completely offline
+- **Data Privacy** - No external API calls in offline mode
+- **Sandbox Execution** - Docker isolation for secure code runs
+- **Session Management** - Persistent conversation history
+- **Self-Hosted** - Run on your own infrastructure
+- **262 Tests** - Production-quality test coverage
+
+</td>
+</tr>
+</table>
+
+---
+
+## Key Features
+
+### 1. Unified Workflow Architecture
 
 ```
-User Prompt
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Unified Chat Endpoint                         │
-│                    POST /chat/unified                            │
-└─────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    UnifiedAgentManager                           │
-│  - 세션 컨텍스트 관리                                              │
-│  - Supervisor 분석 요청                                           │
-│  - 응답 타입별 라우팅                                             │
-└─────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    SupervisorAgent                               │
-│  - 요청 분석 (Reasoning LLM)                                     │
-│  - response_type 결정                                            │
-│  - 복잡도 평가                                                    │
-└─────────────────────────────────────────────────────────────────┘
-    │
-    ├─► QUICK_QA ─────────► Direct LLM Response
-    ├─► PLANNING ─────────► PlanningHandler (계획 생성 + 파일 저장)
-    ├─► CODE_GENERATION ──► CodeGenerationHandler (워크플로우 실행)
-    ├─► CODE_REVIEW ──────► CodeReviewHandler
-    └─► DEBUGGING ────────► DebuggingHandler
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    ResponseAggregator                            │
-│  - UnifiedResponse 생성                                          │
-│  - Next Actions 제안                                             │
-│  - 컨텍스트 DB 저장                                               │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         User Request                                  │
+└──────────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Supervisor Agent (Reasoning LLM)                   │
+│                                                                       │
+│   Analyzes request → Determines response type → Routes to handler    │
+└──────────────────────────────────────────────────────────────────────┘
+         │              │              │              │              │
+         ▼              ▼              ▼              ▼              ▼
+    ┌────────┐    ┌────────┐    ┌────────┐    ┌────────┐    ┌────────┐
+    │QUICK_QA│    │PLANNING│    │CODE_GEN│    │ REVIEW │    │ DEBUG  │
+    └────────┘    └────────┘    └────────┘    └────────┘    └────────┘
+         │              │              │              │              │
+         └──────────────┴──────────────┴──────────────┴──────────────┘
+                                       │
+                                       ▼
+                    ┌──────────────────────────────────┐
+                    │     Unified Response + Artifacts  │
+                    └──────────────────────────────────┘
 ```
 
-## 📋 Features
+**What makes it special:**
+- Single entry point handles all request types
+- Supervisor uses Reasoning LLM (DeepSeek-R1) for intelligent analysis
+- Automatic routing based on request complexity
+- Consistent response format across all handlers
 
-### Unified Workflow Architecture
-- **단일 진입점**: 모든 요청이 Supervisor를 통과
-- **지능적 라우팅**: 요청 유형에 따른 자동 경로 결정 (QUICK_QA, PLANNING, CODE_GENERATION 등)
-- **통합 응답 포맷**: 모든 경로에서 동일한 응답 구조
-- **컨텍스트 영속성**: 대화 및 작업 컨텍스트 DB 저장
-- **Next Actions UI**: 응답 타입별 맞춤형 다음 행동 제안
+---
 
-### LLM Provider Abstraction
-- **다중 모델 지원**: DeepSeek-R1, Qwen3-Coder, GPT-OSS
-- **모델별 어댑터**: 자동 프롬프트 최적화
-- **한국어 지원**: 동사 어간 기반 패턴 매칭
+### 2. Agent Tools (20 Tools)
 
-### User Interface
-- **Claude.ai 스타일**: 깔끔한 대화형 인터페이스
-- **실시간 스트리밍**: 코드 생성 과정 실시간 표시
-- **계획 파일 뷰어**: 복잡한 작업 계획 미리보기
-- **반응형 디자인**: 데스크톱/모바일 지원
+<table>
+<tr>
+<td width="33%" valign="top">
 
-## 🚀 Quick Start
+**File & Git**
+| Tool | Function |
+|:-----|:---------|
+| `read_file` | Read contents |
+| `write_file` | Write/create |
+| `search_files` | Pattern search |
+| `list_directory` | List files |
+| `git_status` | Repo status |
+| `git_diff` | View changes |
+| `git_log` | History |
+| `git_branch` | Branches |
+| `git_commit` | Commit |
+
+</td>
+<td width="33%" valign="top">
+
+**Code Operations**
+| Tool | Function |
+|:-----|:---------|
+| `execute_python` | Run Python |
+| `run_tests` | Test runner |
+| `lint_code` | Linting |
+| `format_code` | Formatting |
+| `shell_command` | Shell exec |
+| `generate_docstring` | Docstrings |
+| `sandbox_execute` | Isolated run |
+
+</td>
+<td width="33%" valign="top">
+
+**Web & Search**
+| Tool | Function |
+|:-----|:---------|
+| `code_search` | Code search |
+| `web_search` | Web search |
+| `http_request` | REST API |
+| `download_file` | Downloads |
+
+**Network Mode**
+- `online` = All tools
+- `offline` = Block external API
+
+</td>
+</tr>
+</table>
+
+---
+
+### 3. Network Mode (Air-Gapped Support)
+
+Perfect for **enterprise environments** with strict security requirements.
+
+| Mode | Description | Blocked Tools |
+|:-----|:------------|:--------------|
+| `online` | Full functionality | None |
+| `offline` | Air-gapped mode | `web_search`, `http_request` |
+
+**Security Policy:**
+- **Block**: Tools that send data externally
+- **Allow**: Tools that only receive data (downloads)
+- **Allow**: All local tools (file, git, code)
+
+```bash
+# Enable offline mode
+NETWORK_MODE=offline
+```
+
+---
+
+### 4. Sandbox Execution (Docker Isolation)
+
+Execute untrusted code safely in isolated containers.
+
+```python
+sandbox = registry.get_tool("sandbox_execute")
+
+# Python execution
+result = await sandbox.execute(
+    code="import os; print(os.getcwd())",
+    language="python",
+    timeout=60
+)
+
+# Shell execution
+result = await sandbox.execute(
+    code="ls -la && whoami",
+    language="shell"
+)
+```
+
+**Supported Languages**: Python, Node.js, TypeScript, Shell
+
+**Offline Setup:**
+```bash
+docker pull ghcr.io/agent-infra/sandbox:latest
+# Works offline after first pull
+```
+
+---
+
+### 5. CLI Interface
+
+Full-featured command-line interface with:
+
+- **Command History** - Persistent across sessions
+- **Auto-Completion** - Tab completion for commands and files
+- **Slash Commands** - `/help`, `/status`, `/preview`, `/config`
+- **Streaming Output** - Real-time code generation display
+
+```bash
+# Start interactive mode
+python -m cli
+
+# One-shot mode
+python -m cli "Create a Python REST API"
+
+# With options
+python -m cli --workspace ./project --model qwen2.5-coder:32b
+```
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-1. **vLLM 서버** (앱 시작 전 실행 필요):
-   ```bash
-   # Terminal 1: Reasoning Model
-   vllm serve deepseek-ai/DeepSeek-R1 --port 8001
+| Requirement | Version |
+|:------------|:--------|
+| Python | 3.12+ |
+| Node.js | 20+ |
+| Docker | Latest (for sandbox) |
+| GPU | NVIDIA recommended (for vLLM) |
 
-   # Terminal 2: Coding Model
-   vllm serve Qwen/Qwen3-8B-Coder --port 8002
-   ```
-
-2. **Python 3.12** and **Node.js 20+**
-
-### Development Setup
+### Installation
 
 ```bash
-# 1. 환경 설정
-cp .env.example .env
-# .env 파일에서 LLM 엔드포인트 설정
+# 1. Clone
+git clone https://github.com/your-org/agentic-coder.git
+cd agentic-coder
 
-# 2. Backend
+# 2. Environment
+cp .env.example .env
+
+# 3. Backend
 cd backend
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# 3. Frontend
-cd frontend
+# 4. Frontend
+cd ../frontend
 npm install
-npm run dev
+
+# 5. Sandbox (optional)
+docker pull ghcr.io/agent-infra/sandbox:latest
 ```
 
-Frontend: http://localhost:5173
-
-### Mock Mode (vLLM 없이 테스트)
+### Start Services
 
 ```bash
-./RUN_MOCK.sh  # 또는 Windows: RUN_MOCK.bat
+# Terminal 1: vLLM (Reasoning)
+vllm serve deepseek-ai/DeepSeek-R1 --port 8001
+
+# Terminal 2: vLLM (Coding)
+vllm serve Qwen/Qwen3-8B-Coder --port 8002
+
+# Terminal 3: Backend
+cd backend && uvicorn app.main:app --port 8000 --reload
+
+# Terminal 4: Frontend
+cd frontend && npm run dev
 ```
 
-## 📁 Project Structure
+**Access:** http://localhost:5173
 
-```
-TestCodeAgent/
-├── backend/
-│   ├── app/
-│   │   ├── main.py                         # FastAPI entry point
-│   │   ├── agent/
-│   │   │   ├── unified_agent_manager.py    # 통합 에이전트 매니저
-│   │   │   └── handlers/                   # 응답 타입별 핸들러
-│   │   └── api/
-│   │       └── main_routes.py              # /chat/unified 엔드포인트
-│   ├── core/
-│   │   ├── supervisor.py                   # SupervisorAgent
-│   │   ├── response_aggregator.py          # UnifiedResponse
-│   │   └── context_store.py                # 컨텍스트 저장소
-│   └── shared/
-│       └── llm/
-│           ├── base.py                     # LLMProvider 인터페이스
-│           └── adapters/                   # 모델별 어댑터
-├── frontend/
-│   └── src/
-│       ├── components/
-│       │   ├── WorkflowInterface.tsx       # Unified 모드 UI
-│       │   ├── NextActionsPanel.tsx        # 다음 행동 버튼
-│       │   └── PlanFileViewer.tsx          # 계획 파일 뷰어
-│       └── api/
-│           └── client.ts                   # API 클라이언트
-└── docs/                                   # 기술 문서
+### Mock Mode (No GPU)
+
+```bash
+./RUN_MOCK.sh  # Linux/Mac
+RUN_MOCK.bat   # Windows
 ```
 
-## 🎯 API Endpoints
+---
 
-### Unified Chat (Non-streaming)
-```
-POST /chat/unified
-```
+## Configuration
 
-```json
-// Request
-{
-  "message": "Python으로 계산기 만들어줘",
-  "session_id": "session-123",
-  "workspace": "/home/user/workspace"
-}
+```bash
+# .env
 
-// Response
-{
-  "response_type": "code_generation",
-  "content": "## 코드 생성 완료\n\n...",
-  "artifacts": [...],
-  "next_actions": ["테스트 실행", "코드 리뷰 요청"],
-  "session_id": "session-123",
-  "success": true
-}
-```
-
-### Unified Chat (Streaming)
-```
-POST /chat/unified/stream
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-```env
-# Primary LLM
-LLM_ENDPOINT=http://localhost:8001/v1
-LLM_MODEL=deepseek-ai/DeepSeek-R1
-MODEL_TYPE=deepseek  # deepseek, qwen, gpt-oss, generic
-
-# Optional: Task-specific endpoints
+# LLM Endpoints
 VLLM_REASONING_ENDPOINT=http://localhost:8001/v1
 VLLM_CODING_ENDPOINT=http://localhost:8002/v1
 REASONING_MODEL=deepseek-ai/DeepSeek-R1
 CODING_MODEL=Qwen/Qwen3-8B-Coder
 
-# Server
-API_HOST=0.0.0.0
-API_PORT=8000
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+# Network Mode
+NETWORK_MODE=online  # or 'offline'
+
+# Sandbox
+SANDBOX_IMAGE=ghcr.io/agent-infra/sandbox:latest
+SANDBOX_HOST=localhost
+SANDBOX_PORT=8080
+SANDBOX_TIMEOUT=60
 ```
 
-## 📚 Documentation
+---
 
-| 문서 | 설명 |
-|------|------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 아키텍처 상세 |
-| [MOCK_MODE.md](docs/MOCK_MODE.md) | Mock 모드 테스트 가이드 |
-| [MULTI_USER_ANALYSIS.md](docs/MULTI_USER_ANALYSIS.md) | 다중 사용자 동시 접속 분석 |
-| [OPTIMIZATION_RECOMMENDATIONS.md](docs/OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU 최적화 권장사항 |
-| [REFINEMENT_CYCLE_GUIDE.md](docs/REFINEMENT_CYCLE_GUIDE.md) | 코드 개선 워크플로우 가이드 |
-| [INSTALL_CONDA.md](INSTALL_CONDA.md) | Conda 환경 설치 가이드 |
+## API Reference
 
-### Archive (완료된 작업 문서)
-| 문서 | 설명 |
-|------|------|
-| [LLM_MODEL_CHANGE_PLAN.md](docs/archive/LLM_MODEL_CHANGE_PLAN.md) | LLM 추상화 계층 구현 완료 |
-| [AGENT_COMPATIBILITY_AUDIT.md](docs/archive/AGENT_COMPATIBILITY_AUDIT.md) | 프롬프트 호환성 감사 완료 |
-| [IMPROVEMENT_PLAN.md](docs/archive/IMPROVEMENT_PLAN.md) | 시스템 개선 Phase 1&2 완료 |
-| [AGENT_EXPANSION_PROPOSAL.md](docs/archive/AGENT_EXPANSION_PROPOSAL.md) | 에이전트 확장 제안서 |
+### Unified Chat
 
-## 🎨 UI Design
+```http
+POST /chat/unified
+Content-Type: application/json
 
-Claude.ai 스타일 디자인:
+{
+  "message": "Create a Python calculator with tests",
+  "session_id": "session-123",
+  "workspace": "/path/to/workspace"
+}
+```
 
-| Element | Color |
-|---------|-------|
-| Background | `#FAF9F7` (warm off-white) |
-| Accent | `#DA7756` (terracotta) |
-| Text Primary | `#1A1A1A` |
-| Text Secondary | `#666666` |
+### Streaming
 
-## 🛠️ Supported LLM Models
+```http
+POST /chat/unified/stream
+```
 
-| 모델 | 특징 | 프롬프트 형식 |
-|------|------|---------------|
-| DeepSeek-R1 | 추론 모델 | `<think></think>` 태그 |
-| Qwen3-Coder | 코딩 특화 | Standard prompts |
-| GPT-OSS | OpenAI Harmony | Structured reasoning |
+---
 
-## 📄 License
+## Testing
 
-MIT License - see LICENSE file for details
+```bash
+cd backend
+pytest app/tools/tests/ -v
+
+# 262 passed, 8 skipped
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|:---------|:------------|
+| [Agent Tools Guide](docs/AGENT_TOOLS_PHASE2_README.md) | All 20 tools documentation |
+| [Architecture](docs/ARCHITECTURE.md) | System design |
+| [CLI Guide](docs/CLI_README.md) | Command-line interface |
+| [Mock Mode](docs/MOCK_MODE.md) | Testing without GPU |
+| [Roadmap](docs/ROADMAP.md) | Development roadmap & future plans |
+
+---
+
+## Roadmap
+
+- [x] **Phase 1** - Core tools (14 tools)
+- [x] **Phase 2** - Network mode + Web tools
+- [x] **Phase 2.5** - Code formatting tools
+- [x] **Phase 3** - CLI & Performance optimization
+- [x] **Phase 4** - Sandbox execution
+- [ ] **Phase 5** - Plan mode with approval workflow
+- [ ] **Phase 6** - Context window optimization
+- [ ] **Phase 7** - MCP (Model Context Protocol) integration
+- [ ] **Phase 8** - Multi-agent collaboration
+
+See [ROADMAP.md](docs/ROADMAP.md) for detailed plans and feature backlog.
+
+---
+
+## Supported Models
+
+| Model | Type | Strengths |
+|:------|:-----|:----------|
+| DeepSeek-R1 | Reasoning | Complex analysis, planning |
+| Qwen3-Coder | Coding | Code generation, completion |
+| GPT-OSS | General | Balanced performance |
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push branch (`git push origin feature/amazing`)
+5. Open Pull Request
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+**Built with**
+
+[![Python](https://img.shields.io/badge/-Python-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/-React-61DAFB?style=flat-square&logo=react&logoColor=black)](https://reactjs.org)
+[![vLLM](https://img.shields.io/badge/-vLLM-FF6F00?style=flat-square&logo=lightning&logoColor=white)](https://vllm.ai)
+[![Docker](https://img.shields.io/badge/-Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+
+---
+
+**If this project helps you, please give it a ⭐**
+
+</div>

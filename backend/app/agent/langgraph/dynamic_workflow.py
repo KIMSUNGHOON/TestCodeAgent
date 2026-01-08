@@ -536,17 +536,28 @@ class DynamicWorkflow:
                 logger.info(f"📝 Conversation context: {len(conversation_history)} previous messages")
 
             # Build enhanced request with conversation context
+            # CONTEXT IMPROVEMENT Phase 2: Use ContextManager for compression and key info extraction
             enhanced_request = user_request
             if conversation_history:
-                # Add recent conversation context to the request for continuity
-                recent_context = conversation_history[-6:]  # Last 3 exchanges (user + assistant)
-                context_summary = "\n".join([
-                    f"{'사용자' if msg['role'] == 'user' else 'AI'}: {msg['content'][:200]}..."
-                    if len(msg['content']) > 200 else f"{'사용자' if msg['role'] == 'user' else 'AI'}: {msg['content']}"
-                    for msg in recent_context
-                ])
-                enhanced_request = f"""이전 대화 내용:
-{context_summary}
+                from backend.app.utils.context_manager import ContextManager
+
+                # Create context manager
+                context_mgr = ContextManager(max_recent_messages=10)
+
+                # Create enriched context with compression and key info extraction
+                enriched_context = context_mgr.create_enriched_context(
+                    history=conversation_history,
+                    agent_type="supervisor",  # Supervisor sees all context
+                    compress=True
+                )
+
+                # Format context for prompt
+                context_summary = context_mgr.format_context_for_prompt(
+                    enriched_context,
+                    include_key_info=True
+                )
+
+                enhanced_request = f"""{context_summary}
 
 현재 요청:
 {user_request}"""
@@ -679,7 +690,8 @@ class DynamicWorkflow:
                     user_request=user_request,
                     workspace_root=workspace_root,
                     task_type=supervisor_analysis.get("task_type", "implementation"),
-                    enable_debug=enable_debug
+                    enable_debug=enable_debug,
+                    conversation_history=conversation_history  # CONTEXT IMPROVEMENT: Pass to all agents
                 )
                 state["supervisor_analysis"] = supervisor_analysis
                 state["max_iterations"] = supervisor_analysis.get("max_iterations", 5)
@@ -879,8 +891,37 @@ class DynamicWorkflow:
                 })
 
                 # Collect all artifacts
+                # FIXED: Remove duplicates by normalized path before setting final_artifacts
+                import os
                 coder_output = state.get("coder_output", {})
-                all_artifacts = coder_output.get("artifacts", [])
+                all_artifacts_raw = coder_output.get("artifacts", [])
+                workspace_root = state.get("workspace_root", "")
+
+                # Deduplicate artifacts by normalized absolute path
+                seen_paths = set()
+                all_artifacts = []
+                for artifact in all_artifacts_raw:
+                    artifact_filename = artifact.get("filename", "")
+                    artifact_file_path = artifact.get("file_path", "")
+
+                    # Normalize path
+                    if artifact_file_path and os.path.isabs(artifact_file_path):
+                        normalized_path = os.path.normpath(artifact_file_path)
+                    elif artifact_filename:
+                        normalized_path = os.path.normpath(os.path.join(workspace_root, artifact_filename))
+                    else:
+                        logger.warning(f"⚠️  Skipping artifact without valid path in final_artifacts")
+                        continue
+
+                    # Add only if not seen before
+                    if normalized_path not in seen_paths:
+                        all_artifacts.append(artifact)
+                        seen_paths.add(normalized_path)
+                    else:
+                        logger.warning(f"⚠️  Removed duplicate from final_artifacts: {artifact_filename}")
+
+                logger.info(f"📁 Final artifacts: {len(all_artifacts_raw)} raw → {len(all_artifacts)} unique")
+
                 state["final_artifacts"] = all_artifacts
                 state["workflow_status"] = "completed"
 
@@ -980,3 +1021,37 @@ class DynamicWorkflow:
 
 # Global dynamic workflow instance
 dynamic_workflow = DynamicWorkflow()
+
+
+class DynamicWorkflowManager:
+    """Alias class for CLI compatibility
+
+    Wraps DynamicWorkflow to provide the interface expected by session_manager.py
+    """
+
+    def __init__(self):
+        self._workflow = DynamicWorkflow()
+        logger.info("✅ DynamicWorkflowManager initialized (wrapper for DynamicWorkflow)")
+
+    async def execute_streaming_workflow(
+        self,
+        user_request: str,
+        workspace_dir: str,
+        conversation_history: List[Dict[str, str]] = None
+    ) -> AsyncGenerator[Dict, None]:
+        """Execute workflow with streaming - CLI compatible interface
+
+        Args:
+            user_request: User's request
+            workspace_dir: Workspace directory (maps to workspace_root)
+            conversation_history: Previous conversation for context
+
+        Yields:
+            Stream updates from workflow execution
+        """
+        async for update in self._workflow.execute(
+            user_request=user_request,
+            workspace_root=workspace_dir,
+            conversation_history=conversation_history or []
+        ):
+            yield update

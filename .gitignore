@@ -56,3 +56,23 @@ htmlcov/
 
 # Docker
 *.pid
+
+# Data and workspace directories
+data/
+workspace/
+
+# Vector databases and CLI sessions
+chroma_db/
+.agentic-coder/
+
+# Claude Code local settings
+.claude/
+
+# AI context (user-specific)
+.ai_context.json
+
+# Debug logs (keep Requirement.md for reference)
+debug/*.log
+
+# Session files
+*.session.json

@@ -1,1 +1,1 @@
-"""Test package for TestCodeAgent"""
+"""Test package for Agentic Coder"""

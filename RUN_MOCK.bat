@@ -6,7 +6,7 @@ REM vLLM 없이 Frontend UI/UX 테스트 가능
 
 echo.
 echo ========================================
-echo     Mock Server for TestCodeAgent
+echo     Mock Server for Agentic Coder
 echo ========================================
 echo.
 

@@ -31,8 +31,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def _get_code_generation_prompt(user_request: str, task_type: str) -> tuple:
+def _get_code_generation_prompt(
+    user_request: str,
+    task_type: str,
+    conversation_history: List[Dict[str, str]] = None
+) -> tuple:
     """Get appropriate prompt and config based on model type.
+
+    Args:
+        user_request: User's request
+        task_type: Type of task
+        conversation_history: Full conversation history (Phase 2 Context Improvement)
 
     Returns:
         Tuple of (prompt, config_dict)
@@ -40,13 +49,47 @@ def _get_code_generation_prompt(user_request: str, task_type: str) -> tuple:
     model_type = settings.get_coding_model_type
     model_name = settings.get_coding_model
 
+    # Phase 2 Context Improvement: Filter conversation history for coder-relevant context
+    context_section = ""
+    if conversation_history:
+        try:
+            from backend.app.utils.context_manager import ContextManager
+
+            context_mgr = ContextManager(max_recent_messages=10)
+
+            # Get coder-specific filtered context
+            enriched_context = context_mgr.create_enriched_context(
+                history=conversation_history,
+                agent_type="coder",  # Filter for coding-related context
+                compress=True
+            )
+
+            # Format context (key files, errors, recent messages)
+            context_formatted = context_mgr.format_context_for_prompt(
+                enriched_context,
+                include_key_info=True
+            )
+
+            if context_formatted:
+                context_section = f"""
+## Previous Context
+{context_formatted}
+
+"""
+        except Exception as e:
+            logger.warning(f"Failed to process conversation context: {e}")
+            context_section = ""
+
     if model_type == "qwen" and QWEN_CODER_SYSTEM_PROMPT:
         prompt = f"""{QWEN_CODER_SYSTEM_PROMPT}
 
-Request: {user_request}
+{context_section}Request: {user_request}
 Task Type: {task_type}
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format with this structure:
 {{
     "files": [
@@ -56,7 +99,8 @@ Respond in JSON format with this structure:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}
 
 Generate the code now:"""
@@ -70,10 +114,13 @@ Generate the code now:"""
 4. Generate production-ready code
 </think>
 
-Request: {user_request}
+{context_section}Request: {user_request}
 Task Type: {task_type}
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format:
 {{
     "files": [
@@ -83,22 +130,27 @@ Respond in JSON format:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}"""
         config = {"temperature": 0.3, "max_tokens": 8000}
     else:
         # Generic prompt for GPT, Claude, Llama, etc.
         prompt = f"""You are an expert software engineer. Generate production-ready code for the following request:
 
-Request: {user_request}
+{context_section}Request: {user_request}
 Task Type: {task_type}
 
 Think through the problem step by step:
 1. What files are needed?
 2. What is the structure?
 3. What error handling is required?
+4. Are there any files that should be deleted?
 
 Generate complete, working code. Include all necessary files.
+
+IMPORTANT: If you need to delete any files (e.g., during refactoring or cleanup), include them in "deleted_files".
+
 Respond in JSON format:
 {{
     "files": [
@@ -108,7 +160,8 @@ Respond in JSON format:
             "language": "python",
             "description": "Brief description"
         }}
-    ]
+    ],
+    "deleted_files": ["old_file.py", "unused_module.py"]
 }}
 
 Generate the code now:"""
@@ -155,20 +208,39 @@ def coder_node(state: QualityGateState) -> Dict:
         ))
 
     try:
-        # Generate code using vLLM (returns tuple of files and token_usage)
-        generated_files, token_usage = _generate_code_with_vllm(
+        # Get conversation history from state (Phase 2 Context Improvement)
+        conversation_history = state.get("conversation_history", [])
+
+        # Generate code using vLLM (returns tuple of files, deleted_files, and token_usage)
+        generated_files, deleted_files, token_usage = _generate_code_with_vllm(
             user_request=user_request,
             task_type=task_type,
-            workspace_root=workspace_root
+            workspace_root=workspace_root,
+            conversation_history=conversation_history  # Phase 2: Pass context
         )
 
         # Write files and create artifacts
+        # FIXED: Prevent duplicate artifacts by tracking unique normalized paths
         import os
+        from pathlib import Path
+
+        seen_paths = set()  # Track normalized absolute paths to prevent duplicates
+
         for file_info in generated_files:
             filename = file_info["filename"]
             content = file_info["content"]
             language = file_info.get("language", "python")
             description = file_info.get("description", "")
+
+            # Normalize path to prevent duplicates
+            normalized_path = os.path.normpath(os.path.join(workspace_root, filename))
+
+            # Skip if already processed (duplicate in generated_files)
+            if normalized_path in seen_paths:
+                logger.warning(f"⚠️  Skipping duplicate file in generated_files: {filename}")
+                continue
+
+            seen_paths.add(normalized_path)
 
             # Check if file already exists to determine action
             full_path = os.path.join(workspace_root, filename)
@@ -207,6 +279,41 @@ def coder_node(state: QualityGateState) -> Dict:
                 })
             else:
                 logger.error(f"❌ Failed to write {filename}: {result['error']}")
+
+        # Process deleted files (FILE DELETION FEATURE)
+        if deleted_files:
+            logger.info(f"🗑️  Processing {len(deleted_files)} file(s) for deletion...")
+
+            for filename in deleted_files:
+                # Normalize path
+                normalized_path = os.path.normpath(os.path.join(workspace_root, filename))
+                full_path = os.path.join(workspace_root, filename)
+
+                # Check if file exists before trying to delete
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                        logger.info(f"🗑️  Deleted: {filename}")
+
+                        # Create artifact for deleted file
+                        artifacts.append({
+                            "filename": filename,
+                            "file_path": full_path,
+                            "relative_path": filename,
+                            "project_root": workspace_root,
+                            "language": "text",  # Unknown language for deleted files
+                            "content": "",  # No content for deleted files
+                            "description": "File deleted",
+                            "size_bytes": 0,
+                            "checksum": "",
+                            "saved": True,
+                            "saved_path": full_path,
+                            "action": "deleted",  # Mark as deleted
+                        })
+                    except Exception as e:
+                        logger.error(f"❌ Failed to delete {filename}: {e}")
+                else:
+                    logger.warning(f"⚠️  Cannot delete {filename}: File does not exist")
 
         # Add result debug log with actual token usage
         if state.get("enable_debug"):
@@ -262,7 +369,8 @@ def coder_node(state: QualityGateState) -> Dict:
 def _generate_code_with_vllm(
     user_request: str,
     task_type: str,
-    workspace_root: str
+    workspace_root: str,
+    conversation_history: List[Dict[str, str]] = None
 ) -> tuple:
     """Generate code using LLM via vLLM/OpenAI-compatible endpoint
 
@@ -270,10 +378,12 @@ def _generate_code_with_vllm(
         user_request: User's request
         task_type: Type of task
         workspace_root: Workspace root directory
+        conversation_history: Full conversation history (Phase 2 Context Improvement)
 
     Returns:
-        Tuple of (files_list, token_usage_dict)
+        Tuple of (files_list, deleted_files_list, token_usage_dict)
         - files_list: List of file dictionaries with filename, content, language, description
+        - deleted_files_list: List of file paths to delete
         - token_usage_dict: Dictionary with prompt_tokens, completion_tokens, total_tokens
     """
     # Get endpoint and model from settings (supports both unified and split configs)
@@ -286,11 +396,15 @@ def _generate_code_with_vllm(
     # Check if endpoint is configured
     if not coding_endpoint:
         logger.warning("⚠️  LLM coding endpoint not configured, using fallback generator")
-        return _fallback_code_generator(user_request, task_type), token_usage
+        return _fallback_code_generator(user_request, task_type), [], token_usage
 
     try:
-        # Get model-appropriate prompt and config
-        prompt, model_config = _get_code_generation_prompt(user_request, task_type)
+        # Get model-appropriate prompt and config (Phase 2: Pass conversation context)
+        prompt, model_config = _get_code_generation_prompt(
+            user_request,
+            task_type,
+            conversation_history=conversation_history
+        )
 
         # Log model info (model type auto-detected from model name)
         logger.info(f"🤖 Using model: {coding_model} (type: {settings.get_coding_model_type})")
@@ -320,7 +434,7 @@ def _generate_code_with_vllm(
 
         if error:
             logger.error(f"vLLM request failed after retries: {error}")
-            return _fallback_code_generator(user_request, task_type), token_usage
+            return _fallback_code_generator(user_request, task_type), [], token_usage
 
         # Chat completions returns content in message
         generated_text = result["choices"][0]["message"]["content"]
@@ -342,17 +456,20 @@ def _generate_code_with_vllm(
             if json_start != -1 and json_end > json_start:
                 json_str = generated_text[json_start:json_end]
                 parsed = json.loads(json_str)
-                return parsed.get("files", []), token_usage
+                files = parsed.get("files", [])
+                deleted_files = parsed.get("deleted_files", [])  # FILE DELETION FEATURE
+                logger.info(f"📝 Parsed {len(files)} files, {len(deleted_files)} files to delete")
+                return files, deleted_files, token_usage
         except json.JSONDecodeError:
             logger.warning("Failed to parse vLLM JSON response, using fallback")
-            return _fallback_code_generator(user_request, task_type), token_usage
+            return _fallback_code_generator(user_request, task_type), [], token_usage
 
     except Exception as e:
         logger.error(f"vLLM call failed: {e}", exc_info=True)
-        return _fallback_code_generator(user_request, task_type), token_usage
+        return _fallback_code_generator(user_request, task_type), [], token_usage
 
     # Fallback if we exit without returning (should not happen)
-    return _fallback_code_generator(user_request, task_type), token_usage
+    return _fallback_code_generator(user_request, task_type), [], token_usage
 
 
 def _fallback_code_generator(user_request: str, task_type: str) -> List[Dict]:

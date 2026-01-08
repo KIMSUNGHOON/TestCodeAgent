@@ -42,3 +42,7 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Data and workspace directories
+data/
+workspace/

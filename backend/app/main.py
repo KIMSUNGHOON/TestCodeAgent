@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
+from app.core.config import settings, log_configuration
 from app.api.routes.langgraph_routes import router as langgraph_router
 from app.api.routes.hitl_routes import router as hitl_router
 from app.api.routes.cache_routes import router as cache_router
@@ -34,6 +34,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Log configuration after logging is set up
+log_configuration()
 
 
 @asynccontextmanager

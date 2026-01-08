@@ -138,31 +138,53 @@ const WorkspaceProjectSelector = ({
   };
 
   // Extract project name from current workspace
-  const displayProjectName = currentProject
-    ? currentProject.split('/').pop()
-    : currentWorkspace.split('/').pop() || 'workspace';
+  // Try multiple sources: currentProject > last path segment > session-based name
+  const extractWorkspaceName = (): string => {
+    if (currentProject) {
+      return currentProject.split('/').pop() || 'project';
+    }
+
+    const workspaceSegments = currentWorkspace.split('/').filter(s => s);
+    if (workspaceSegments.length > 0) {
+      // Get the last segment which is usually the project name or session-id/project-name
+      const lastName = workspaceSegments[workspaceSegments.length - 1];
+      // If it looks like a session ID (contains session- prefix), get the one before it
+      if (lastName.startsWith('session-') && workspaceSegments.length > 1) {
+        return workspaceSegments[workspaceSegments.length - 2];
+      }
+      return lastName;
+    }
+
+    // Fallback to session ID if available
+    return sessionId ? `session-${sessionId.slice(0, 8)}` : 'workspace';
+  };
+
+  // Simply display session ID, no dropdown
+  // sessionId is already in format "session-123456789", so we truncate the timestamp
+  const displaySessionId = sessionId
+    ? sessionId.startsWith('session-')
+      ? `session-${sessionId.slice(8, 16)}` // Take first 8 digits of timestamp
+      : sessionId.slice(0, 16) // Fallback
+    : 'session';
 
   return (
     <div className="relative">
-      {/* Main Toggle Button */}
-      <button
-        onClick={() => setShowDropdown(!showDropdown)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-[#E5E5E5] hover:border-[#DA7756] transition-colors text-sm"
-        title="Select Workspace/Project"
+      {/* Session ID Display - Read-only, no dropdown */}
+      <div
+        className="flex items-center gap-2 px-3 h-[72px] rounded-lg bg-gray-800 border border-gray-700 text-sm"
+        title={`Session ID: ${sessionId}`}
       >
-        <svg className="w-4 h-4 text-[#666666]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
         </svg>
-        <span className="font-medium text-[#1A1A1A] max-w-[150px] truncate">
-          {displayProjectName}
+        <span className="font-mono text-gray-300 text-xs">
+          {displaySessionId}
         </span>
-        <svg className={`w-4 h-4 text-[#666666] transition-transform ${showDropdown ? '' : 'rotate-180'}`} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
-      </button>
+      </div>
 
-      {/* Dropdown */}
-      {showDropdown && (
+      {/* Dropdown removed - keeping only for backwards compatibility */}
+      {false && showDropdown && (
         <>
           {/* Backdrop */}
           <div className="fixed inset-0 z-40" onClick={() => setShowDropdown(false)} />

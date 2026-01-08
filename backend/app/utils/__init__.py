@@ -1,4 +1,4 @@
-"""Utility modules for TestCodeAgent"""
+"""Utility modules for Agentic Coder"""
 
 from .security import sanitize_path, SecurityError
 

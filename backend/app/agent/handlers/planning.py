@@ -121,11 +121,8 @@ class PlanningHandler(BaseHandler):
             HandlerResult: 처리 결과 (계획 + 옵션으로 파일 저장)
         """
         try:
-            # 프로젝트 이름 추출
-            project_name = ""
-            if context and hasattr(context, 'workspace') and context.workspace:
-                import os
-                project_name = os.path.basename(context.workspace)
+            # 프로젝트 이름 추출 (베이스 클래스 메서드 사용)
+            project_name = self._get_project_name(context)
 
             # 시스템 프롬프트 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
             system_prompt = _get_planning_system_prompt(self.model_type, user_message, project_name)
@@ -184,12 +181,7 @@ class PlanningHandler(BaseHandler):
             )
 
         except Exception as e:
-            self.logger.error(f"Planning error: {e}")
-            return HandlerResult(
-                content="",
-                success=False,
-                error=str(e)
-            )
+            return self._create_error_result(e)
 
     async def execute_stream(
         self,
@@ -207,20 +199,14 @@ class PlanningHandler(BaseHandler):
         Yields:
             StreamUpdate: 스트리밍 업데이트
         """
-        yield StreamUpdate(
-            agent="PlanningHandler",
-            update_type="thinking",
-            status="running",
+        yield self._create_progress_update(
             message="요청을 분석하고 있습니다...",
             streaming_content="## 분석 시작\n- 요청 내용 파악 중...\n- 복잡도 평가 중..."
         )
 
         try:
-            # 프로젝트 이름 추출
-            project_name = ""
-            if context and hasattr(context, 'workspace') and context.workspace:
-                import os
-                project_name = os.path.basename(context.workspace)
+            # 프로젝트 이름 추출 (베이스 클래스 메서드 사용)
+            project_name = self._get_project_name(context)
 
             # 시스템 프롬프트 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
             system_prompt = _get_planning_system_prompt(self.model_type, user_message, project_name)
@@ -301,13 +287,7 @@ class PlanningHandler(BaseHandler):
             )
 
         except Exception as e:
-            self.logger.error(f"Planning stream error: {e}")
-            yield StreamUpdate(
-                agent="PlanningHandler",
-                update_type="error",
-                status="error",
-                message=str(e)
-            )
+            yield self._create_error_update(e)
 
     def _build_context_info(self, analysis: Dict[str, Any], context: Any) -> str:
         """컨텍스트 정보 문자열 생성"""

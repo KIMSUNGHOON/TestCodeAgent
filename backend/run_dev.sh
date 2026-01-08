@@ -18,5 +18,5 @@ pip install -r requirements.txt
 
 # Run the server
 echo "Starting FastAPI server..."
-cd /home/user/TestCodeAgent/backend
+cd /home/user/agentic-coder/backend
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

@@ -97,11 +97,8 @@ class QuickQAHandler(BaseHandler):
             HandlerResult: 처리 결과
         """
         try:
-            # 프로젝트 이름 추출
-            import os
-            project_name = ""
-            if context and hasattr(context, 'workspace') and context.workspace:
-                project_name = os.path.basename(context.workspace)
+            # 프로젝트 이름 추출 (베이스 클래스 메서드 사용)
+            project_name = self._get_project_name(context)
 
             # 메시지 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
             system_prompt = get_quick_qa_prompt(user_message, project_name)
@@ -140,12 +137,7 @@ class QuickQAHandler(BaseHandler):
             )
 
         except Exception as e:
-            self.logger.error(f"QuickQA error: {e}")
-            return HandlerResult(
-                content="",
-                success=False,
-                error=str(e)
-            )
+            return self._create_error_result(e)
 
     async def execute_stream(
         self,
@@ -163,19 +155,11 @@ class QuickQAHandler(BaseHandler):
         Yields:
             StreamUpdate: 스트리밍 업데이트
         """
-        yield StreamUpdate(
-            agent="QuickQAHandler",
-            update_type="thinking",
-            status="running",
-            message="응답 생성 중..."
-        )
+        yield self._create_progress_update("응답 생성 중...")
 
         try:
-            # 프로젝트 이름 추출
-            import os
-            project_name = ""
-            if context and hasattr(context, 'workspace') and context.workspace:
-                project_name = os.path.basename(context.workspace)
+            # 프로젝트 이름 추출 (베이스 클래스 메서드 사용)
+            project_name = self._get_project_name(context)
 
             # 메시지 구성 (언어 감지 및 프로젝트 컨텍스트 적용)
             system_prompt = get_quick_qa_prompt(user_message, project_name)
@@ -227,25 +211,13 @@ class QuickQAHandler(BaseHandler):
             # 최종 토큰 사용량
             token_usage = create_token_usage(prompt_text, content)
 
-            yield StreamUpdate(
-                agent="QuickQAHandler",
-                update_type="completed",
-                status="completed",
+            yield self._create_completed_update(
                 message=content[:200],
-                streaming_content=content,
-                data={
-                    "full_content": content,
-                    "token_usage": token_usage
-                }
+                content=content,
+                extra_data={"token_usage": token_usage}
             )
 
             self.logger.info("QuickQA streaming completed successfully")
 
         except Exception as e:
-            self.logger.error(f"QuickQA stream error: {e}")
-            yield StreamUpdate(
-                agent="QuickQAHandler",
-                update_type="error",
-                status="error",
-                message=str(e)
-            )
+            yield self._create_error_update(e)
