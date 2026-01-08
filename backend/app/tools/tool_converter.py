@@ -58,11 +58,29 @@ def convert_tool_to_openai_format(tool_schema: Dict[str, Any]) -> Dict[str, Any]
     description = tool_schema.get("description", "")
     internal_params = tool_schema.get("parameters", {})
 
-    # Convert parameters
+    # Check if parameters are already in OpenAI format
+    # OpenAI format has "type": "object" and "properties" keys
+    if isinstance(internal_params, dict) and internal_params.get("type") == "object" and "properties" in internal_params:
+        # Already in OpenAI format, just wrap it
+        return {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": internal_params
+            }
+        }
+
+    # Convert from internal format to OpenAI format
     properties = {}
     required_params = []
 
     for param_name, param_def in internal_params.items():
+        # Skip if param_def is not a dict (defensive programming)
+        if not isinstance(param_def, dict):
+            logger.warning(f"Skipping parameter '{param_name}' in tool '{name}': not a dict")
+            continue
+
         # Build property definition
         prop = {
             "type": param_def.get("type", "string"),
