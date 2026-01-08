@@ -3,13 +3,18 @@
 This is the orchestrator that analyzes user requests and dynamically
 constructs workflows based on task complexity and requirements.
 
-Uses DeepSeek-R1 for reasoning and planning via vLLM API.
+Supports two modes:
+1. Traditional: Analyze request → Build fixed workflow (backward compatible)
+2. Tool Use: LLM freely decides which agents to call iteratively (new, flexible)
+
+Uses DeepSeek-R1 or GPT-OSS for reasoning and planning via vLLM API.
 """
 
 import asyncio
 import logging
 import re
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
+import json
+from typing import AsyncGenerator, Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from dataclasses import dataclass, field
 
@@ -40,6 +45,9 @@ from shared.prompts.gpt_oss import (
     GPT_OSS_QA_PROMPT,
     GPT_OSS_CONFIG,
 )
+
+# Import agent tools for Tool Use pattern
+from core.agent_tools import get_agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -946,6 +954,334 @@ Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} a
         except Exception as e:
             logger.warning(f"RCA API call failed: {e}")
             return f"RCA unavailable: {failure_reason}"
+
+    # ============================================
+    # NEW: Tool Use Pattern (Phase 2)
+    # ============================================
+
+    async def execute_with_tools(
+        self,
+        user_request: str,
+        context: Optional[Dict] = None,
+        max_iterations: int = 10
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Execute workflow using Tool Use pattern (Claude Code style)
+
+        Instead of fixed workflow types, LLM freely decides which agents to call.
+        This provides maximum flexibility for handling any type of request.
+
+        Args:
+            user_request: User's request
+            context: Optional context (conversation history, etc.)
+            max_iterations: Maximum tool call iterations (prevent infinite loops)
+
+        Yields:
+            Stream updates for each tool call and response
+        """
+        logger.info(f"🔧 Supervisor: Starting Tool Use execution")
+        logger.info(f"   Request: {user_request[:100]}...")
+
+        # Build messages
+        messages = []
+
+        # System prompt with tool instructions
+        tool_system_prompt = self._build_tool_use_system_prompt()
+        messages.append({"role": "system", "content": tool_system_prompt})
+
+        # Add context if available
+        if context and context.get("conversation_history"):
+            formatted_context = self._format_context_harmony(context)
+            messages.append({
+                "role": "user",
+                "content": f"## Previous Context\n{formatted_context}"
+            })
+
+        # Add user request
+        messages.append({"role": "user", "content": user_request})
+
+        # Get agent tools
+        tools = get_agent_tools()
+
+        # Iterative Tool Use Loop (like Claude Code)
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            logger.info(f"🔄 Iteration {iteration}/{max_iterations}")
+
+            # Yield iteration start
+            yield {
+                "type": "tool_iteration",
+                "iteration": iteration,
+                "max_iterations": max_iterations
+            }
+
+            try:
+                # Call LLM with tools
+                client = vllm_router.get_client("reasoning")
+
+                response = await client.chat_completion_with_tools(
+                    messages=messages,
+                    tools=tools,
+                    temperature=0.7,
+                    max_tokens=4096
+                )
+
+                message = response.choices[0].message
+
+                # Check if LLM wants to call tools
+                if message.tool_calls:
+                    logger.info(f"🔧 LLM requested {len(message.tool_calls)} tool calls")
+
+                    # Add assistant message with tool calls
+                    messages.append({
+                        "role": "assistant",
+                        "content": message.content or "",
+                        "tool_calls": message.tool_calls
+                    })
+
+                    # Execute each tool call
+                    for tool_call in message.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+
+                        logger.info(f"   → Calling: {tool_name}({list(tool_args.keys())})")
+
+                        # Yield tool call start
+                        yield {
+                            "type": "tool_call_start",
+                            "tool": tool_name,
+                            "arguments": tool_args,
+                            "tool_call_id": tool_call.id
+                        }
+
+                        # Execute tool
+                        tool_result = await self._execute_tool(
+                            tool_name=tool_name,
+                            arguments=tool_args,
+                            context=context
+                        )
+
+                        # Yield tool result
+                        yield {
+                            "type": "tool_call_result",
+                            "tool": tool_name,
+                            "result": tool_result,
+                            "tool_call_id": tool_call.id
+                        }
+
+                        # Add tool result to messages
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": json.dumps(tool_result)
+                        })
+
+                        # Check if complete_task was called
+                        if tool_name == "complete_task":
+                            logger.info("✅ Task completed by LLM")
+                            yield {
+                                "type": "final_response",
+                                "content": tool_result.get("response", ""),
+                                "summary": tool_result.get("summary", ""),
+                                "files_created": tool_result.get("files_created", [])
+                            }
+                            return
+
+                        # Check if ask_human was called
+                        if tool_name == "ask_human":
+                            # This will be handled by HITL system
+                            # The human response will be added to messages
+                            pass
+
+                    # Continue loop - LLM will see tool results and decide next step
+
+                else:
+                    # No tool calls - LLM provided final response
+                    logger.info("✅ LLM provided final response (no tool calls)")
+                    yield {
+                        "type": "final_response",
+                        "content": message.content or "Task completed",
+                        "summary": "Completed without additional tools"
+                    }
+                    return
+
+            except Exception as e:
+                logger.error(f"❌ Tool Use execution error: {e}")
+                yield {
+                    "type": "error",
+                    "message": str(e),
+                    "iteration": iteration
+                }
+                return
+
+        # Max iterations reached
+        logger.warning(f"⚠️ Max iterations ({max_iterations}) reached")
+        yield {
+            "type": "max_iterations_reached",
+            "message": f"Reached maximum {max_iterations} iterations",
+            "content": "Task may not be fully complete. Please review the results."
+        }
+
+    def _build_tool_use_system_prompt(self) -> str:
+        """Build system prompt for Tool Use mode"""
+        return """You are an advanced AI software engineer with access to specialized agent tools.
+
+Your role is to:
+1. Understand user requests
+2. Plan the best approach
+3. Call appropriate agent tools to accomplish tasks
+4. Ask humans for clarification when needed
+5. Complete tasks successfully
+
+## Available Tools
+
+You have access to these agent tools:
+- **ask_human**: Ask user questions when unclear or for important decisions
+- **architect_agent**: Design project structure and architecture
+- **coder_agent**: Write production-ready code
+- **reviewer_agent**: Review code for quality and security
+- **refiner_agent**: Fix issues and improve code
+- **qa_tester_agent**: Generate and run tests
+- **security_auditor_agent**: Deep security analysis
+- **complete_task**: Mark task as complete with final response
+
+## Guidelines
+
+1. **For simple questions** (like "hello", "what is X"):
+   - Answer directly with complete_task()
+   - No need for other agents
+
+2. **For code generation**:
+   - Start with architect_agent() to plan structure
+   - Use coder_agent() to implement
+   - Use reviewer_agent() to check quality
+   - Fix issues with refiner_agent() if needed
+   - Complete with complete_task()
+
+3. **When uncertain**:
+   - Use ask_human() to clarify
+   - Better to ask than to guess wrong
+   - Provide context: why you're asking, what options you see
+
+4. **For critical operations**:
+   - Use security_auditor_agent() for sensitive code
+   - Use ask_human() for dangerous operations (delete, drop, production changes)
+   - Always confirm with user before irreversible actions
+
+5. **Efficiency**:
+   - Don't call unnecessary agents
+   - Skip review for trivial code changes
+   - Use judgment - balance thoroughness vs speed
+
+## Your Workflow is Dynamic
+
+You decide:
+- Which agents to call
+- In what order
+- How many iterations
+- When to ask humans
+- When task is complete
+
+Think step by step and use tools wisely."""
+
+    async def _execute_tool(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        context: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """Execute a tool (agent) call
+
+        Args:
+            tool_name: Name of the tool/agent to call
+            arguments: Tool arguments
+            context: Optional context
+
+        Returns:
+            Tool execution result
+        """
+        logger.info(f"🔧 Executing tool: {tool_name}")
+
+        # Special case: ask_human (HITL)
+        if tool_name == "ask_human":
+            return await self._handle_ask_human(arguments, context)
+
+        # Special case: complete_task
+        if tool_name == "complete_task":
+            return {
+                "success": True,
+                "summary": arguments.get("summary", ""),
+                "response": arguments.get("response", ""),
+                "files_created": arguments.get("files_created", [])
+            }
+
+        # Agent tools - delegate to actual agents
+        # TODO: Implement agent execution
+        # For now, return placeholder
+        return {
+            "success": True,
+            "agent": tool_name,
+            "message": f"Agent {tool_name} executed (placeholder)",
+            "arguments": arguments
+        }
+
+    async def _handle_ask_human(
+        self,
+        arguments: Dict[str, Any],
+        context: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """Handle ask_human tool call via HITL system
+
+        Args:
+            arguments: Tool arguments (question, reason, options)
+            context: Context with workflow_id
+
+        Returns:
+            Human's answer
+        """
+        from app.hitl import get_hitl_manager
+        from app.hitl.models import HITLTemplates
+
+        question = arguments.get("question", "")
+        reason = arguments.get("reason", "")
+        options = arguments.get("options")
+
+        logger.info(f"❓ Asking human: {question}")
+
+        # Get workflow ID from context
+        workflow_id = context.get("workflow_id", "default") if context else "default"
+        stage_id = f"ask_human_{datetime.utcnow().timestamp()}"
+
+        # Create HITL request
+        hitl_request = HITLTemplates.ask_human(
+            workflow_id=workflow_id,
+            stage_id=stage_id,
+            question=question,
+            reason=reason,
+            options=options
+        )
+
+        # Send to HITL manager and wait for response
+        hitl_manager = get_hitl_manager()
+        response = await hitl_manager.request_and_wait(hitl_request, timeout=300)
+
+        # Extract answer
+        if response.action == "select" and response.selected_option:
+            # User selected an option
+            selected_idx = int(response.selected_option.split("_")[1])
+            answer = options[selected_idx] if options else response.feedback
+        else:
+            # User provided free-form feedback
+            answer = response.feedback or "No response provided"
+
+        logger.info(f"✅ Human answered: {answer}")
+
+        return {
+            "success": True,
+            "question": question,
+            "answer": answer,
+            "feedback": response.feedback
+        }
 
 
 # Global supervisor instance (with API mode enabled by default)
