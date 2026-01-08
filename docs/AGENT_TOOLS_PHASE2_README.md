@@ -591,9 +591,6 @@ result = await sandbox_tool.execute(
 # Docker image
 SANDBOX_IMAGE=ghcr.io/agent-infra/sandbox:latest
 
-# For offline/airgapped environments
-SANDBOX_REGISTRY=harbor.company.com
-
 # API settings
 SANDBOX_HOST=localhost
 SANDBOX_PORT=8080
@@ -602,18 +599,28 @@ SANDBOX_PORT=8080
 SANDBOX_TIMEOUT=60
 SANDBOX_MEMORY=1g
 SANDBOX_CPU=2.0
+
+# Optional: Enterprise registry (only for multi-server deployments)
+# SANDBOX_REGISTRY=harbor.company.com
 ```
 
-**Offline Setup**:
+**Offline Setup (Local Server)**:
 ```bash
-# Pull image once (online)
+# Pull image once (requires internet)
 docker pull ghcr.io/agent-infra/sandbox:latest
 
-# Push to internal registry
+# Image is cached locally - works offline after first pull
+# No additional configuration needed for single-server deployment
+```
+
+**Offline Setup (Enterprise - Multiple Servers)**:
+```bash
+# On machine with internet access
+docker pull ghcr.io/agent-infra/sandbox:latest
 docker tag ghcr.io/agent-infra/sandbox:latest harbor.company.com/sandbox/aio:latest
 docker push harbor.company.com/sandbox/aio:latest
 
-# Set environment for offline use
+# On target servers, set environment
 export SANDBOX_REGISTRY=harbor.company.com
 ```
 
