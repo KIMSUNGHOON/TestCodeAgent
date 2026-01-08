@@ -197,6 +197,18 @@ class TerminalUI:
                         # Store artifact for later display
                         artifacts.append(update)
 
+                    elif update_type == "workflow":
+                        # Handle workflow completion (e.g., QUICK_QA)
+                        status = update.get("status")
+                        if status == "completed":
+                            # Check for streaming_content (used by QUICK_QA)
+                            streaming_content = update.get("streaming_content", "")
+                            if streaming_content:
+                                progress.stop()
+                                self.console.print("\n[bold green]✅ Complete![/bold green]")
+                                self.console.print(Markdown(streaming_content))
+                                progress.start()
+
                     elif update_type == "final_response":
                         # Display final response
                         final_content = update.get("content", "")
