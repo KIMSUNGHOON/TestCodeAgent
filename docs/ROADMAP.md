@@ -1,8 +1,8 @@
 # Agentic Coder - Development Roadmap
 
 **Last Updated**: 2026-01-08
-**Current Version**: 1.0.0
-**Status**: Phase 4 Complete
+**Current Version**: 1.1.0
+**Status**: Phase 5 Complete
 
 ---
 
@@ -131,25 +131,10 @@ SANDBOX_CPU=2.0
 
 ---
 
-## Tool Summary
-
-**Total: 20 Tools**
-
-| Phase | Tools Added | Running Total |
-|-------|-------------|---------------|
-| Phase 1 | 14 | 14 |
-| Phase 2 | 2 | 16 |
-| Phase 2.5 | 3 | 19 |
-| Phase 4 | 1 | 20 |
-
----
-
-## Planned Phases
-
 ### Phase 5: Plan Mode with Approval Workflow
 
-**Status**: Planned
-**Priority**: High
+**Status**: Complete
+**Commit**: Phase 5 implementation
 
 Implementation of a planning phase before code generation, with human-in-the-loop approval.
 
@@ -166,7 +151,7 @@ User Request
     ▼
 ┌─────────────────────┐
 │ User Review         │ ← Approve / Modify / Reject plan
-│ (Chat UI or Modal)  │
+│ (PlanApprovalModal) │
 └─────────────────────┘
     │
     ▼
@@ -176,51 +161,98 @@ User Request
 └─────────────────────┘
 ```
 
-#### Planned Features
+#### Implemented Features
 
-**AI-Driven HITL**:
-- Agent detects uncertainty during reasoning
-- Automatically generates clarifying questions
-- Waits for user feedback before proceeding
+**Plan Schema** (`backend/app/agent/langgraph/schemas/plan.py`):
+- `ExecutionPlan`: Complete plan with steps, files, and risks
+- `PlanStep`: Individual step with action, target, complexity, dependencies
+- Status tracking: pending, in_progress, completed, failed, skipped
 
-**User-Driven HITL**:
-- Pause button to interrupt workflow at any time
-- Feedback via chat UI (not separate modal)
-- Modify plan mid-execution
+**PlanningHandler Enhancement** (`backend/app/agent/handlers/planning.py`):
+- `generate_structured_plan()`: JSON-based structured plan generation
+- `generate_structured_plan_stream()`: Streaming plan generation
+- Automatic complexity and risk assessment
 
-**Plan Structure**:
+**Plan API** (`backend/app/api/routes/plan_routes.py`):
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/plan/generate` | POST | Generate new plan |
+| `/api/plan/{plan_id}` | GET | Get plan details |
+| `/api/plan/{plan_id}/approve` | POST | Approve plan |
+| `/api/plan/{plan_id}/modify` | POST | Modify plan steps |
+| `/api/plan/{plan_id}/reject` | POST | Reject plan |
+| `/api/plan/{plan_id}/execute` | POST | Start execution |
+| `/api/plan/{plan_id}/execute/stream` | GET | Stream execution (SSE) |
+| `/api/plan/{plan_id}/status` | GET | Get execution status |
+
+**Plan Executor** (`backend/app/agent/langgraph/nodes/plan_executor.py`):
+- Step-by-step execution with progress tracking
+- Dependency checking between steps
+- HITL integration for steps requiring approval
+- Error handling with rollback support
+
+**Frontend Components**:
+- `PlanApprovalModal.tsx`: Plan review and approval UI
+- API client methods for all plan operations
+
+**Plan Structure Example**:
 ```json
 {
-  "plan_id": "plan-abc123",
+  "plan_id": "plan-abc12345",
   "steps": [
     {
       "step": 1,
       "action": "create_file",
       "target": "src/calculator.py",
       "description": "Create main calculator module",
-      "requires_approval": true
+      "requires_approval": false,
+      "estimated_complexity": "low",
+      "dependencies": []
     },
     {
       "step": 2,
-      "action": "modify_file",
-      "target": "src/main.py",
-      "description": "Import and use calculator",
-      "requires_approval": false
+      "action": "create_file",
+      "target": "tests/test_calculator.py",
+      "description": "Create unit tests",
+      "requires_approval": false,
+      "estimated_complexity": "low",
+      "dependencies": [1]
     }
   ],
-  "estimated_files": ["calculator.py", "test_calculator.py"],
-  "risks": ["Breaking change to main.py imports"]
+  "estimated_files": ["src/calculator.py", "tests/test_calculator.py"],
+  "risks": ["None identified for this simple task"],
+  "approval_status": "pending"
 }
 ```
 
-#### Implementation Tasks
-- [ ] Plan generation prompt engineering
-- [ ] Plan review UI component
-- [ ] Step-by-step execution with checkpoints
-- [ ] Plan modification API
-- [ ] Integration with existing HITL infrastructure
+#### Available Actions
+| Action | Description |
+|--------|-------------|
+| `create_file` | Create a new file |
+| `modify_file` | Modify existing file |
+| `delete_file` | Delete a file |
+| `run_tests` | Run test suite |
+| `run_lint` | Run linter |
+| `install_deps` | Install dependencies |
+| `review_code` | Review code for issues |
+| `refactor` | Refactor existing code |
 
 ---
+
+## Tool Summary
+
+**Total: 20 Tools**
+
+| Phase | Tools Added | Running Total |
+|-------|-------------|---------------|
+| Phase 1 | 14 | 14 |
+| Phase 2 | 2 | 16 |
+| Phase 2.5 | 3 | 19 |
+| Phase 4 | 1 | 20 |
+
+---
+
+## Planned Phases
 
 ### Phase 6: Context Window Optimization
 
@@ -387,7 +419,7 @@ Session B:                    [Planning@GPU0] → [Coding@GPU1]
 ## Known Limitations
 
 1. **Single Model per Role**: Only one reasoning + one coding model
-2. **No Plan Mode**: Code generation starts immediately
+2. ~~**No Plan Mode**: Code generation starts immediately~~ (Resolved in Phase 5)
 3. **Limited Context**: 6 messages, 200 chars (improvement planned)
 4. **No MCP**: Not compatible with MCP ecosystem yet
 5. **Sequential Workflow**: Limited parallelization within single session
@@ -409,6 +441,7 @@ Session B:                    [Planning@GPU0] → [Coding@GPU1]
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1.0 | 2026-01-08 | Phase 5 complete, Plan Mode with Approval Workflow |
 | 1.0.0 | 2026-01-08 | Phase 1-4 complete, 20 tools, CLI ready |
 | 0.9.0 | 2026-01-07 | Phase 3 CLI enhancements |
 | 0.8.0 | 2026-01-06 | Phase 2 network mode |

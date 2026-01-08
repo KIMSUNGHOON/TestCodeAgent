@@ -8,6 +8,7 @@ from app.core.config import settings, log_configuration
 from app.api.routes.langgraph_routes import router as langgraph_router
 from app.api.routes.hitl_routes import router as hitl_router
 from app.api.routes.cache_routes import router as cache_router
+from app.api.routes.plan_routes import router as plan_router
 
 # Lazy import of optional dependencies
 try:
@@ -102,6 +103,10 @@ logger.info("✅ HITL routes registered")
 # Include Cache management routes
 app.include_router(cache_router, prefix="/api")
 logger.info("✅ Cache management routes registered at /api/cache")
+
+# Include Plan Mode routes (Phase 5)
+app.include_router(plan_router, prefix="/api")
+logger.info("✅ Plan Mode routes registered at /api/plan")
 
 
 @app.get("/")

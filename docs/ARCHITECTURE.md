@@ -1,7 +1,7 @@
 # Agentic Coder 시스템 아키텍처
 
-**버전**: 2.0
-**최종 업데이트**: 2026-01-06
+**버전**: 2.1
+**최종 업데이트**: 2026-01-08
 
 ---
 
@@ -311,10 +311,108 @@ frontend/
 
 ---
 
-## 9. 관련 문서
+## 9. Plan Mode 아키텍처 (Phase 5)
+
+### 9.1 Plan Mode 개요
+
+Plan Mode는 코드 생성 전 사용자 승인 기반의 계획 수립 단계를 제공합니다.
+
+```
+User Request
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Plan Generation                               │
+│  - PlanningHandler.generate_structured_plan()                   │
+│  - JSON 형식 실행 계획 생성                                       │
+│  - 단계별 작업, 영향 파일, 위험 요소 분석                         │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    User Approval                                 │
+│  - PlanApprovalModal 컴포넌트                                    │
+│  - Approve / Modify / Reject 선택                               │
+│  - 단계별 승인 요구사항 설정 가능                                 │
+└─────────────────────────────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Step-by-step Execution                        │
+│  - PlanExecutor 노드                                            │
+│  - 단계별 진행 상황 추적                                         │
+│  - HITL 통합 (승인 필요 단계)                                    │
+│  - 오류 시 롤백/건너뛰기 옵션                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 Plan Mode 컴포넌트
+
+| 컴포넌트 | 파일 | 역할 |
+|----------|------|------|
+| `ExecutionPlan` | `backend/app/agent/langgraph/schemas/plan.py` | 실행 계획 스키마 |
+| `PlanStep` | `backend/app/agent/langgraph/schemas/plan.py` | 개별 단계 스키마 |
+| `PlanningHandler` | `backend/app/agent/handlers/planning.py` | 구조화된 계획 생성 |
+| `PlanExecutor` | `backend/app/agent/langgraph/nodes/plan_executor.py` | 단계별 실행 |
+| `plan_routes` | `backend/app/api/routes/plan_routes.py` | Plan API 엔드포인트 |
+| `PlanApprovalModal` | `frontend/src/components/PlanApprovalModal.tsx` | 계획 승인 UI |
+
+### 9.3 Plan API 엔드포인트
+
+| 엔드포인트 | 메서드 | 설명 |
+|------------|--------|------|
+| `/api/plan/generate` | POST | 실행 계획 생성 |
+| `/api/plan/{plan_id}` | GET | 계획 상세 조회 |
+| `/api/plan/{plan_id}/approve` | POST | 계획 승인 |
+| `/api/plan/{plan_id}/modify` | POST | 단계 수정 |
+| `/api/plan/{plan_id}/reject` | POST | 계획 거부 |
+| `/api/plan/{plan_id}/execute` | POST | 실행 시작 |
+| `/api/plan/{plan_id}/execute/stream` | GET | 실행 스트리밍 (SSE) |
+| `/api/plan/{plan_id}/status` | GET | 실행 상태 조회 |
+
+### 9.4 Plan 데이터 구조
+
+```json
+{
+  "plan_id": "plan-abc12345",
+  "session_id": "session-123",
+  "user_request": "Python 계산기 만들어줘",
+  "steps": [
+    {
+      "step": 1,
+      "action": "create_file",
+      "target": "src/calculator.py",
+      "description": "계산기 모듈 생성",
+      "requires_approval": false,
+      "estimated_complexity": "low",
+      "dependencies": [],
+      "status": "pending"
+    },
+    {
+      "step": 2,
+      "action": "create_file",
+      "target": "tests/test_calculator.py",
+      "description": "유닛 테스트 생성",
+      "requires_approval": false,
+      "estimated_complexity": "low",
+      "dependencies": [1],
+      "status": "pending"
+    }
+  ],
+  "estimated_files": ["src/calculator.py", "tests/test_calculator.py"],
+  "risks": [],
+  "approval_status": "pending",
+  "total_steps": 2
+}
+```
+
+---
+
+## 10. 관련 문서
 
 | 문서 | 설명 |
 |------|------|
+| [ROADMAP.md](./ROADMAP.md) | 개발 로드맵 및 Phase 진행 상황 |
 | [MOCK_MODE.md](./MOCK_MODE.md) | vLLM 없이 Mock 테스트 가이드 |
 | [MULTI_USER_ANALYSIS.md](./MULTI_USER_ANALYSIS.md) | 다중 사용자 동시 접속 분석 |
 | [OPTIMIZATION_RECOMMENDATIONS.md](./OPTIMIZATION_RECOMMENDATIONS.md) | H100 GPU 최적화 권장사항 |

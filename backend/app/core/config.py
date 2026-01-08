@@ -176,6 +176,33 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # =========================
+    # Network Mode Configuration (Phase 2)
+    # =========================
+    # Controls which tools are available based on network access
+    # Options: online (all tools) | offline (local tools only)
+    network_mode: str = "online"
+
+    # =========================
+    # Agent Tools Configuration
+    # =========================
+    # ChromaDB Path for Code Search Tool
+    chroma_db_path: str = "./chroma_db"
+
+    # Tavily API Key for Web Search (optional)
+    tavily_api_key: Optional[str] = None
+
+    # =========================
+    # Sandbox Configuration (Phase 4)
+    # =========================
+    # Docker-based isolated code execution
+    sandbox_image: str = "ghcr.io/agent-infra/sandbox:latest"
+    sandbox_host: str = "localhost"
+    sandbox_port: int = 8080
+    sandbox_timeout: int = 60
+    sandbox_memory: str = "1g"
+    sandbox_cpu: float = 2.0
+
     @property
     def cors_origins_list(self) -> List[str]:
         """Convert comma-separated CORS origins to list."""
@@ -229,4 +256,14 @@ def log_configuration():
     _config_logger.info(f"   API_PORT: {settings.api_port}")
     _config_logger.info(f"   CORS_ORIGINS: {settings.cors_origins}")
     _config_logger.info(f"   LOG_LEVEL: {settings.log_level}")
+    _config_logger.info("-" * 60)
+    _config_logger.info("Network & Tools Settings:")
+    _config_logger.info(f"   NETWORK_MODE: {settings.network_mode}")
+    _config_logger.info(f"   CHROMA_DB_PATH: {settings.chroma_db_path}")
+    _config_logger.info("-" * 60)
+    _config_logger.info("Sandbox Settings:")
+    _config_logger.info(f"   SANDBOX_IMAGE: {settings.sandbox_image}")
+    _config_logger.info(f"   SANDBOX_HOST: {settings.sandbox_host}")
+    _config_logger.info(f"   SANDBOX_PORT: {settings.sandbox_port}")
+    _config_logger.info(f"   SANDBOX_TIMEOUT: {settings.sandbox_timeout}")
     _config_logger.info("=" * 60)

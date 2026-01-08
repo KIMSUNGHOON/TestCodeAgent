@@ -1269,6 +1269,331 @@ class ApiClient {
     const response = await this.client.post('/cache/clear-all');
     return response.data;
   }
+
+  // ==================== Plan Mode API (Phase 5) ====================
+
+  /**
+   * Generate a new execution plan
+   *
+   * @param message - User's request
+   * @param sessionId - Session ID
+   * @param workspace - Optional workspace path
+   * @returns Generated execution plan
+   */
+  async generatePlan(
+    message: string,
+    sessionId: string,
+    workspace?: string
+  ): Promise<{
+    success: boolean;
+    plan?: {
+      plan_id: string;
+      session_id: string;
+      created_at: string;
+      user_request: string;
+      steps: Array<{
+        step: number;
+        action: string;
+        target: string;
+        description: string;
+        requires_approval: boolean;
+        estimated_complexity: string;
+        dependencies: number[];
+        status: string;
+      }>;
+      estimated_files: string[];
+      risks: string[];
+      total_steps: number;
+      approval_status: string;
+    };
+    message?: string;
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.post('/plan/generate', {
+        message,
+        session_id: sessionId,
+        workspace,
+      });
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to generate plan',
+      };
+    }
+  }
+
+  /**
+   * Get plan details
+   *
+   * @param planId - Plan ID
+   * @returns Plan details
+   */
+  async getPlan(planId: string): Promise<{
+    success: boolean;
+    plan?: any;
+    progress?: {
+      total_steps: number;
+      completed: number;
+      failed: number;
+      in_progress: number;
+      pending: number;
+      progress_percent: number;
+      current_step: number;
+    };
+    error?: string;
+  }> {
+    try {
+      const response = await this.client.get(`/plan/${planId}`);
+      return response.data;
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to get plan',
+      };
+    }
+  }
+
+  /**
+   * List plans for a session
+   *
+   * @param sessionId - Session ID
+   * @returns List of plan summaries
+   */
+  async listSessionPlans(sessionId: string): Promise<Array<{
+    plan_id: string;
+    session_id: string;
+    user_request: string;
+    total_steps: number;
+    approval_status: string;
+    created_at: string;
+    progress_percent: number;
+  }>> {
+    const response = await this.client.get(`/plan/session/${sessionId}`);
+    return response.data;
+  }
+
+  /**
+   * Approve a plan for execution
+   *
+   * @param planId - Plan ID
+   * @returns Approval confirmation
+   */
+  async approvePlan(planId: string): Promise<{
+    success: boolean;
+    plan_id: string;
+    status: string;
+    message: string;
+  }> {
+    const response = await this.client.post(`/plan/${planId}/approve`);
+    return response.data;
+  }
+
+  /**
+   * Modify plan steps
+   *
+   * @param planId - Plan ID
+   * @param steps - Modified steps
+   * @param note - Optional modification note
+   * @returns Updated plan
+   */
+  async modifyPlan(
+    planId: string,
+    steps: Array<{
+      step: number;
+      action: string;
+      target: string;
+      description: string;
+      requires_approval?: boolean;
+      estimated_complexity?: string;
+      dependencies?: number[];
+    }>,
+    note?: string
+  ): Promise<{
+    success: boolean;
+    plan?: any;
+    message?: string;
+  }> {
+    const response = await this.client.post(`/plan/${planId}/modify`, {
+      steps,
+      modification_note: note,
+    });
+    return response.data;
+  }
+
+  /**
+   * Reject a plan
+   *
+   * @param planId - Plan ID
+   * @param reason - Rejection reason
+   * @returns Rejection confirmation
+   */
+  async rejectPlan(
+    planId: string,
+    reason: string
+  ): Promise<{
+    success: boolean;
+    plan_id: string;
+    status: string;
+    message: string;
+  }> {
+    const response = await this.client.post(`/plan/${planId}/reject`, {
+      reason,
+    });
+    return response.data;
+  }
+
+  /**
+   * Start plan execution
+   *
+   * @param planId - Plan ID
+   * @returns Execution start confirmation
+   */
+  async startPlanExecution(planId: string): Promise<{
+    success: boolean;
+    plan_id: string;
+    message: string;
+    progress?: {
+      total_steps: number;
+      completed: number;
+      failed: number;
+      in_progress: number;
+      pending: number;
+      progress_percent: number;
+      current_step: number;
+    };
+  }> {
+    const response = await this.client.post(`/plan/${planId}/execute`);
+    return response.data;
+  }
+
+  /**
+   * Stream plan execution progress
+   *
+   * @param planId - Plan ID
+   * @returns AsyncGenerator yielding execution updates
+   */
+  async *streamPlanExecution(planId: string): AsyncGenerator<{
+    type: string;
+    step?: number;
+    description?: string;
+    output?: string;
+    error?: string;
+    progress?: any;
+  }, void, unknown> {
+    try {
+      const baseURL = this.client.defaults.baseURL || '/api';
+      const response = await fetch(`${baseURL}/plan/${planId}/execute/stream`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/event-stream',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.substring(6).trim();
+              try {
+                const update = JSON.parse(data);
+                yield update;
+              } catch {
+                console.warn('Invalid SSE data:', data);
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      console.error('Plan execution stream error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get plan execution status
+   *
+   * @param planId - Plan ID
+   * @returns Execution status
+   */
+  async getPlanStatus(planId: string): Promise<{
+    success: boolean;
+    plan_id: string;
+    approval_status: string;
+    execution_started_at?: string;
+    execution_completed_at?: string;
+    current_step: number;
+    progress: {
+      total_steps: number;
+      completed: number;
+      failed: number;
+      in_progress: number;
+      pending: number;
+      progress_percent: number;
+      current_step: number;
+    };
+    steps: any[];
+  }> {
+    const response = await this.client.get(`/plan/${planId}/status`);
+    return response.data;
+  }
+
+  /**
+   * Delete a plan
+   *
+   * @param planId - Plan ID
+   * @returns Deletion confirmation
+   */
+  async deletePlan(planId: string): Promise<{
+    success: boolean;
+    plan_id: string;
+    message: string;
+  }> {
+    const response = await this.client.delete(`/plan/${planId}`);
+    return response.data;
+  }
+
+  /**
+   * List all plans
+   *
+   * @returns List of all plan summaries
+   */
+  async listAllPlans(): Promise<Array<{
+    plan_id: string;
+    session_id: string;
+    user_request: string;
+    total_steps: number;
+    approval_status: string;
+    created_at: string;
+    progress_percent: number;
+  }>> {
+    const response = await this.client.get('/plan/');
+    return response.data;
+  }
 }
 
 // Export singleton instance

@@ -2,23 +2,88 @@
 
 이 핸들러는 사용자의 요청을 분석하고 개발 계획을 수립합니다.
 복잡한 작업의 경우 계획을 파일로 저장할 수 있습니다.
+
+Phase 5: 구조화된 계획 생성 및 사용자 승인 워크플로우 지원
 """
+import json
 import logging
 import re
+import uuid
 import aiofiles
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Optional, AsyncGenerator
+from typing import Dict, Any, Optional, AsyncGenerator, List
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.core.config import settings
 from app.agent.handlers.base import BaseHandler, HandlerResult, StreamUpdate
+from app.agent.langgraph.schemas.plan import ExecutionPlan, PlanStep
 from shared.utils.token_utils import estimate_tokens, create_token_usage
 from shared.utils.language_utils import detect_language, get_language_instruction
 
 logger = logging.getLogger(__name__)
+
+
+# Structured Plan Generation Prompt (Phase 5)
+STRUCTURED_PLAN_PROMPT = """You are an expert software architect creating a detailed execution plan.
+
+Analyze the user's request and create a structured plan with specific, actionable steps.
+
+IMPORTANT: Output your plan in the following JSON format ONLY (no markdown, no additional text):
+
+{{
+    "summary": "Brief summary of what will be built",
+    "steps": [
+        {{
+            "step": 1,
+            "action": "create_file",
+            "target": "src/calculator.py",
+            "description": "Create main calculator module with basic arithmetic operations",
+            "requires_approval": false,
+            "estimated_complexity": "low",
+            "dependencies": []
+        }},
+        {{
+            "step": 2,
+            "action": "create_file",
+            "target": "tests/test_calculator.py",
+            "description": "Create unit tests for calculator module",
+            "requires_approval": false,
+            "estimated_complexity": "low",
+            "dependencies": [1]
+        }}
+    ],
+    "estimated_files": ["src/calculator.py", "tests/test_calculator.py"],
+    "risks": ["None identified for this simple task"]
+}}
+
+Available actions:
+- create_file: Create a new file
+- modify_file: Modify an existing file
+- delete_file: Delete a file
+- run_tests: Run test suite
+- run_lint: Run linter
+- install_deps: Install dependencies
+- refactor: Refactor existing code
+- review_code: Review code for issues
+
+Complexity levels: low, medium, high
+
+Set requires_approval=true for:
+- Deleting files
+- Modifying core/critical files
+- High complexity changes
+- Security-sensitive operations
+
+User Request:
+{user_request}
+
+Context:
+{context}
+
+Generate the structured plan JSON:"""
 
 
 def _get_planning_system_prompt(model_type: str, user_message: str = "", project_name: str = "") -> str:
@@ -393,3 +458,255 @@ class PlanningHandler(BaseHandler):
         except Exception as e:
             self.logger.error(f"Failed to save plan file: {e}")
             return None
+
+    async def generate_structured_plan(
+        self,
+        user_message: str,
+        session_id: str,
+        analysis: Dict[str, Any],
+        context: Any = None
+    ) -> ExecutionPlan:
+        """Generate a structured execution plan (Phase 5)
+
+        Creates a detailed, step-by-step execution plan that can be
+        reviewed and approved by the user before execution.
+
+        Args:
+            user_message: User's request
+            session_id: Session identifier
+            analysis: Supervisor analysis result
+            context: Optional conversation context
+
+        Returns:
+            ExecutionPlan: Structured plan for user approval
+        """
+        try:
+            self.logger.info(f"Generating structured plan for: {user_message[:50]}...")
+
+            # Build context info
+            context_info = self._build_context_info(analysis, context)
+
+            # Format prompt
+            prompt = STRUCTURED_PLAN_PROMPT.format(
+                user_request=user_message,
+                context=context_info
+            )
+
+            # System prompt for structured output
+            system_prompt = """You are a software architecture expert.
+Generate ONLY valid JSON output. No markdown, no explanations, just the JSON object.
+Ensure the JSON is properly formatted and parseable."""
+
+            if self.model_type == "deepseek":
+                system_prompt = f"""<think>
+Analyze the request and determine:
+1. What files need to be created or modified
+2. What is the logical order of operations
+3. Which steps might need user approval
+4. What are the potential risks
+</think>
+
+{system_prompt}"""
+
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=prompt)
+            ]
+
+            # Call LLM
+            response = await self.llm.ainvoke(messages)
+            response_text = self._strip_think_tags(response.content)
+
+            # Parse JSON response
+            plan_data = self._parse_plan_json(response_text)
+
+            # Create PlanStep objects
+            steps = []
+            for step_data in plan_data.get("steps", []):
+                steps.append(PlanStep(
+                    step=step_data.get("step", len(steps) + 1),
+                    action=step_data.get("action", "custom"),
+                    target=step_data.get("target", ""),
+                    description=step_data.get("description", ""),
+                    requires_approval=step_data.get("requires_approval", False),
+                    estimated_complexity=step_data.get("estimated_complexity", "low"),
+                    dependencies=step_data.get("dependencies", []),
+                ))
+
+            # Create ExecutionPlan
+            plan = ExecutionPlan.create(
+                session_id=session_id,
+                user_request=user_message,
+                steps=steps,
+                estimated_files=plan_data.get("estimated_files", []),
+                risks=plan_data.get("risks", [])
+            )
+
+            self.logger.info(f"Structured plan created: {plan.plan_id} with {len(steps)} steps")
+            return plan
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate structured plan: {e}")
+            # Return a minimal plan on error
+            return ExecutionPlan.create(
+                session_id=session_id,
+                user_request=user_message,
+                steps=[PlanStep(
+                    step=1,
+                    action="custom",
+                    target="",
+                    description=f"Execute request: {user_message[:100]}",
+                    requires_approval=True,
+                    estimated_complexity="medium",
+                )],
+                estimated_files=[],
+                risks=[f"Plan generation failed: {str(e)}"]
+            )
+
+    def _parse_plan_json(self, response_text: str) -> Dict[str, Any]:
+        """Parse JSON from LLM response
+
+        Handles various edge cases like markdown code blocks,
+        extra text before/after JSON, etc.
+
+        Args:
+            response_text: Raw LLM response
+
+        Returns:
+            Parsed JSON dictionary
+        """
+        # Try direct JSON parse first
+        try:
+            return json.loads(response_text.strip())
+        except json.JSONDecodeError:
+            pass
+
+        # Try extracting JSON from markdown code block
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Try finding JSON object in text
+        brace_match = re.search(r'\{[\s\S]*\}', response_text)
+        if brace_match:
+            try:
+                return json.loads(brace_match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # Return empty plan structure
+        self.logger.warning("Failed to parse plan JSON, returning empty structure")
+        return {
+            "summary": "Failed to parse plan",
+            "steps": [],
+            "estimated_files": [],
+            "risks": ["Plan parsing failed"]
+        }
+
+    async def generate_structured_plan_stream(
+        self,
+        user_message: str,
+        session_id: str,
+        analysis: Dict[str, Any],
+        context: Any = None
+    ) -> AsyncGenerator[StreamUpdate, None]:
+        """Generate structured plan with streaming updates
+
+        Args:
+            user_message: User's request
+            session_id: Session identifier
+            analysis: Supervisor analysis result
+            context: Optional conversation context
+
+        Yields:
+            StreamUpdate: Progress updates during plan generation
+        """
+        yield self._create_progress_update(
+            message="구조화된 실행 계획을 생성하고 있습니다...",
+            streaming_content="## 계획 생성 중\n- 요청 분석 중...\n- 단계별 작업 구성 중..."
+        )
+
+        try:
+            # Generate the plan
+            plan = await self.generate_structured_plan(
+                user_message=user_message,
+                session_id=session_id,
+                analysis=analysis,
+                context=context
+            )
+
+            # Format plan for display
+            plan_display = self._format_plan_for_display(plan)
+
+            yield StreamUpdate(
+                agent="PlanningHandler",
+                update_type="plan_generated",
+                status="awaiting_approval",
+                message=f"실행 계획이 생성되었습니다. {plan.total_steps}개 단계",
+                streaming_content=plan_display,
+                data={
+                    "plan": plan.to_dict(),
+                    "requires_approval": True,
+                }
+            )
+
+        except Exception as e:
+            yield self._create_error_update(e)
+
+    def _format_plan_for_display(self, plan: ExecutionPlan) -> str:
+        """Format ExecutionPlan for user-friendly display
+
+        Args:
+            plan: ExecutionPlan object
+
+        Returns:
+            Formatted markdown string
+        """
+        lines = [
+            "## 실행 계획",
+            "",
+            f"**Plan ID**: `{plan.plan_id}`",
+            f"**총 단계**: {plan.total_steps}개",
+            "",
+            "### 단계별 작업",
+            ""
+        ]
+
+        for step in plan.steps:
+            approval_badge = " [승인 필요]" if step.requires_approval else ""
+            complexity_icon = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(
+                step.estimated_complexity, "⚪"
+            )
+
+            lines.append(f"**{step.step}. {step.description}**{approval_badge}")
+            lines.append(f"   - 작업: `{step.action}`")
+            lines.append(f"   - 대상: `{step.target}`")
+            lines.append(f"   - 복잡도: {complexity_icon} {step.estimated_complexity}")
+            if step.dependencies:
+                lines.append(f"   - 선행 단계: {step.dependencies}")
+            lines.append("")
+
+        if plan.estimated_files:
+            lines.append("### 예상 파일")
+            for f in plan.estimated_files:
+                lines.append(f"- `{f}`")
+            lines.append("")
+
+        if plan.risks:
+            lines.append("### 위험 요소")
+            for risk in plan.risks:
+                lines.append(f"- {risk}")
+            lines.append("")
+
+        lines.extend([
+            "---",
+            "",
+            "이 계획을 **승인**하시려면 '승인' 또는 'approve'를 입력하세요.",
+            "**수정**이 필요하시면 수정 내용을 말씀해주세요.",
+            "**거부**하시려면 '거부' 또는 'reject'를 입력하세요."
+        ])
+
+        return "\n".join(lines)
