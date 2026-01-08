@@ -8,7 +8,7 @@ import pathlib
 import asyncio
 import logging
 
-from .base import BaseTool, ToolCategory, ToolResult
+from .base import BaseTool, ToolCategory, ToolResult, NetworkType
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,12 @@ class ExecutePythonTool(BaseTool):
 
     def __init__(self):
         super().__init__("execute_python", ToolCategory.CODE)
-        self.description = "Execute Python code safely with timeout"
+
+        # Phase 2: Network requirement - LOCAL (local code execution)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Execute Python code safely with timeout - works offline"
         self.parameters = {
             "code": {
                 "type": "string",
@@ -97,7 +102,12 @@ class RunTestsTool(BaseTool):
 
     def __init__(self):
         super().__init__("run_tests", ToolCategory.CODE)
-        self.description = "Run pytest tests on specified path"
+
+        # Phase 2: Network requirement - LOCAL (local test execution)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Run pytest tests on specified path - works offline"
         self.parameters = {
             "test_path": {
                 "type": "string",
@@ -195,7 +205,12 @@ class LintCodeTool(BaseTool):
 
     def __init__(self):
         super().__init__("lint_code", ToolCategory.CODE)
-        self.description = "Lint Python code with flake8"
+
+        # Phase 2: Network requirement - LOCAL (local code linting)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Lint Python code with flake8 - works offline"
         self.parameters = {
             "file_path": {
                 "type": "string",

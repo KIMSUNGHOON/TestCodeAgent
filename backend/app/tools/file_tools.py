@@ -8,7 +8,7 @@ from typing import List
 import aiofiles
 import logging
 
-from .base import BaseTool, ToolCategory, ToolResult
+from .base import BaseTool, ToolCategory, ToolResult, NetworkType
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,12 @@ class ReadFileTool(BaseTool):
 
     def __init__(self):
         super().__init__("read_file", ToolCategory.FILE)
-        self.description = "Read contents of a file with size limits"
+
+        # Phase 2: Network requirement - LOCAL (local file system)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Read contents of a file with size limits - works offline"
         self.parameters = {
             "path": {
                 "type": "string",
@@ -86,7 +91,12 @@ class WriteFileTool(BaseTool):
 
     def __init__(self):
         super().__init__("write_file", ToolCategory.FILE)
-        self.description = "Write content to a file with safety checks"
+
+        # Phase 2: Network requirement - LOCAL (local file system)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Write content to a file with safety checks - works offline"
         self.parameters = {
             "path": {
                 "type": "string",
@@ -155,7 +165,12 @@ class SearchFilesTool(BaseTool):
 
     def __init__(self):
         super().__init__("search_files", ToolCategory.FILE)
-        self.description = "Search for files matching a glob pattern"
+
+        # Phase 2: Network requirement - LOCAL (local file system)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Search for files matching a glob pattern - works offline"
         self.parameters = {
             "pattern": {
                 "type": "string",
@@ -221,7 +236,12 @@ class ListDirectoryTool(BaseTool):
 
     def __init__(self):
         super().__init__("list_directory", ToolCategory.FILE)
-        self.description = "List files and directories in a path"
+
+        # Phase 2: Network requirement - LOCAL (local file system)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "List files and directories in a path - works offline"
         self.parameters = {
             "path": {
                 "type": "string",

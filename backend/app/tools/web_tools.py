@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Optional, List, Dict, Any
 
-from .base import BaseTool, ToolCategory, ToolResult
+from .base import BaseTool, ToolCategory, ToolResult, NetworkType
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,13 @@ class WebSearchTool(BaseTool):
             api_key: Tavily API key. If not provided, reads from TAVILY_API_KEY env var
         """
         super().__init__("web_search", ToolCategory.WEB)
-        self.description = "Search the web for information using Tavily search API"
+
+        # Phase 2: Network requirement - requires external API access
+        # Tavily API is an interactive external API that may send query data
+        self.requires_network = True
+        self.network_type = NetworkType.EXTERNAL_API
+
+        self.description = "Search the web for information using Tavily search API (requires online mode)"
         self.parameters = {
             "query": {
                 "type": "string",

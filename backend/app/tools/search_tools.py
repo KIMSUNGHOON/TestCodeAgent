@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
-from .base import BaseTool, ToolCategory, ToolResult
+from .base import BaseTool, ToolCategory, ToolResult, NetworkType
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,13 @@ class CodeSearchTool(BaseTool):
             chroma_path: Path to ChromaDB storage. Defaults to ./chroma_db
         """
         super().__init__("code_search", ToolCategory.SEARCH)
-        self.description = "Semantic search across codebase using RAG (ChromaDB vector database)"
+
+        # Phase 2: Network requirement - LOCAL (uses local ChromaDB)
+        # No network access needed - operates on local vector database
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Semantic search across codebase using RAG (ChromaDB vector database) - works offline"
         self.parameters = {
             "query": {
                 "type": "string",
@@ -209,7 +215,12 @@ class DocumentSearchTool(BaseTool):
 
     def __init__(self):
         super().__init__("doc_search", ToolCategory.SEARCH)
-        self.description = "Search documentation and markdown files"
+
+        # Phase 2: Network requirement - LOCAL (future: local file search)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Search documentation and markdown files - works offline"
         self.parameters = {
             "query": {
                 "type": "string",

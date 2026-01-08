@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Optional, List
 
-from .base import BaseTool, ToolCategory, ToolResult
+from .base import BaseTool, ToolCategory, ToolResult, NetworkType
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,12 @@ class GitStatusTool(BaseTool):
 
     def __init__(self):
         super().__init__("git_status", ToolCategory.GIT)
-        self.description = "Get current git repository status"
+
+        # Phase 2: Network requirement - LOCAL (local git command)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Get current git repository status - works offline"
         self.parameters = {}
 
     def validate_params(self, **kwargs) -> bool:
@@ -85,7 +90,12 @@ class GitDiffTool(BaseTool):
 
     def __init__(self):
         super().__init__("git_diff", ToolCategory.GIT)
-        self.description = "View git changes (diff)"
+
+        # Phase 2: Network requirement - LOCAL (local git command)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "View git changes (diff) - works offline"
         self.parameters = {
             "cached": {
                 "type": "boolean",
@@ -158,7 +168,12 @@ class GitLogTool(BaseTool):
 
     def __init__(self):
         super().__init__("git_log", ToolCategory.GIT)
-        self.description = "View recent git commits"
+
+        # Phase 2: Network requirement - LOCAL (local git command)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "View recent git commits - works offline"
         self.parameters = {
             "max_count": {
                 "type": "number",
@@ -225,7 +240,12 @@ class GitBranchTool(BaseTool):
 
     def __init__(self):
         super().__init__("git_branch", ToolCategory.GIT)
-        self.description = "Get current git branch name"
+
+        # Phase 2: Network requirement - LOCAL (local git command)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Get current git branch name - works offline"
         self.parameters = {}
 
     def validate_params(self, **kwargs) -> bool:
@@ -267,7 +287,12 @@ class GitCommitTool(BaseTool):
 
     def __init__(self):
         super().__init__("git_commit", ToolCategory.GIT)
-        self.description = "Create a git commit with staged or specified files"
+
+        # Phase 2: Network requirement - LOCAL (local git command)
+        self.requires_network = False
+        self.network_type = NetworkType.LOCAL
+
+        self.description = "Create a git commit with staged or specified files - works offline"
         self.parameters = {
             "message": {
                 "type": "string",
