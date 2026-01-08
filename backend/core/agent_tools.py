@@ -1,314 +1,230 @@
-"""Agent Tools Definition for Tool Use Pattern
+"""Concrete Action Tools for LLM Tool Use Pattern
 
-This module defines all agents as OpenAI-compatible function tools,
-enabling LLM-driven dynamic workflow orchestration.
+This module exposes CONCRETE ACTION TOOLS (not abstract agent roles) to the LLM,
+following the Claude Code / ChatGPT approach.
 
-Instead of hardcoded workflow types (QUICK_QA, CODE_GENERATION, etc.),
-the LLM freely decides which agents to call and in what order.
+OLD APPROACH (Wrong - Hardcoded Agents):
+- architect_agent, coder_agent, reviewer_agent, etc.
+- Still hardcoding! Just moved from workflow types to agent tools
+- LLM can't combine freely - stuck with 8 fixed agents
+
+NEW APPROACH (Correct - Concrete Actions):
+- read_file, write_file, execute_python, git_commit, web_search, etc.
+- 20+ concrete tools from ToolRegistry
+- LLM freely combines these for ANY task
+- No hardcoding - true dynamic workflow
+
+Example Usage:
+```python
+# Get all tools for LLM
+tools = get_agent_tools()
+
+# LLM decides: "I need to read config, then search code, then create file"
+# - read_file("config.py")
+# - code_search("authentication")
+# - write_file("auth.py", content)
+```
+
+Key Philosophy:
+- Tools are ACTIONS, not ROLES
+- LLM is the orchestrator, tools are the instruments
+- ask_human is for STRATEGIC decisions, not information gathering
 """
 
 from typing import List, Dict, Any
+import logging
+
+# Import converter to get concrete tools from registry
+from backend.app.tools.tool_converter import (
+    get_concrete_tools_from_registry,
+    add_strategic_tools
+)
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================
-# Agent Tool Definitions
-# ============================================
-
-AGENT_TOOLS: List[Dict[str, Any]] = [
-    {
-        "type": "function",
-        "function": {
-            "name": "ask_human",
-            "description": (
-                "Ask the human user a question when you need clarification, "
-                "important decisions, or confirmation. Use this when:\n"
-                "- Request is ambiguous or unclear\n"
-                "- Multiple valid approaches exist\n"
-                "- Important decision with significant impact\n"
-                "- Potentially dangerous operation needs confirmation\n"
-                "- Low confidence in your analysis"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "Clear, concise question to ask the user"
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why you're asking - provide context for the user"
-                    },
-                    "options": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional list of suggested answers (for multiple choice)"
-                    }
-                },
-                "required": ["question", "reason"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "architect_agent",
-            "description": (
-                "Design project structure and architecture. Use this agent to:\n"
-                "- Plan folder/file structure\n"
-                "- Design system architecture\n"
-                "- Identify technical components and dependencies\n"
-                "- Create high-level implementation plan\n"
-                "- Recommend design patterns and best practices"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "requirements": {
-                        "type": "string",
-                        "description": "Detailed project requirements and constraints"
-                    },
-                    "architecture_style": {
-                        "type": "string",
-                        "enum": ["monolithic", "microservices", "layered", "modular"],
-                        "description": "Preferred architecture style (optional)"
-                    },
-                    "constraints": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Technical constraints (e.g., 'must use FastAPI', 'no external dependencies')"
-                    }
-                },
-                "required": ["requirements"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "coder_agent",
-            "description": (
-                "Generate actual implementation code. Use this agent to:\n"
-                "- Write production-ready code\n"
-                "- Implement features based on architecture\n"
-                "- Create multiple files with proper structure\n"
-                "- Follow security best practices automatically\n"
-                "- Include error handling and type hints"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "task": {
-                        "type": "string",
-                        "description": "Clear description of what code to generate"
-                    },
-                    "architecture": {
-                        "type": "object",
-                        "description": "Architecture plan from architect_agent (optional but recommended)"
-                    },
-                    "existing_files": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of existing files to consider (for modifications)"
-                    }
-                },
-                "required": ["task"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "reviewer_agent",
-            "description": (
-                "Review code for quality, bugs, and security issues. Use this to:\n"
-                "- Check for logic errors and bugs\n"
-                "- Identify security vulnerabilities (SQL injection, XSS, etc.)\n"
-                "- Verify code follows best practices\n"
-                "- Suggest improvements and optimizations\n"
-                "- Validate error handling and edge cases"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Code to review (or specify files)"
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of files to review from workspace"
-                    },
-                    "focus_areas": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": ["security", "performance", "correctness", "maintainability", "all"]
-                        },
-                        "description": "Specific review focus (default: all)"
-                    }
-                },
-                "required": []
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "refiner_agent",
-            "description": (
-                "Fix issues and refine code based on review feedback. Use this to:\n"
-                "- Fix bugs identified by reviewer\n"
-                "- Address security vulnerabilities\n"
-                "- Improve code quality\n"
-                "- Apply suggested optimizations\n"
-                "- Refactor for better maintainability"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Original code to refine"
-                    },
-                    "review_feedback": {
-                        "type": "object",
-                        "description": "Feedback from reviewer_agent"
-                    },
-                    "issues_to_fix": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Specific issues to address"
-                    }
-                },
-                "required": ["review_feedback"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "qa_tester_agent",
-            "description": (
-                "Generate and run tests for code. Use this to:\n"
-                "- Create unit tests\n"
-                "- Create integration tests\n"
-                "- Execute tests and report results\n"
-                "- Verify code correctness\n"
-                "- Check edge case handling"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Code to test"
-                    },
-                    "test_type": {
-                        "type": "string",
-                        "enum": ["unit", "integration", "both"],
-                        "description": "Type of tests to generate"
-                    },
-                    "execute_tests": {
-                        "type": "boolean",
-                        "description": "Whether to execute tests (default: true)"
-                    }
-                },
-                "required": ["code"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "security_auditor_agent",
-            "description": (
-                "Perform deep security analysis. Use this for:\n"
-                "- OWASP Top 10 vulnerability scanning\n"
-                "- Authentication/authorization review\n"
-                "- Input validation checking\n"
-                "- Cryptography usage review\n"
-                "- Dependency vulnerability checking\n"
-                "Use this for critical/production code or when user explicitly requests security audit."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Code to audit"
-                    },
-                    "focus": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": [
-                                "injection",
-                                "authentication",
-                                "xss",
-                                "csrf",
-                                "sensitive_data",
-                                "all"
-                            ]
-                        },
-                        "description": "Specific security focus areas"
-                    }
-                },
-                "required": ["code"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "complete_task",
-            "description": (
-                "Mark the task as complete and provide final response to user. "
-                "Call this when you have finished all necessary work and are ready to respond. "
-                "This will end the workflow and return the final result to the user."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "summary": {
-                        "type": "string",
-                        "description": "Brief summary of what was accomplished"
-                    },
-                    "response": {
-                        "type": "string",
-                        "description": "Final response message to the user"
-                    },
-                    "files_created": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of files created/modified"
-                    }
-                },
-                "required": ["summary", "response"]
-            }
-        }
-    }
-]
-
-
-# ============================================
-# Helper Functions
+# Tool Retrieval
 # ============================================
 
 def get_agent_tools() -> List[Dict[str, Any]]:
-    """Get all agent tools for LLM Tool Use"""
-    return AGENT_TOOLS
+    """Get all concrete action tools for LLM Tool Use
+
+    This returns 20+ concrete tools from ToolRegistry plus strategic meta-tools:
+
+    **Concrete Action Tools (from ToolRegistry):**
+    - File: read_file, write_file, search_files, list_directory
+    - Code: execute_python, run_tests, lint_code, format_code, shell_command, generate_docstring
+    - Git: git_status, git_diff, git_log, git_branch, git_commit
+    - Web: web_search, http_request, download_file
+    - Search: code_search (semantic search with ChromaDB)
+    - Sandbox: sandbox_execute (isolated execution)
+
+    **Strategic Meta-Tools:**
+    - ask_human: Ask for strategic decisions (architecture choices, dangerous ops)
+    - complete_task: Mark task complete and return final response
+
+    Returns:
+        List of OpenAI-compatible function definitions
+    """
+    # Get concrete action tools from registry
+    concrete_tools = get_concrete_tools_from_registry()
+
+    # Add strategic meta-tools (ask_human, complete_task)
+    all_tools = add_strategic_tools(concrete_tools)
+
+    logger.info(f"🔧 Loaded {len(all_tools)} tools for LLM Tool Use:")
+    logger.info(f"   - {len(concrete_tools)} concrete action tools")
+    logger.info(f"   - 2 strategic meta-tools (ask_human, complete_task)")
+
+    return all_tools
 
 
 def get_tool_names() -> List[str]:
-    """Get list of all available tool names"""
-    return [tool["function"]["name"] for tool in AGENT_TOOLS]
+    """Get list of all available tool names
+
+    Returns:
+        List of tool names (e.g., ['read_file', 'execute_python', ...])
+    """
+    tools = get_agent_tools()
+    return [tool["function"]["name"] for tool in tools]
 
 
 def get_tool_by_name(name: str) -> Dict[str, Any]:
-    """Get tool definition by name"""
-    for tool in AGENT_TOOLS:
+    """Get tool definition by name
+
+    Args:
+        name: Tool name (e.g., 'read_file')
+
+    Returns:
+        OpenAI-compatible function definition
+
+    Raises:
+        ValueError: If tool not found
+    """
+    tools = get_agent_tools()
+    for tool in tools:
         if tool["function"]["name"] == name:
             return tool
-    raise ValueError(f"Tool '{name}' not found")
+    raise ValueError(f"Tool '{name}' not found. Available: {get_tool_names()}")
+
+
+def get_tool_categories() -> Dict[str, List[str]]:
+    """Get tools organized by category
+
+    Returns:
+        Dictionary mapping category to list of tool names
+        Example: {'file': ['read_file', 'write_file'], 'code': [...]}
+    """
+    from backend.app.tools.registry import get_registry
+
+    registry = get_registry()
+    categories = {}
+
+    for tool in registry.list_tools():
+        category = tool.category.value
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(tool.name)
+
+    # Add strategic tools
+    categories["meta"] = ["ask_human", "complete_task"]
+
+    return categories
+
+
+# ============================================
+# Tool Statistics
+# ============================================
+
+def get_tool_statistics() -> Dict[str, Any]:
+    """Get comprehensive tool statistics
+
+    Returns:
+        Dictionary with tool counts, categories, network modes, etc.
+    """
+    from backend.app.tools.registry import get_registry
+
+    registry = get_registry()
+    stats = registry.get_statistics()
+
+    # Add strategic tool info
+    stats["strategic_tools"] = 2
+    stats["total_tools_with_meta"] = stats["total_tools"] + 2
+
+    return stats
+
+
+# ============================================
+# Tool Documentation
+# ============================================
+
+def print_tool_documentation():
+    """Print human-readable tool documentation
+
+    Useful for debugging and understanding available tools
+    """
+    categories = get_tool_categories()
+
+    print("\n" + "="*80)
+    print("AVAILABLE TOOLS FOR LLM TOOL USE")
+    print("="*80)
+
+    for category, tool_names in sorted(categories.items()):
+        print(f"\n## {category.upper()} ({len(tool_names)} tools)")
+        for name in sorted(tool_names):
+            print(f"   - {name}")
+
+    stats = get_tool_statistics()
+    print(f"\n{'='*80}")
+    print(f"TOTAL: {stats['total_tools_with_meta']} tools")
+    print(f"  - Concrete action tools: {stats['total_tools']}")
+    print(f"  - Strategic meta-tools: {stats['strategic_tools']}")
+    print(f"  - Network mode: {stats['network_mode']}")
+    print(f"  - Available in current mode: {stats['available_tools']}")
+    if stats['disabled_tools'] > 0:
+        print(f"  - Disabled (offline mode): {stats['disabled_tools']}")
+    print("="*80 + "\n")
+
+
+# ============================================
+# Legacy Compatibility (for migration period)
+# ============================================
+
+# For code that still references old agent names during migration
+LEGACY_AGENT_MAPPING = {
+    "architect_agent": ["read_file", "search_files", "list_directory"],
+    "coder_agent": ["write_file", "execute_python", "format_code"],
+    "reviewer_agent": ["read_file", "lint_code"],
+    "refiner_agent": ["read_file", "write_file", "format_code"],
+    "qa_tester_agent": ["execute_python", "run_tests"],
+    "security_auditor_agent": ["read_file", "lint_code", "code_search"],
+}
+
+
+def get_tools_for_legacy_agent(agent_name: str) -> List[str]:
+    """Get recommended concrete tools for legacy agent names
+
+    This is for backward compatibility during migration.
+
+    Args:
+        agent_name: Legacy agent name (e.g., 'coder_agent')
+
+    Returns:
+        List of recommended concrete tool names
+
+    Example:
+        get_tools_for_legacy_agent('coder_agent')
+        # Returns: ['write_file', 'execute_python', 'format_code']
+    """
+    return LEGACY_AGENT_MAPPING.get(agent_name, [])
+
+
+# ============================================
+# Module Initialization
+# ============================================
+
+# Log tool loading on import
+logger.info("🔧 agent_tools.py loaded - using CONCRETE ACTION TOOLS")
+logger.info(f"   Available tools: {len(get_tool_names())}")
+logger.info("   Mode: Dynamic LLM-driven Tool Use (no hardcoding)")

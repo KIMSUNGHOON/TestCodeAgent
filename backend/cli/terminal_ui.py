@@ -156,43 +156,88 @@ class TerminalUI:
             task = progress.add_task("[cyan]Initializing...", total=None)
 
             try:
-                async for update in self.session_mgr.execute_streaming_workflow(user_request):
-                    # DynamicWorkflow uses 'node' and 'status' fields, not 'type'
-                    node = update.get("node")
-                    status = update.get("status")
-                    updates_data = update.get("updates", {})
-                    agent_title = update.get("agent_title", node)
+                # Use Tool Use workflow (dynamic LLM-driven approach)
+                async for update in self.session_mgr.execute_tool_use_workflow(user_request):
+                    update_type = update.get("type")
 
-                    # Handle node status changes
-                    if node and status:
-                        if status == "starting":
-                            # Agent starting
-                            status_msg = agent_status_map.get(node, f"{agent_title} working...")
-                            progress.update(task, description=f"[cyan]{status_msg}")
+                    # Handle different update types from Tool Use pattern
+                    if update_type == "tool_iteration":
+                        # New iteration starting
+                        iteration = update.get("iteration", 0)
+                        max_iter = update.get("max_iterations", 0)
+                        progress.update(task, description=f"[cyan]🔄 Iteration {iteration}/{max_iter}...")
 
-                        elif status == "completed":
-                            # Agent completed - check for streaming_content
-                            streaming_content = updates_data.get("streaming_content", "")
-                            artifacts_list = updates_data.get("artifacts", [])
-
-                            # Display streaming content if available
-                            if streaming_content:
-                                progress.stop()
-                                self.console.print(f"\n[bold magenta]{agent_title}:[/bold magenta]")
-                                self.console.print(Markdown(streaming_content))
-                                progress.start()
-
-                            # Collect artifacts
-                            if artifacts_list:
-                                for artifact in artifacts_list:
-                                    artifacts.append({"action": "created", **artifact})
-
-                        elif status == "error":
-                            # Agent error
-                            error_msg = updates_data.get("message", "Unknown error")
+                    elif update_type == "reasoning":
+                        # LLM reasoning/thinking (CoT)
+                        reasoning = update.get("content", "")
+                        if reasoning:
                             progress.stop()
-                            self.console.print(f"\n[bold red]❌ {agent_title} Error:[/bold red] {error_msg}")
+                            self.console.print("\n[dim italic]💭 Thinking:[/dim italic]")
+                            self.console.print(f"[dim]{reasoning[:200]}...[/dim]")  # Show first 200 chars
                             progress.start()
+
+                    elif update_type == "tool_call_start":
+                        # Tool execution starting
+                        tool_name = update.get("tool")
+                        arguments = update.get("arguments", {})
+                        arg_summary = ", ".join(f"{k}={str(v)[:30]}" for k, v in arguments.items())
+                        progress.update(task, description=f"[yellow]🔧 {tool_name}({arg_summary[:50]}...)")
+
+                    elif update_type == "tool_call_result":
+                        # Tool execution completed
+                        tool_name = update.get("tool")
+                        result = update.get("result", {})
+                        success = result.get("success", False)
+
+                        if success:
+                            # Show successful tool execution
+                            output_preview = str(result.get("output", ""))[:100]
+                            progress.stop()
+                            self.console.print(f"[green]✓[/green] {tool_name}: {output_preview}")
+                            progress.start()
+
+                            # Collect artifacts from write_file tool
+                            if tool_name == "write_file":
+                                path = result.get("metadata", {}).get("path", "unknown")
+                                artifacts.append({
+                                    "action": "created",
+                                    "filename": path,
+                                    "language": "python"
+                                })
+                        else:
+                            # Show tool error
+                            error = result.get("error", "Unknown error")
+                            progress.stop()
+                            self.console.print(f"[red]✗[/red] {tool_name}: {error}")
+                            progress.start()
+
+                    elif update_type == "final_response":
+                        # Final response from LLM
+                        response = update.get("content", "")
+                        summary = update.get("summary", "")
+
+                        progress.stop()
+                        self.console.print("\n[bold green]✅ Task Complete[/bold green]")
+                        if summary:
+                            self.console.print(f"[dim]{summary}[/dim]\n")
+                        if response:
+                            self.console.print(Markdown(response))
+
+                    elif update_type == "error":
+                        # Execution error
+                        error_msg = update.get("message", "Unknown error")
+                        progress.stop()
+                        self.console.print(f"\n[bold red]❌ Error:[/bold red] {error_msg}")
+                        progress.start()
+
+                    elif update_type == "max_iterations_reached":
+                        # Hit max iteration limit
+                        progress.stop()
+                        self.console.print("\n[yellow]⚠️ Maximum iterations reached[/yellow]")
+                        content = update.get("content", "")
+                        if content:
+                            self.console.print(content)
+                        progress.start()
 
             except Exception as e:
                 self.console.print(f"\n[bold red]❌ Execution Error:[/bold red] {str(e)}")

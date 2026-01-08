@@ -170,6 +170,55 @@ class SessionManager:
         if final_response:
             self.add_message("assistant", final_response)
 
+    async def execute_tool_use_workflow(
+        self,
+        user_request: str,
+        max_iterations: int = 15
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Execute workflow using Tool Use pattern (NEW - Dynamic LLM-driven)
+
+        Instead of hardcoded workflow types (QUICK_QA, CODE_GENERATION),
+        the LLM freely decides which concrete tools to call.
+
+        This is the Claude Code / ChatGPT approach - maximum flexibility.
+
+        Args:
+            user_request: User's request
+            max_iterations: Maximum tool call iterations (prevent infinite loops)
+
+        Yields:
+            Stream updates from tool execution
+        """
+        from backend.core.supervisor import supervisor
+
+        # Add user message to history
+        self.add_message("user", user_request)
+
+        # Build context
+        context = {
+            "conversation_history": self.conversation_history,
+            "workspace": str(self.workspace),
+            "session_id": self.session_id,
+            "model": self.model
+        }
+
+        # Execute with Tool Use pattern
+        final_response = None
+        async for update in supervisor.execute_with_tools(
+            user_request=user_request,
+            context=context,
+            max_iterations=max_iterations
+        ):
+            # Store final response
+            if update.get("type") == "final_response":
+                final_response = update.get("content", "")
+
+            yield update
+
+        # Add assistant response to history
+        if final_response:
+            self.add_message("assistant", final_response)
+
     def get_history_summary(self) -> Dict[str, Any]:
         """Get summary of conversation history
 

@@ -60,6 +60,44 @@ class VLLMClient:
             logger.error(f"Error calling vLLM API: {e}")
             raise
 
+    async def chat_completion_with_tools(
+        self,
+        messages: list[Dict[str, str]],
+        tools: list[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        tool_choice: str = "auto",
+        **kwargs
+    ) -> Any:
+        """Create a chat completion with function/tool calling support.
+
+        Args:
+            messages: List of message dictionaries with 'role' and 'content'
+            tools: List of tool definitions in OpenAI format
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            tool_choice: How to select tools ('auto', 'required', 'none')
+            **kwargs: Additional arguments to pass to the API
+
+        Returns:
+            Chat completion response with tool_calls if LLM wants to call tools
+        """
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                tools=tools,
+                tool_choice=tool_choice,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=False,  # Tool calling doesn't support streaming
+                **kwargs
+            )
+            return response
+        except Exception as e:
+            logger.error(f"Error calling vLLM API with tools: {e}")
+            raise
+
     async def stream_chat_completion(
         self,
         messages: list[Dict[str, str]],

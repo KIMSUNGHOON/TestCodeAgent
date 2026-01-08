@@ -1032,12 +1032,27 @@ Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} a
                 if message.tool_calls:
                     logger.info(f"🔧 LLM requested {len(message.tool_calls)} tool calls")
 
-                    # Add assistant message with tool calls
+                    # GPT-OSS Note: Only calls 1 tool at a time (no parallel calling)
+                    # This is correct behavior for GPT-OSS-120B
+
+                    # Preserve CoT: Include reasoning content from LLM
+                    # For GPT-OSS, message.content may include chain-of-thought reasoning
+                    assistant_content = message.content or ""
+
+                    # Add assistant message with tool calls (preserves CoT)
                     messages.append({
                         "role": "assistant",
-                        "content": message.content or "",
+                        "content": assistant_content,  # Contains CoT for GPT-OSS
                         "tool_calls": message.tool_calls
                     })
+
+                    # Yield thinking if available (for streaming UI)
+                    if assistant_content:
+                        yield {
+                            "type": "reasoning",
+                            "content": assistant_content,
+                            "iteration": iteration
+                        }
 
                     # Execute each tool call
                     for tool_call in message.tool_calls:
@@ -1123,66 +1138,104 @@ Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} a
         }
 
     def _build_tool_use_system_prompt(self) -> str:
-        """Build system prompt for Tool Use mode"""
-        return """You are an advanced AI software engineer with access to specialized agent tools.
+        """Build system prompt for Tool Use mode with concrete action tools"""
+        return """You are an advanced AI software engineer with access to concrete action tools.
 
 Your role is to:
 1. Understand user requests
-2. Plan the best approach
-3. Call appropriate agent tools to accomplish tasks
-4. Ask humans for clarification when needed
+2. Break down tasks into concrete actions
+3. Use available tools to accomplish tasks
+4. Ask humans for STRATEGIC decisions only
 5. Complete tasks successfully
 
 ## Available Tools
 
-You have access to these agent tools:
-- **ask_human**: Ask user questions when unclear or for important decisions
-- **architect_agent**: Design project structure and architecture
-- **coder_agent**: Write production-ready code
-- **reviewer_agent**: Review code for quality and security
-- **refiner_agent**: Fix issues and improve code
-- **qa_tester_agent**: Generate and run tests
-- **security_auditor_agent**: Deep security analysis
-- **complete_task**: Mark task as complete with final response
+You have access to 20+ CONCRETE ACTION TOOLS organized by category:
+
+**File Operations:**
+- read_file: Read file contents
+- write_file: Create or overwrite files
+- search_files: Search for files by pattern
+- list_directory: List directory contents
+
+**Code Execution:**
+- execute_python: Run Python code
+- run_tests: Execute test suites
+- lint_code: Check code quality
+- format_code: Auto-format code
+- shell_command: Execute shell commands
+- generate_docstring: Auto-generate documentation
+
+**Git Operations:**
+- git_status: Check repository status
+- git_diff: View changes
+- git_log: View commit history
+- git_branch: Manage branches
+- git_commit: Create commits
+
+**Web & Network:**
+- web_search: Search the web
+- http_request: Make HTTP requests
+- download_file: Download files
+
+**Code Search:**
+- code_search: Semantic code search with ChromaDB
+
+**Sandbox:**
+- sandbox_execute: Isolated code execution
+
+**Strategic Meta-Tools:**
+- ask_human: Ask for STRATEGIC decisions (architecture, dangerous ops) - NOT for info gathering!
+- complete_task: Mark task complete and return final response
 
 ## Guidelines
 
-1. **For simple questions** (like "hello", "what is X"):
+1. **For simple questions** (like "hello", "what is X", "explain Y"):
    - Answer directly with complete_task()
-   - No need for other agents
+   - No need for other tools
 
-2. **For code generation**:
-   - Start with architect_agent() to plan structure
-   - Use coder_agent() to implement
-   - Use reviewer_agent() to check quality
-   - Fix issues with refiner_agent() if needed
-   - Complete with complete_task()
+2. **For information gathering**:
+   - Use read_file() to read files - DON'T ask humans!
+   - Use code_search() to find code - DON'T ask humans!
+   - Use web_search() for external info - DON'T ask humans!
+   - ask_human() is for STRATEGIC decisions, not information!
 
-3. **When uncertain**:
-   - Use ask_human() to clarify
-   - Better to ask than to guess wrong
-   - Provide context: why you're asking, what options you see
+3. **For code generation**:
+   - Use read_file() to understand existing code
+   - Use write_file() to create new code
+   - Use execute_python() or run_tests() to verify
+   - Use lint_code() to check quality
+   - Use git_commit() to save changes
+   - Use complete_task() when done
 
-4. **For critical operations**:
-   - Use security_auditor_agent() for sensitive code
-   - Use ask_human() for dangerous operations (delete, drop, production changes)
-   - Always confirm with user before irreversible actions
+4. **When to use ask_human()** (STRATEGIC DECISIONS ONLY):
+   - Multiple valid architectural approaches (REST vs GraphQL, JWT vs sessions)
+   - Dangerous operations (delete files, drop database, production changes)
+   - Important business decisions with significant impact
+   - Low confidence requiring human judgment
 
-5. **Efficiency**:
-   - Don't call unnecessary agents
-   - Skip review for trivial code changes
-   - Use judgment - balance thoroughness vs speed
+5. **When NOT to use ask_human()**:
+   - "What's in this file?" → Use read_file()!
+   - "What does this function do?" → Use read_file() + analyze!
+   - "Where is X defined?" → Use code_search()!
+   - "What's the API for Y?" → Use web_search()!
 
-## Your Workflow is Dynamic
+6. **Efficiency**:
+   - Combine tools creatively to accomplish tasks
+   - Think step by step: what info do I need? which tools provide it?
+   - Balance thoroughness vs speed
 
-You decide:
-- Which agents to call
-- In what order
+## Your Workflow is DYNAMIC and CREATIVE
+
+You freely decide:
+- Which tools to use
+- In what order and combination
 - How many iterations
-- When to ask humans
+- When to ask humans (rarely!)
 - When task is complete
 
-Think step by step and use tools wisely."""
+Think of yourself as an autonomous agent with a toolbox.
+For each task, select the right tools and use them effectively."""
 
     async def _execute_tool(
         self,
@@ -1190,40 +1243,85 @@ Think step by step and use tools wisely."""
         arguments: Dict[str, Any],
         context: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Execute a tool (agent) call
+        """Execute a concrete action tool
 
         Args:
-            tool_name: Name of the tool/agent to call
+            tool_name: Name of the tool to call (e.g., 'read_file', 'execute_python')
             arguments: Tool arguments
-            context: Optional context
+            context: Optional context (workspace path, etc.)
 
         Returns:
             Tool execution result
         """
-        logger.info(f"🔧 Executing tool: {tool_name}")
+        logger.info(f"🔧 Executing tool: {tool_name}({list(arguments.keys())})")
 
-        # Special case: ask_human (HITL)
+        # Special case: ask_human (strategic decision HITL)
         if tool_name == "ask_human":
             return await self._handle_ask_human(arguments, context)
 
-        # Special case: complete_task
+        # Special case: complete_task (workflow termination)
         if tool_name == "complete_task":
             return {
                 "success": True,
                 "summary": arguments.get("summary", ""),
                 "response": arguments.get("response", ""),
-                "files_created": arguments.get("files_created", [])
+                "files_modified": arguments.get("files_modified", []),
+                "next_steps": arguments.get("next_steps", [])
             }
 
-        # Agent tools - delegate to actual agents
-        # TODO: Implement agent execution
-        # For now, return placeholder
-        return {
-            "success": True,
-            "agent": tool_name,
-            "message": f"Agent {tool_name} executed (placeholder)",
-            "arguments": arguments
-        }
+        # Execute concrete action tool from ToolRegistry
+        try:
+            from backend.app.tools.registry import get_registry
+
+            registry = get_registry()
+            tool = registry.get_tool(tool_name, check_availability=True)
+
+            if not tool:
+                error_msg = f"Tool '{tool_name}' not found or unavailable in current network mode"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "tool": tool_name
+                }
+
+            # Validate parameters
+            if not tool.validate_params(**arguments):
+                error_msg = f"Invalid parameters for tool '{tool_name}'"
+                logger.error(f"❌ {error_msg}")
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "tool": tool_name,
+                    "arguments": arguments
+                }
+
+            # Execute tool
+            logger.info(f"   → Executing {tool_name} from category: {tool.category.value}")
+            result = await tool.execute(**arguments)
+
+            # Convert ToolResult to dict
+            result_dict = result.to_dict()
+            result_dict["tool"] = tool_name
+            result_dict["category"] = tool.category.value
+
+            # Log result
+            if result.success:
+                logger.info(f"   ✅ {tool_name} succeeded (took {result.execution_time:.2f}s)")
+            else:
+                logger.warning(f"   ⚠️ {tool_name} failed: {result.error}")
+
+            return result_dict
+
+        except Exception as e:
+            error_msg = f"Tool execution error: {str(e)}"
+            logger.error(f"❌ {error_msg}", exc_info=True)
+            return {
+                "success": False,
+                "error": error_msg,
+                "tool": tool_name,
+                "arguments": arguments
+            }
 
     async def _handle_ask_human(
         self,
