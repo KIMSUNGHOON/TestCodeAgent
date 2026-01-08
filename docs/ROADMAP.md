@@ -474,6 +474,7 @@ Session B:                    [Planning@GPU0] → [Coding@GPU1]
 - [Agent Tools](./AGENT_TOOLS_PHASE2_README.md) - Tool documentation
 - [CLI Guide](./CLI_README.md) - CLI usage
 - [Main README](../README.md) - Project overview
+- [Session Handoff](./SESSION_HANDOFF.md) - Session continuity document
 
 ---
 
