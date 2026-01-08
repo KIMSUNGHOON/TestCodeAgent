@@ -1488,6 +1488,290 @@ except Exception as e:
 | 7 | `ANALYSIS_REPORT_02_CODE_SYSTEM.md` | 코드/시스템 분석 리포트 (NEW) |
 | 8 | `ANALYSIS_REPORT_03_OPTIMIZATION.md` | 최적화 결과 리포트 (NEW) |
 
+**Commit**: `ed8ebb3 - refactor: Code optimization and cleanup based on analysis reports`
+
+---
+
+### 50. Phase 3 RAG 시스템 구현 및 CLI 마이그레이션 계획 (2026-01-08)
+- **작업**: Vector DB 설정, claude-code repository 임베딩, CLI 변환 계획 수립
+- **목적**: RAG 기반 컨텍스트 검색 및 CLI 도구로의 전환 준비
+
+#### 1. Vector Database 구현 (ChromaDB)
+
+**파일**: `backend/app/utils/repository_embedder.py` (NEW)
+
+**주요 기능**:
+- `RepositoryEmbedder` 클래스
+- 파일 청킹 (max 1000자, overlap 200자)
+- ChromaDB 통합
+- 의미적 검색 (semantic search)
+- 파일 타입/레포지토리 필터링
+
+**구현 상세**:
+```python
+class RepositoryEmbedder:
+    def embed_repository(self, repo_path, repo_name, max_files=None):
+        """Embed entire repository into vector database"""
+        # 1. Walk through files
+        # 2. Filter out binary/non-text files
+        # 3. Chunk text content
+        # 4. Create embeddings (automatic via ChromaDB)
+        # 5. Store in collection
+
+    def search(self, query, n_results=5, repo_filter=None, file_type_filter=None):
+        """Search for relevant code chunks"""
+        # Semantic similarity search
+```
+
+**특징**:
+- Skip patterns: `node_modules`, `.git`, `__pycache__`, binary files
+- File type detection: Python, TypeScript, Markdown, etc.
+- Batch processing: 100 chunks per batch
+- Metadata: repo, file_path, file_type, chunk_index
+
+#### 2. claude-code Repository 임베딩
+
+**파일**: `backend/scripts/embed_claude_code.py` (NEW)
+
+**실행 결과**:
+```
+📊 Statistics:
+   - Files processed: 133
+   - Chunks created: 1,205
+   - Files skipped: 5
+   - Total characters: 881,762
+```
+
+**임베딩 된 내용**:
+- anthropics/claude-code repository
+- Plugins: feature-dev, code-review, hookify 등
+- Documentation: README, plugin guides
+- Commands, Agents, Skills 정의
+
+**검색 테스트**:
+```
+Query: 'How do plugins work?'
+[1] plugins/plugin-dev/README.md
+[2] plugins/plugin-dev/skills/plugin-structure/...
+[3] plugins/plugin-dev/skills/plugin-structure/README.md
+
+Query: 'Agent implementation'
+[1] plugins/plugin-dev/skills/agent-development/SKILL.md
+[2] plugins/plugin-dev/agents/agent-creator.md
+...
+```
+
+#### 3. RAG 검색 도구
+
+**파일**: `backend/scripts/query_claude_code.py` (NEW)
+
+**사용법**:
+```bash
+python backend/scripts/query_claude_code.py "How do CLI tools work?"
+python backend/scripts/query_claude_code.py "What is the plugin architecture?"
+```
+
+**기능**:
+- Vector DB 쿼리
+- 결과 포맷팅 (파일 경로, 청크 정보, 거리 점수)
+- 컨텍스트 표시
+
+#### 4. CLI 마이그레이션 계획
+
+**파일**: `docs/CLI_MIGRATION_PLAN.md` (NEW, 540+ lines)
+
+**주요 섹션**:
+
+##### 현재 상태 분석
+```
+TestCodeAgent (웹 기반)
+├── FastAPI backend
+├── React frontend
+└── LangGraph agent system ✅
+```
+
+**장점**:
+- ✅ 완성된 agent 시스템
+- ✅ Phase 2 Context Management
+- ✅ 파일 생성/수정/삭제
+
+**단점**:
+- ❌ 웹 서버 실행 필요
+- ❌ 터미널에서 직접 사용 불가
+
+##### 목표 아키텍처 (CLI)
+```
+testcodeagent (CLI 도구)
+├── bin/testcodeagent         # 실행 파일
+├── cli/
+│   ├── __main__.py           # Entry point
+│   ├── terminal_ui.py        # Rich/Textual TUI
+│   ├── session_manager.py    # 세션 관리
+│   └── command_parser.py     # 명령어 파싱
+└── agent/                     # 기존 재사용 ✅
+```
+
+**사용 예시**:
+```bash
+# 설치
+pip install testcodeagent
+
+# 사용
+cd /my-project
+testcodeagent
+
+# 또는 one-shot
+testcodeagent "Create a FastAPI hello world app"
+```
+
+##### 4-Phase 구현 계획
+
+**Phase 1**: CLI 기본 구조 (1-2일)
+- Entry point, argparse
+- Session manager
+- 기본 REPL
+- Agent 연동
+
+**Phase 2**: 스트리밍 UI (2-3일)
+- Rich Progress bars
+- Markdown rendering
+- Syntax highlighting
+- Artifact 표시
+
+**Phase 3**: 고급 기능 (3-4일)
+- Slash commands (/help, /status, /history)
+- 설정 시스템
+- 세션 저장/복원
+- 파일 미리보기
+
+**Phase 4**: 패키징/배포 (1-2일)
+- setup.py/pyproject.toml
+- 설치 스크립트 (Linux/MacOS/Windows)
+- 문서 작성
+- CI/CD (선택)
+
+##### 기술 스택
+```
+rich>=13.0.0           # Terminal UI
+click>=8.0.0           # CLI framework
+prompt-toolkit>=3.0.0  # Advanced input
+chromadb>=0.4.0        # Vector DB (Phase 3)
+```
+
+##### UI/UX 디자인
+```python
+COLORS = {
+    "user": "bold cyan",
+    "ai": "bold green",
+    "supervisor": "blue",
+    "coder": "yellow",
+    "created": "green",
+    "modified": "yellow",
+    "deleted": "red",
+}
+```
+
+#### 5. 구현 Todos
+
+**파일**: `docs/CLI_IMPLEMENTATION_TODOS.md` (NEW, 800+ lines)
+
+**총 61개 Task**:
+- Phase 1: 12 tasks (CLI 기본 구조)
+- Phase 2: 9 tasks (스트리밍 UI)
+- Phase 3: 20 tasks (고급 기능)
+- Phase 4: 13 tasks (패키징/배포)
+- Phase 5: 7 tasks (선택적 고급 기능)
+
+**주요 Todo 예시**:
+- T1.1.1: `backend/cli/` 디렉토리 생성
+- T1.1.2: `cli/__main__.py` 작성
+- T1.2.1: `SessionManager` 클래스 구현
+- T1.3.1: `TerminalUI` 클래스 구현
+- T2.1.1: Rich Progress 통합
+- T2.2.1: Markdown 렌더링
+- T3.1.2: `/help` 명령어 구현
+- T3.2.1: `.testcodeagent/settings.json` 지원
+- T4.1.1: `setup.py` 완성
+
+#### 6. 마이그레이션 전략
+
+##### 병행 운영
+```
+backend/
+├── app/
+│   ├── agent/          # ✅ CLI와 웹 모두 사용
+│   ├── core/           # ✅ CLI와 웹 모두 사용
+│   ├── utils/          # ✅ CLI와 웹 모두 사용
+│   ├── api/            # ⚠️  웹 전용
+│   └── cli/            # 🆕 CLI 전용
+frontend/               # ⚠️  웹 전용
+```
+
+##### 점진적 전환
+1. Phase 1-2: CLI 기본 기능 (웹과 병행)
+2. Phase 3: CLI 고급 기능 (사용자 피드백)
+3. Phase 4: 안정화 및 배포
+4. (선택) Phase 5: 웹 버전 deprecate 또는 유지
+
+## 예상 효과
+
+### RAG 시스템
+- ✅ claude-code 베스트 프랙티스 즉시 검색
+- ✅ Plugin 아키텍처 참고
+- ✅ Agent 구현 패턴 학습
+- ✅ 향후 다른 레포지토리도 임베딩 가능
+
+### CLI 변환
+- ✅ 터미널에서 직접 사용 가능
+- ✅ 설치 간편 (`pip install`)
+- ✅ 프로젝트 디렉토리에서 즉시 실행
+- ✅ 웹 서버 불필요
+- ✅ 기존 agent 시스템 100% 재사용
+
+### 통합 효과 (RAG + CLI)
+- claude-code 방식을 CLI에 적용
+- Vector DB로 컨텍스트 보강 (Phase 3 완성)
+- Plugin 시스템 참고 (향후)
+
+## 수정 파일 목록 (Issue 50)
+
+| 순서 | 파일 | 변경 내용 |
+|-----|------|---------|
+| 1 | `backend/app/utils/repository_embedder.py` | RepositoryEmbedder 클래스 (NEW) |
+| 2 | `backend/scripts/embed_claude_code.py` | 임베딩 스크립트 (NEW) |
+| 3 | `backend/scripts/query_claude_code.py` | 검색 도구 (NEW) |
+| 4 | `docs/CLI_MIGRATION_PLAN.md` | CLI 마이그레이션 계획 (NEW, 540+ lines) |
+| 5 | `docs/CLI_IMPLEMENTATION_TODOS.md` | 구현 Todos (NEW, 800+ lines, 61 tasks) |
+
+**Commit**: `d67f6b2 (rebased to e2861ac) - feat: Phase 3 RAG implementation and CLI migration planning`
+
+**Dependencies Added**:
+- `chromadb>=0.4.0` - Vector database
+- (Upcoming) `rich>=13.0.0` - Terminal UI
+- (Upcoming) `click>=8.0.0` - CLI framework
+
+---
+
+## 2026-01-08 작업 완료 요약
+
+### 완료된 Issue
+- ✅ Issue 50: Phase 3 RAG 시스템 구현 및 CLI 마이그레이션 계획
+
+### 주요 성과
+- **RAG 시스템**: ChromaDB 기반 Vector DB 구축, claude-code 임베딩 완료
+- **CLI 계획**: 상세한 4-Phase 마이그레이션 계획 및 61개 구현 Task 정의
+- **문서화**: 1,300+ lines의 종합 계획 문서
+
+### Git 상태
+- **Branch**: `claude/plan-hitl-pause-resume-CHQCU`
+- **최신 Commit**: `e2861ac`
+- **Push 상태**: ✅ All pushed to remote
+
+### 다음 단계
+1. CLI Phase 1 구현 시작 (사용자 승인 시)
+2. 웹 버전과 CLI 병행 운영
+3. 점진적 CLI 전환
+
 ## 분석 주요 발견사항
 
 ### 강점
@@ -1640,3 +1924,255 @@ TestCodeAgent에 완전한 RAG (Retrieval-Augmented Generation) 시스템을 구
 
 - `RAG_IMPLEMENTATION_PLAN.md`: 전체 RAG 구현 계획 및 진행 상황
 - `docs/day-07-phase2-context-improvement.md`: Phase 2 Context 개선 문서
+
+---
+
+## Issue 51: CLI Phase 1 구현 완료 (2026-01-08)
+
+### 개요
+TestCodeAgent에 Command-Line Interface (CLI)를 추가했습니다. Phase 1 기본 구조가 완성되어 터미널에서 대화형 모드로 사용할 수 있습니다.
+
+### 완료된 작업
+
+#### 1. CLI 기본 구조
+- **Entry Point**: `backend/cli/__main__.py`
+  - argparse 기반 명령어 파싱
+  - Interactive REPL 모드
+  - One-shot 실행 모드
+  - 명령줄 옵션: `--workspace`, `--session-id`, `--model`, `--debug`, `--no-save`
+
+#### 2. SessionManager (`backend/cli/session_manager.py`)
+- 세션 ID 자동 생성 (format: `session-YYYYMMDD-HHMMSS`)
+- 대화 히스토리 관리 및 자동 저장
+- 세션 저장/복원 기능 (`.testcodeagent/sessions/`)
+- DynamicWorkflowManager 통합
+- 비동기 스트리밍 워크플로우 실행
+
+**주요 메서드**:
+```python
+- execute_streaming_workflow() # 비동기 스트리밍 실행
+- save_session() / _load_session() # 세션 영속성
+- get_history_summary() # 히스토리 통계
+- get_context_info() # ContextManager 통합
+- list_sessions() # 저장된 세션 목록
+```
+
+#### 3. TerminalUI (`backend/cli/terminal_ui.py`)
+- Rich Console 기반 터미널 UI
+- REPL 루프 (Read-Eval-Print Loop)
+- 스트리밍 progress 표시 (Progress bar, Spinner)
+- Markdown 렌더링 (AI 응답)
+- Artifact 표시 (생성/수정/삭제된 파일)
+
+**Slash Commands 구현**:
+- `/help` - 도움말 표시
+- `/status` - 세션 상태 조회
+- `/history` - 대화 히스토리 표시
+- `/context` - 컨텍스트 정보 (파일, 에러, 결정사항)
+- `/files` - 생성된 파일 목록
+- `/sessions` - 저장된 세션 목록
+- `/clear` - 화면 지우기
+- `/exit`, `/quit` - 종료
+
+#### 4. 패키지 설정
+- **setup.py**: CLI entry point 정의
+  - `console_scripts`: `testcodeagent` 명령어
+  - CLI 전용 의존성: `rich>=13.0.0`, `click>=8.0.0`, `prompt-toolkit>=3.0.0`
+- **bin/testcodeagent**: 실행 스크립트 (chmod +x)
+
+### 사용법
+
+```bash
+# Interactive 모드
+cd backend
+python -m cli
+
+# 또는 설치 후
+testcodeagent
+
+# One-shot 모드
+testcodeagent "Create a Python calculator"
+
+# 옵션 사용
+testcodeagent -w ./my-project -m qwen2.5-coder:32b
+
+# 세션 복원
+testcodeagent -s session-20260108-123456
+```
+
+### 테스트 결과
+
+**테스트 파일**: `backend/cli/test_cli_basic.py`
+
+```
+✅ All basic tests passed!
+
+Testing SessionManager...
+✓ Session created
+✓ Workspace and model configuration
+✓ Messages added to history
+✓ History summary generation
+✓ Context info extraction
+
+Testing TerminalUI...
+✓ TerminalUI created
+✓ Console initialized
+✓ /help command works
+✓ /status command works
+✓ /history command works
+✓ /context command works
+✓ /sessions command works
+
+Testing session persistence...
+✓ Session saved to file
+✓ Session loaded successfully
+✓ Test session cleaned up
+```
+
+### 아키텍처
+
+```
+TestCodeAgent/
+├── backend/
+│   ├── cli/                     # 🆕 CLI 모듈
+│   │   ├── __init__.py
+│   │   ├── __main__.py         # Entry point (argparse)
+│   │   ├── session_manager.py  # 세션 관리 + 워크플로우 통합
+│   │   ├── terminal_ui.py      # Rich 기반 터미널 UI
+│   │   └── test_cli_basic.py   # 테스트
+│   ├── app/
+│   │   ├── agent/              # ✅ 재사용 - LangGraph agents
+│   │   ├── core/               # ✅ 재사용 - Supervisor
+│   │   └── utils/              # ✅ 재사용 - ContextManager
+├── bin/
+│   └── testcodeagent           # 🆕 실행 스크립트
+├── setup.py                     # 🆕 패키지 설정
+└── docs/
+    ├── CLI_README.md           # 🆕 CLI 사용 가이드
+    ├── CLI_MIGRATION_PLAN.md   # CLI 마이그레이션 계획
+    └── CLI_IMPLEMENTATION_TODOS.md  # 구현 Todos
+```
+
+### 통합 전략
+
+**기존 Backend 재사용**:
+- ✅ `DynamicWorkflowManager` - 워크플로우 실행
+- ✅ `ContextManager` - 컨텍스트 추출
+- ✅ 모든 LangGraph agents (Coder, Reviewer, Refiner 등)
+- ✅ Supervisor, UnifiedAgentManager
+
+**신규 CLI 전용 코드**:
+- 🆕 SessionManager (CLI 세션 관리)
+- 🆕 TerminalUI (Rich 콘솔)
+- 🆕 Slash command handlers
+
+### 수정된 파일 목록
+
+| # | 파일 | 설명 |
+|---|------|------|
+| 1 | `backend/cli/__init__.py` | CLI 모듈 초기화 (NEW) |
+| 2 | `backend/cli/__main__.py` | CLI entry point, argparse (NEW, 145 lines) |
+| 3 | `backend/cli/session_manager.py` | 세션 관리 클래스 (NEW, 234 lines) |
+| 4 | `backend/cli/terminal_ui.py` | Rich 기반 터미널 UI (NEW, 372 lines) |
+| 5 | `backend/cli/test_cli_basic.py` | 기본 테스트 (NEW, 160 lines) |
+| 6 | `bin/testcodeagent` | 실행 스크립트 (NEW, 18 lines) |
+| 7 | `setup.py` | 패키지 설정 (NEW, 80 lines) |
+| 8 | `docs/CLI_README.md` | CLI 사용 가이드 (NEW, 380+ lines) |
+
+**총 신규 코드**: ~1,389 lines
+
+### Rich Console 출력 예시
+
+```
+╭─────────────────────────────── Session Status ───────────────────────────────╮
+│  Session ID      session-20260108-123456                                     │
+│  Workspace       /home/user/my-project                                       │
+│  Model           deepseek-r1:14b                                             │
+│  Total Messages  4                                                           │
+│  User Messages   2                                                           │
+│  AI Messages     2                                                           │
+│  Created         2026-01-08T12:34:56                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+📁 Files:
+┌────────────┬──────────────────┬───────┐
+│ Action     │ File Path        │ Lines │
+├────────────┼──────────────────┼───────┤
+│ CREATED    │ calculator.py    │ 45    │
+│ MODIFIED   │ utils.py         │ 120   │
+└────────────┴──────────────────┴───────┘
+```
+
+### 특징
+
+1. **Interactive REPL**: 대화형 프롬프트로 자연스러운 상호작용
+2. **Session Persistence**: 자동 저장 및 복원
+3. **Rich UI**: Markdown, Syntax highlighting, Progress bars
+4. **Streaming Progress**: 실시간 agent 진행 상황 표시
+5. **Context Integration**: ContextManager 활용 (파일, 에러, 결정사항 추적)
+6. **Slash Commands**: 8개 명령어로 세션 관리
+7. **One-shot Mode**: 단일 명령 실행 후 종료
+8. **Cross-platform**: Linux/MacOS/Windows 지원
+
+### CLI 모드 vs 웹 모드 비교
+
+| 기능 | 웹 모드 (FastAPI + React) | CLI 모드 |
+|------|---------------------------|----------|
+| 인터페이스 | 브라우저 | 터미널 |
+| 세션 관리 | Redis | JSON 파일 |
+| 진행 표시 | WebSocket 스트리밍 | Rich Progress |
+| 코드 렌더링 | React Syntax Highlighter | Rich Syntax |
+| 워크플로우 | DynamicWorkflowManager | ✅ 동일 |
+| Agent 시스템 | UnifiedAgentManager | ✅ 동일 |
+| 배포 | 서버 필요 | 로컬 실행 |
+| 사용성 | GUI | 키보드 중심 |
+
+### 다음 단계 (Phase 2)
+
+다음 구현 예정 (CLI_IMPLEMENTATION_TODOS.md 참조):
+
+- **Phase 2-A**: Enhanced progress indicators (agent별 메시지)
+- **Phase 2-B**: Real-time streaming content (Live display)
+- **Phase 2-C**: Artifact 파일 미리보기
+- **Phase 2-D**: Code diff 표시 (수정된 파일)
+
+### 성공 지표
+
+| 항목 | 목표 | 달성 |
+|------|------|------|
+| CLI Entry Point | argparse 기반 | ✅ 완료 |
+| Session Management | 저장/복원 | ✅ 완료 |
+| Terminal UI | Rich console | ✅ 완료 |
+| Slash Commands | 기본 명령어 | ✅ 8개 구현 |
+| Workflow Integration | DynamicWorkflowManager | ✅ 통합 |
+| Basic Tests | 기능 테스트 | ✅ 모두 통과 |
+| Documentation | README | ✅ 380+ lines |
+
+### 참고 문서
+
+- `docs/CLI_README.md` - CLI 사용 가이드 및 예제
+- `docs/CLI_MIGRATION_PLAN.md` - 전체 마이그레이션 계획 (4 Phases)
+- `docs/CLI_IMPLEMENTATION_TODOS.md` - 상세 구현 Tasks (61개)
+
+---
+
+## 2026-01-08 작업 완료 요약 (업데이트)
+
+### 완료된 Issues
+- ✅ Issue 50: Phase 3 RAG 시스템 구현 및 CLI 마이그레이션 계획
+- ✅ Issue 51: CLI Phase 1 기본 구조 구현
+
+### 주요 성과
+- **RAG 시스템**: ChromaDB 기반 Vector DB, claude-code 임베딩 (133 files, 1,205 chunks)
+- **CLI Phase 1**: Interactive REPL, Session management, Rich UI, Slash commands
+- **문서화**: CLI_README (380+ lines), 총 1,700+ lines 문서
+
+### Git 상태
+- **Branch**: `claude/plan-hitl-pause-resume-CHQCU`
+- **다음 Commit**: CLI Phase 1 implementation
+- **Push 상태**: Ready to commit
+
+### 다음 단계
+1. Git commit & push (CLI Phase 1)
+2. CLI Phase 2 구현 (Streaming UI 개선)
+3. 점진적 CLI 전환
