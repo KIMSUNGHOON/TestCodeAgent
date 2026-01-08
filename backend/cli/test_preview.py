@@ -34,7 +34,7 @@ def test_preview():
 
     # Create session manager and UI
     session_mgr = SessionManager(
-        workspace="/home/user/TestCodeAgent",
+        workspace="/home/user/agentic-coder",
         auto_save=False
     )
 

@@ -278,4 +278,4 @@ git commit -m "refactor: Code cleanup and optimization
 
 **Report Complete**
 
-*This report documents the optimization and refactoring work performed on the TestCodeAgent project.*
+*This report documents the optimization and refactoring work performed on the Agentic Coder project.*

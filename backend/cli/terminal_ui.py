@@ -1,4 +1,4 @@
-"""Terminal UI for TestCodeAgent CLI
+"""Terminal UI for Agentic Coder CLI
 
 Rich-based terminal interface providing:
 - Interactive REPL mode with command history and auto-completion
@@ -116,7 +116,7 @@ class TerminalUI:
         """
         self.console.print(Panel(
             f"[cyan]Executing:[/cyan] {prompt}",
-            title="TestCodeAgent - One-shot Mode",
+            title="Agentic Coder - One-shot Mode",
             border_style="cyan"
         ))
 
@@ -639,12 +639,12 @@ class TerminalUI:
         self.console.print("\n[cyan]Saving session...[/cyan]")
         self.session_mgr.save_session()
         self.console.print("[green]✓[/green] Session saved")
-        self.console.print("\n[bold cyan]Thank you for using TestCodeAgent![/bold cyan]")
+        self.console.print("\n[bold cyan]Thank you for using Agentic Coder![/bold cyan]")
 
     def _show_welcome(self):
         """Show welcome message"""
         welcome_text = f"""
-[bold cyan]TestCodeAgent CLI[/bold cyan] - Interactive AI Coding Assistant
+[bold cyan]Agentic Coder CLI[/bold cyan] - Interactive AI Coding Assistant
 
 [dim]Session ID:[/dim] {self.session_mgr.session_id}
 [dim]Workspace:[/dim] {self.session_mgr.workspace}

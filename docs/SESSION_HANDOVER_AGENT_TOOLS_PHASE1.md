@@ -630,7 +630,7 @@ class WebSearchTool(BaseTool):
 
 ## 12. 연락처 및 지원
 
-- **GitHub**: KIMSUNGHOON/TestCodeAgent
+- **GitHub**: KIMSUNGHOON/Agentic Coder
 - **Branch**: `claude/plan-hitl-pause-resume-CHQCU`
 - **Issues**: Issue 54 (Agent Tools Phase 1) - ✅ Completed
 - **Next Issue**: Issue 55 (Network Mode - Phase 2) - 📝 Planned

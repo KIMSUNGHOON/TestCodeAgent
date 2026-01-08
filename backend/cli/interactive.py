@@ -1,4 +1,4 @@
-"""Enhanced Interactive Mode for TestCodeAgent CLI
+"""Enhanced Interactive Mode for Agentic Coder CLI
 
 Features:
 - Command history with persistence
@@ -275,7 +275,7 @@ class InteractiveSession:
         self.enable_completion = enable_completion
 
         # Setup history
-        self.history_file = history_file or (Path.home() / ".testcodeagent" / "history")
+        self.history_file = history_file or (Path.home() / ".agentic-coder" / "history")
         self.history_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Check if prompt_toolkit is available

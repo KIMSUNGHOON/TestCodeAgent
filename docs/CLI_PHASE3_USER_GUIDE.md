@@ -49,14 +49,14 @@ Your command history is now saved and persists across sessions.
 
 **History File Location**:
 ```
-~/.testcodeagent/history
+~/.agentic-coder/history
 ```
 
 **Configuration**:
 ```yaml
-# ~/.testcodeagent/config.yaml
+# ~/.agentic-coder/config.yaml
 history:
-  file: ~/.testcodeagent/history
+  file: ~/.agentic-coder/history
   max_lines: 10000
   save: true
 ```
@@ -95,16 +95,16 @@ Manage settings via YAML configuration files.
 
 **Configuration Hierarchy** (highest to lowest priority):
 1. Environment variables
-2. Project config (`.testcodeagent/config.yaml`)
-3. User config (`~/.testcodeagent/config.yaml`)
+2. Project config (`.agentic-coder/config.yaml`)
+3. User config (`~/.agentic-coder/config.yaml`)
 4. Default values
 
 #### Create Default Config
 
 ```bash
 # In CLI
-/config init        # Creates ~/.testcodeagent/config.yaml
-/config init project  # Creates .testcodeagent/config.yaml
+/config init        # Creates ~/.agentic-coder/config.yaml
+/config init project  # Creates .agentic-coder/config.yaml
 ```
 
 #### View Configuration
@@ -127,7 +127,7 @@ Manage settings via YAML configuration files.
 #### Configuration File Format
 
 ```yaml
-# ~/.testcodeagent/config.yaml
+# ~/.agentic-coder/config.yaml
 llm:
   model: deepseek-r1:14b
   api_endpoint: http://localhost:8001/v1
@@ -141,13 +141,13 @@ ui:
   word_wrap: false
 
 history:
-  file: ~/.testcodeagent/history
+  file: ~/.agentic-coder/history
   max_lines: 10000
   save: true
 
 session:
   auto_save: true
-  dir: .testcodeagent/sessions
+  dir: .agentic-coder/sessions
 
 workspace:
   default: "."
@@ -214,7 +214,7 @@ debug:
 
 **Output Example**:
 ```
-Current Workspace: /home/user/TestCodeAgent
+Current Workspace: /home/user/Agentic Coder
 Files: 234, Directories: 45
 
 To change: /workspace <path>
@@ -361,7 +361,7 @@ Press `Ctrl+R` and type to search:
 
 ### 5. Project-Specific Config
 
-Create `.testcodeagent/config.yaml` in your project:
+Create `.agentic-coder/config.yaml` in your project:
 ```yaml
 llm:
   model: qwen2.5-coder:32b  # Override for this project
@@ -386,13 +386,13 @@ workspace:
 
 2. Check permissions:
 ```bash
-ls -la ~/.testcodeagent/
+ls -la ~/.agentic-coder/
 # Should be writable
 ```
 
 3. Check file:
 ```bash
-cat ~/.testcodeagent/history
+cat ~/.agentic-coder/history
 ```
 
 ### Auto-Completion Not Working
@@ -411,7 +411,7 @@ pip install --upgrade prompt_toolkit
 
 1. Check syntax:
 ```bash
-python -c "import yaml; yaml.safe_load(open('~/.testcodeagent/config.yaml'))"
+python -c "import yaml; yaml.safe_load(open('~/.agentic-coder/config.yaml'))"
 ```
 
 2. Check path:

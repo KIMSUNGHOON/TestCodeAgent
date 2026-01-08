@@ -1,6 +1,6 @@
-# TestCodeAgent CLI
+# Agentic Coder CLI
 
-Interactive command-line interface for TestCodeAgent - an AI-powered coding assistant.
+Interactive command-line interface for Agentic Coder - an AI-powered coding assistant.
 
 ## 🚀 Quick Start
 
@@ -8,8 +8,8 @@ Interactive command-line interface for TestCodeAgent - an AI-powered coding assi
 
 ```bash
 # Clone the repository
-git clone https://github.com/KIMSUNGHOON/TestCodeAgent.git
-cd TestCodeAgent
+git clone https://github.com/KIMSUNGHOON/Agentic Coder.git
+cd Agentic Coder
 
 # Install in development mode
 pip install -e .
@@ -22,22 +22,22 @@ pip install .
 
 ```bash
 # Start interactive mode
-testcodeagent
+agentic-coder
 
 # Or from the repository
 python -m cli
 
 # One-shot mode (single command)
-testcodeagent "Create a Python calculator"
+agentic-coder "Create a Python calculator"
 
 # Specify workspace
-testcodeagent -w ./my-project
+agentic-coder -w ./my-project
 
 # Resume previous session
-testcodeagent -s session-20260108-123456
+agentic-coder -s session-20260108-123456
 
 # Use different model
-testcodeagent -m qwen2.5-coder:32b
+agentic-coder -m qwen2.5-coder:32b
 ```
 
 ## 📖 Features
@@ -67,10 +67,10 @@ Use special commands in interactive mode:
 
 ### Session Management
 
-Sessions are automatically saved to `.testcodeagent/sessions/` in your workspace:
+Sessions are automatically saved to `.agentic-coder/sessions/` in your workspace:
 
 ```
-.testcodeagent/
+.agentic-coder/
 └── sessions/
     ├── session-20260108-123456.json
     └── session-20260108-134502.json
@@ -86,7 +86,7 @@ Each session contains:
 ### Example 1: Create a New Feature
 
 ```bash
-$ testcodeagent -w ./my-app
+$ agentic-coder -w ./my-app
 
 You: Create a Python function to calculate fibonacci numbers with memoization
 
@@ -107,7 +107,7 @@ Total Messages  2
 ### Example 2: Resume Previous Session
 
 ```bash
-$ testcodeagent -s session-20260108-123456 -w ./my-app
+$ agentic-coder -s session-20260108-123456 -w ./my-app
 
 Resuming session: session-20260108-123456
 
@@ -122,7 +122,7 @@ CREATED  test_fibonacci.py  45 lines
 ### Example 3: One-Shot Mode
 
 ```bash
-$ testcodeagent "Add type hints to all functions in utils.py"
+$ agentic-coder "Add type hints to all functions in utils.py"
 
 Executing: Add type hints to all functions in utils.py
 
@@ -135,7 +135,7 @@ MODIFIED  utils.py  120 lines
 ## 🛠️ Command Line Options
 
 ```
-usage: testcodeagent [-h] [-w WORKSPACE] [-s SESSION_ID] [-m MODEL]
+usage: agentic-coder [-h] [-w WORKSPACE] [-s SESSION_ID] [-m MODEL]
                      [--version] [--debug] [--no-save] [prompt ...]
 
 Options:
@@ -162,10 +162,10 @@ backend/cli/
 
 ### Integration with Existing System
 
-The CLI reuses the existing TestCodeAgent backend:
+The CLI reuses the existing Agentic Coder backend:
 
 ```
-TestCodeAgent/
+Agentic Coder/
 ├── backend/
 │   ├── app/
 │   │   ├── agent/           # ✅ Reused - LangGraph agents
@@ -173,7 +173,7 @@ TestCodeAgent/
 │   │   └── utils/           # ✅ Reused - ContextManager, RAG
 │   └── cli/                 # 🆕 New - CLI interface
 ├── bin/
-│   └── testcodeagent        # Executable script
+│   └── agentic-coder        # Executable script
 └── setup.py                 # Package configuration
 ```
 
@@ -293,7 +293,7 @@ async for update in workflow_mgr.execute_streaming_workflow(
 
 ```bash
 # Ensure backend is in Python path
-export PYTHONPATH=/path/to/TestCodeAgent/backend:$PYTHONPATH
+export PYTHONPATH=/path/to/Agentic Coder/backend:$PYTHONPATH
 
 # Or run from backend directory
 cd backend
@@ -304,11 +304,11 @@ python -m cli
 
 ```bash
 # List available sessions
-testcodeagent
+agentic-coder
 You: /sessions
 
 # Use exact session ID
-testcodeagent -s session-20260108-123456
+agentic-coder -s session-20260108-123456
 ```
 
 ### Rich Display Issues
@@ -319,7 +319,7 @@ echo $TERM
 
 # Try forcing color output
 export FORCE_COLOR=1
-testcodeagent
+agentic-coder
 ```
 
 ## 📚 Related Documentation
@@ -330,7 +330,7 @@ testcodeagent
 
 ## 📄 License
 
-Same as TestCodeAgent project (MIT License)
+Same as Agentic Coder project (MIT License)
 
 ---
 

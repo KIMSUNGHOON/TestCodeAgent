@@ -1,7 +1,7 @@
-# TestCodeAgent CLI Migration Plan
+# Agentic Coder CLI Migration Plan
 
 **작성일**: 2026-01-08
-**목적**: TestCodeAgent를 FastAPI 웹앱에서 Interactive CLI 도구로 변환
+**목적**: Agentic Coder를 FastAPI 웹앱에서 Interactive CLI 도구로 변환
 **참고**: anthropics/claude-code architecture
 
 ---
@@ -11,7 +11,7 @@
 ### 현재 아키텍처 (FastAPI + React)
 
 ```
-TestCodeAgent/
+Agentic Coder/
 ├── backend/                     # FastAPI 서버
 │   ├── app/
 │   │   ├── api/                # REST API 엔드포인트
@@ -50,9 +50,9 @@ TestCodeAgent/
 ### Claude Code 스타일 CLI
 
 ```
-testcodeagent                    # 글로벌 CLI 도구
+agentic-coder                    # 글로벌 CLI 도구
 ├── bin/
-│   └── testcodeagent           # 실행 파일 (entry point)
+│   └── agentic-coder           # 실행 파일 (entry point)
 ├── cli/
 │   ├── __main__.py             # CLI 진입점
 │   ├── terminal_ui.py          # Rich/Textual 기반 TUI
@@ -70,14 +70,14 @@ testcodeagent                    # 글로벌 CLI 도구
 **설치 및 사용**:
 ```bash
 # 설치
-pip install testcodeagent
+pip install agentic-coder
 
 # 사용
 cd /path/to/my-project
-testcodeagent
+agentic-coder
 
 # 또는
-testcodeagent "Create a FastAPI hello world app"
+agentic-coder "Create a FastAPI hello world app"
 ```
 
 ---
@@ -90,7 +90,7 @@ testcodeagent "Create a FastAPI hello world app"
 
 ```python
 #!/usr/bin/env python3
-"""TestCodeAgent CLI Entry Point"""
+"""Agentic Coder CLI Entry Point"""
 
 import sys
 import argparse
@@ -99,7 +99,7 @@ from cli.session_manager import SessionManager
 
 def main():
     parser = argparse.ArgumentParser(
-        description="TestCodeAgent - AI-powered coding assistant"
+        description="Agentic Coder - AI-powered coding assistant"
     )
     parser.add_argument(
         "prompt",
@@ -171,9 +171,9 @@ class TerminalUI:
     def start_interactive(self):
         """Start interactive REPL mode"""
         self.console.print(Panel(
-            "[bold green]TestCodeAgent Interactive Mode[/bold green]\n"
+            "[bold green]Agentic Coder Interactive Mode[/bold green]\n"
             "Type your request or /help for commands",
-            title="🤖 TestCodeAgent"
+            title="🤖 Agentic Coder"
         ))
 
         while True:
@@ -268,7 +268,7 @@ class TerminalUI:
 - `/help` - Show this help message
 - `/status` - Show current session status
 - `/clear` - Clear screen
-- `/exit` - Exit TestCodeAgent
+- `/exit` - Exit Agentic Coder
 
 ## Usage Examples
 
@@ -342,7 +342,7 @@ class SessionManager:
 #### Todo List
 - [ ] 1.1. 프로젝트 구조 생성
   - [ ] `cli/` 디렉토리 생성
-  - [ ] `bin/testcodeagent` 실행 스크립트 생성
+  - [ ] `bin/agentic-coder` 실행 스크립트 생성
   - [ ] `setup.py` 또는 `pyproject.toml` 작성
 
 - [ ] 1.2. CLI Entry Point 구현
@@ -367,8 +367,8 @@ class SessionManager:
 
 #### 완료 조건
 ```bash
-$ testcodeagent
-🤖 TestCodeAgent Interactive Mode
+$ agentic-coder
+🤖 Agentic Coder Interactive Mode
 You: Hello
 AI: Hello! How can I help you today?
 ```
@@ -425,7 +425,7 @@ You: Create a Python calculator
   - [ ] `/files` - 생성된 파일 목록
 
 - [ ] 3.2. 설정 시스템
-  - [ ] `.testcodeagent/settings.json` 지원
+  - [ ] `.agentic-coder/settings.json` 지원
   - [ ] 모델 설정 (Qwen, DeepSeek, GPT-OSS)
   - [ ] workspace 기본 경로
   - [ ] 커스텀 프롬프트
@@ -442,7 +442,7 @@ You: Create a Python calculator
 
 #### 완료 조건
 ```bash
-$ testcodeagent --session-id session-123 --model qwen-coder
+$ agentic-coder --session-id session-123 --model qwen-coder
 
 🤖 Resuming session-123
 
@@ -489,14 +489,14 @@ You: /context
 #### 완료 조건
 ```bash
 # 설치
-$ pip install testcodeagent
+$ pip install agentic-coder
 
 # 사용
-$ testcodeagent --version
-TestCodeAgent v1.0.0
+$ agentic-coder --version
+Agentic Coder v1.0.0
 
-$ testcodeagent --help
-usage: testcodeagent [-h] [--workspace WORKSPACE] [--session-id SESSION_ID] ...
+$ agentic-coder --help
+usage: agentic-coder [-h] [--workspace WORKSPACE] [--session-id SESSION_ID] ...
 ```
 
 ---
@@ -550,7 +550,7 @@ COLORS = {
 ║      ██║   ███████╗███████║   ██║         ║
 ║      ╚═╝   ╚══════╝╚══════╝   ╚═╝         ║
 ║                                            ║
-║   🤖 TestCodeAgent - AI Coding Assistant  ║
+║   🤖 Agentic Coder - AI Coding Assistant  ║
 ║                                            ║
 ╚════════════════════════════════════════════╝
 ```
@@ -616,8 +616,8 @@ python -m cli --workspace /path/to/project
 
 CLI 마이그레이션이 성공적이려면:
 
-1. **설치 간편성**: `pip install testcodeagent` 한 줄로 설치
-2. **사용 편의성**: `testcodeagent` 실행만으로 작동
+1. **설치 간편성**: `pip install agentic-coder` 한 줄로 설치
+2. **사용 편의성**: `agentic-coder` 실행만으로 작동
 3. **반응성**: 실시간 agent 진행 상황 확인
 4. **안정성**: 기존 agent 시스템의 모든 기능 유지
 5. **확장성**: 새로운 slash command 쉽게 추가 가능

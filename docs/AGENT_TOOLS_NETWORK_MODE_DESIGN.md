@@ -549,7 +549,7 @@ class TestNetworkModeIntegration:
 ```markdown
 ## Network Mode
 
-TestCodeAgent supports two network modes for different deployment environments:
+Agentic Coder supports two network modes for different deployment environments:
 
 ### Online Mode (Default)
 

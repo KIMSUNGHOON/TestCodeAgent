@@ -163,8 +163,8 @@ class DownloadFileTool(BaseTool):
 
 **기능**:
 - YAML 기반 설정 파일 지원
-- 사용자 설정: `~/.testcodeagent/config.yaml`
-- 프로젝트 설정: `.testcodeagent/config.yaml`
+- 사용자 설정: `~/.agentic-coder/config.yaml`
+- 프로젝트 설정: `.agentic-coder/config.yaml`
 - 환경변수 오버라이드
 
 ```python
@@ -175,7 +175,7 @@ class CLIConfig:
     api_endpoint: str = "http://localhost:8001/v1"
 
     # History Settings
-    history_file: str = "~/.testcodeagent/history"
+    history_file: str = "~/.agentic-coder/history"
     save_history: bool = True
 
     # Network Settings
@@ -302,7 +302,7 @@ ae4cbac feat: Implement Network Mode for Agent Tools (Phase 2)
 NETWORK_MODE=online
 ```
 
-### CLI 설정 파일 (~/.testcodeagent/config.yaml)
+### CLI 설정 파일 (~/.agentic-coder/config.yaml)
 
 ```yaml
 llm:
@@ -311,7 +311,7 @@ llm:
   temperature: 0.7
 
 history:
-  file: ~/.testcodeagent/history
+  file: ~/.agentic-coder/history
   save: true
 
 network:
@@ -378,7 +378,7 @@ network:
 ### 6.3 CLI Phase 3
 - **의존성**: prompt_toolkit 패키지 필요
 - **Fallback**: prompt_toolkit 없으면 기본 input() 사용
-- **히스토리**: `~/.testcodeagent/history`에 저장
+- **히스토리**: `~/.agentic-coder/history`에 저장
 
 ---
 

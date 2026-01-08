@@ -1584,7 +1584,7 @@ python backend/scripts/query_claude_code.py "What is the plugin architecture?"
 
 ##### 현재 상태 분석
 ```
-TestCodeAgent (웹 기반)
+Agentic Coder (웹 기반)
 ├── FastAPI backend
 ├── React frontend
 └── LangGraph agent system ✅
@@ -1601,8 +1601,8 @@ TestCodeAgent (웹 기반)
 
 ##### 목표 아키텍처 (CLI)
 ```
-testcodeagent (CLI 도구)
-├── bin/testcodeagent         # 실행 파일
+agentic-coder (CLI 도구)
+├── bin/agentic-coder         # 실행 파일
 ├── cli/
 │   ├── __main__.py           # Entry point
 │   ├── terminal_ui.py        # Rich/Textual TUI
@@ -1614,14 +1614,14 @@ testcodeagent (CLI 도구)
 **사용 예시**:
 ```bash
 # 설치
-pip install testcodeagent
+pip install agentic-coder
 
 # 사용
 cd /my-project
-testcodeagent
+agentic-coder
 
 # 또는 one-shot
-testcodeagent "Create a FastAPI hello world app"
+agentic-coder "Create a FastAPI hello world app"
 ```
 
 ##### 4-Phase 구현 계획
@@ -1690,7 +1690,7 @@ COLORS = {
 - T2.1.1: Rich Progress 통합
 - T2.2.1: Markdown 렌더링
 - T3.1.2: `/help` 명령어 구현
-- T3.2.1: `.testcodeagent/settings.json` 지원
+- T3.2.1: `.agentic-coder/settings.json` 지원
 - T4.1.1: `setup.py` 완성
 
 #### 6. 마이그레이션 전략
@@ -1810,7 +1810,7 @@ frontend/               # ⚠️  웹 전용
 ## Issue 48: Phase 3 RAG 시스템 구현 완료
 
 ### 개요
-TestCodeAgent에 완전한 RAG (Retrieval-Augmented Generation) 시스템을 구현했습니다.
+Agentic Coder에 완전한 RAG (Retrieval-Augmented Generation) 시스템을 구현했습니다.
 벡터 검색, 대화 컨텍스트, Knowledge Graph를 결합한 Hybrid RAG 아키텍처가 완성되었습니다.
 
 ### 완료된 Phase
@@ -1930,7 +1930,7 @@ TestCodeAgent에 완전한 RAG (Retrieval-Augmented Generation) 시스템을 구
 ## Issue 51: CLI Phase 1 구현 완료 (2026-01-08)
 
 ### 개요
-TestCodeAgent에 Command-Line Interface (CLI)를 추가했습니다. Phase 1 기본 구조가 완성되어 터미널에서 대화형 모드로 사용할 수 있습니다.
+Agentic Coder에 Command-Line Interface (CLI)를 추가했습니다. Phase 1 기본 구조가 완성되어 터미널에서 대화형 모드로 사용할 수 있습니다.
 
 ### 완료된 작업
 
@@ -1944,7 +1944,7 @@ TestCodeAgent에 Command-Line Interface (CLI)를 추가했습니다. Phase 1 기
 #### 2. SessionManager (`backend/cli/session_manager.py`)
 - 세션 ID 자동 생성 (format: `session-YYYYMMDD-HHMMSS`)
 - 대화 히스토리 관리 및 자동 저장
-- 세션 저장/복원 기능 (`.testcodeagent/sessions/`)
+- 세션 저장/복원 기능 (`.agentic-coder/sessions/`)
 - DynamicWorkflowManager 통합
 - 비동기 스트리밍 워크플로우 실행
 
@@ -1976,9 +1976,9 @@ TestCodeAgent에 Command-Line Interface (CLI)를 추가했습니다. Phase 1 기
 
 #### 4. 패키지 설정
 - **setup.py**: CLI entry point 정의
-  - `console_scripts`: `testcodeagent` 명령어
+  - `console_scripts`: `agentic-coder` 명령어
   - CLI 전용 의존성: `rich>=13.0.0`, `click>=8.0.0`, `prompt-toolkit>=3.0.0`
-- **bin/testcodeagent**: 실행 스크립트 (chmod +x)
+- **bin/agentic-coder**: 실행 스크립트 (chmod +x)
 
 ### 사용법
 
@@ -1988,16 +1988,16 @@ cd backend
 python -m cli
 
 # 또는 설치 후
-testcodeagent
+agentic-coder
 
 # One-shot 모드
-testcodeagent "Create a Python calculator"
+agentic-coder "Create a Python calculator"
 
 # 옵션 사용
-testcodeagent -w ./my-project -m qwen2.5-coder:32b
+agentic-coder -w ./my-project -m qwen2.5-coder:32b
 
 # 세션 복원
-testcodeagent -s session-20260108-123456
+agentic-coder -s session-20260108-123456
 ```
 
 ### 테스트 결과
@@ -2032,7 +2032,7 @@ Testing session persistence...
 ### 아키텍처
 
 ```
-TestCodeAgent/
+Agentic Coder/
 ├── backend/
 │   ├── cli/                     # 🆕 CLI 모듈
 │   │   ├── __init__.py
@@ -2045,7 +2045,7 @@ TestCodeAgent/
 │   │   ├── core/               # ✅ 재사용 - Supervisor
 │   │   └── utils/              # ✅ 재사용 - ContextManager
 ├── bin/
-│   └── testcodeagent           # 🆕 실행 스크립트
+│   └── agentic-coder           # 🆕 실행 스크립트
 ├── setup.py                     # 🆕 패키지 설정
 └── docs/
     ├── CLI_README.md           # 🆕 CLI 사용 가이드
@@ -2075,7 +2075,7 @@ TestCodeAgent/
 | 3 | `backend/cli/session_manager.py` | 세션 관리 클래스 (NEW, 234 lines) |
 | 4 | `backend/cli/terminal_ui.py` | Rich 기반 터미널 UI (NEW, 372 lines) |
 | 5 | `backend/cli/test_cli_basic.py` | 기본 테스트 (NEW, 160 lines) |
-| 6 | `bin/testcodeagent` | 실행 스크립트 (NEW, 18 lines) |
+| 6 | `bin/agentic-coder` | 실행 스크립트 (NEW, 18 lines) |
 | 7 | `setup.py` | 패키지 설정 (NEW, 80 lines) |
 | 8 | `docs/CLI_README.md` | CLI 사용 가이드 (NEW, 380+ lines) |
 
@@ -2419,7 +2419,7 @@ prompt-toolkit   # ❌ requirements.txt에만 있음, 미사용
 **Critical (P0)**:
 - ❌ Command history (↑↓ arrows) - prompt_toolkit 필요
 - ❌ Autocomplete for commands - prompt_toolkit 필요
-- ❌ Settings system (.testcodeagent/settings.json)
+- ❌ Settings system (.agentic-coder/settings.json)
 
 **High Priority (P1)**:
 - ❌ `/diff <file>` command
@@ -2450,7 +2450,7 @@ prompt-toolkit   # ❌ requirements.txt에만 있음, 미사용
 
 2. **Settings System** (4 hours)
    - CLIConfig 클래스
-   - `.testcodeagent/settings.json`
+   - `.agentic-coder/settings.json`
    - `/config` slash command
 
 3. **Essential Commands** (8 hours)
@@ -2588,7 +2588,7 @@ Total: ~1,292 lines, 11 tools
 4. Pydantic AI framework
 
 **Key Findings**:
-- ✅ **TestCodeAgent already follows "Deep Agents" pattern** (2025 best practice):
+- ✅ **Agentic Coder already follows "Deep Agents" pattern** (2025 best practice):
   - Planning tool (✅ PlanningHandler)
   - Multiple sub-agents (✅ 8 specialized handlers)
   - Comprehensive file system access (✅ 4 file tools)
@@ -2600,7 +2600,7 @@ Total: ~1,292 lines, 11 tools
 
 **Current System vs. Industry Standards**:
 ```
-                TestCodeAgent    Industry Standard
+                Agentic Coder    Industry Standard
 Architecture    LangGraph        ✅ LangGraph/AutoGen
 Pattern         Deep Agents      ✅ Deep Agents
 File Tools      4 tools          ✅ Comprehensive
@@ -2754,7 +2754,7 @@ class GitCommitTool(BaseTool):
 
 1. **LangChain Tool Adapter** (4 hours)
    - Allow using LangChain `@tool` decorated functions
-   - Example: Convert existing LangChain tools to TestCodeAgent format
+   - Example: Convert existing LangChain tools to Agentic Coder format
 
 2. **OpenAI Function Calling Schema** (3 hours)
    - Support OpenAI-compatible function schemas
@@ -2903,7 +2903,7 @@ docs: Agent tools analysis and enhancement recommendations
 
 ### 결론
 
-**현재 상태**: TestCodeAgent의 tool system은 **견고하고 잘 설계됨**
+**현재 상태**: Agentic Coder의 tool system은 **견고하고 잘 설계됨**
 **주요 Gap**: WEB와 SEARCH 카테고리 도구 부재
 **권장 조치**: **Phase 1 (8시간) 즉시 시작** - WebSearchTool, CodeSearchTool, GitCommitTool 추가
 **장기 비전**: 36시간 투자로 업계 최고 수준의 tool ecosystem 완성

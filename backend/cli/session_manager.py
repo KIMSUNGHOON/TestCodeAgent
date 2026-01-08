@@ -1,4 +1,4 @@
-"""Session Manager for TestCodeAgent CLI
+"""Session Manager for Agentic Coder CLI
 
 Handles:
 - Session ID generation and management
@@ -38,7 +38,7 @@ class SessionManager:
         self.auto_save = auto_save
 
         # Session directory
-        self.session_dir = self.workspace / ".testcodeagent" / "sessions"
+        self.session_dir = self.workspace / ".agentic-coder" / "sessions"
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize or resume session

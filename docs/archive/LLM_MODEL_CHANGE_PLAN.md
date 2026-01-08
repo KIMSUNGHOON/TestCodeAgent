@@ -2,7 +2,7 @@
 
 ## 📋 개요
 
-현재 TestCodeAgent는 두 개의 LLM 모델을 사용합니다:
+현재 Agentic Coder는 두 개의 LLM 모델을 사용합니다:
 - **Reasoning Model**: DeepSeek-R1 (분석, 계획 수립)
 - **Coding Model**: Qwen-Coder (코드 생성, 리뷰)
 

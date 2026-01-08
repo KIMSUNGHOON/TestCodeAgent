@@ -9,7 +9,7 @@
 ## 1. Project Overview
 
 ### 1.1 Project Name
-**TestCodeAgent** - AI Coding Assistant
+**Agentic Coder** - AI Coding Assistant
 
 ### 1.2 Core Architecture
 Claude Code / OpenAI Codex 방식의 통합 워크플로우 아키텍처를 구현한 AI 코딩 어시스턴트 시스템
@@ -298,7 +298,7 @@ SupervisorAgent (Reasoning LLM)
 
 ## 9. Conclusion
 
-TestCodeAgent 프로젝트는 성숙한 AI 코딩 어시스턴트 시스템으로, 다양한 LLM을 지원하고 크로스 플랫폼 호환성을 갖추고 있습니다. 최근 Context Improvement Phase 1, 2가 완료되어 대화 컨텍스트 관리가 크게 개선되었습니다.
+Agentic Coder 프로젝트는 성숙한 AI 코딩 어시스턴트 시스템으로, 다양한 LLM을 지원하고 크로스 플랫폼 호환성을 갖추고 있습니다. 최근 Context Improvement Phase 1, 2가 완료되어 대화 컨텍스트 관리가 크게 개선되었습니다.
 
 주요 최적화 포인트는:
 1. 하드코딩된 설정값 제거

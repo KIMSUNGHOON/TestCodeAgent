@@ -8,7 +8,7 @@
 
 ## Overview
 
-Agent Tools Phase 1 adds **3 powerful new tools** to the TestCodeAgent system, enabling agents to search the web, discover code semantically, and create git commits programmatically.
+Agent Tools Phase 1 adds **3 powerful new tools** to the Agentic Coder system, enabling agents to search the web, discover code semantically, and create git commits programmatically.
 
 ### New Tools
 
@@ -89,7 +89,7 @@ code_search = registry.get_tool("code_search")
 result = await code_search.execute(
     query="authentication middleware",
     n_results=5,
-    repo_filter="TestCodeAgent",
+    repo_filter="Agentic Coder",
     file_type_filter="python"
 )
 
@@ -509,13 +509,13 @@ class GitCommitTool(BaseTool):
 
 ## License
 
-Same as TestCodeAgent project license.
+Same as Agentic Coder project license.
 
 ---
 
 ## Support
 
-- **Issues**: https://github.com/KIMSUNGHOON/TestCodeAgent/issues
+- **Issues**: https://github.com/KIMSUNGHOON/Agentic Coder/issues
 - **Documentation**: `docs/AGENT_TOOLS_ANALYSIS_REPORT.md`
 - **Analysis**: `docs/AGENT_TOOLS_PHASE1_IMPACT_ANALYSIS.md`
 

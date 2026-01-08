@@ -1,7 +1,7 @@
 {
-  "project_name": "TestCodeAgent",
+  "project_name": "Agentic Coder",
   "project_type": "ai_coding_assistant",
-  "workspace_root": "/home/user/TestCodeAgent",
+  "workspace_root": "/home/user/agentic-coder",
   "last_updated": "2025-12-18T05:00:00Z",
   "technology_stack": {
     "backend": {

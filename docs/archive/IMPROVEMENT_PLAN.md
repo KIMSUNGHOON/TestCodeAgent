@@ -7,7 +7,7 @@
 
 ## 1. Executive Summary
 
-This document outlines identified issues and proposed improvements for the TestCodeAgent multi-agent workflow system based on comprehensive backend.log analysis and workflow execution testing.
+This document outlines identified issues and proposed improvements for the Agentic Coder multi-agent workflow system based on comprehensive backend.log analysis and workflow execution testing.
 
 ---
 

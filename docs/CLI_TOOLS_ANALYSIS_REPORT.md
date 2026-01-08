@@ -1,4 +1,4 @@
-# CLI Tools Analysis Report for TestCodeAgent
+# CLI Tools Analysis Report for Agentic Coder
 
 **Date**: 2026-01-08
 **Author**: Claude (AI Assistant)
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-This report analyzes the tools, libraries, and patterns available for building robust CLI applications in Python, evaluates the current implementation status of TestCodeAgent CLI, and provides recommendations for completing the implementation.
+This report analyzes the tools, libraries, and patterns available for building robust CLI applications in Python, evaluates the current implementation status of Agentic Coder CLI, and provides recommendations for completing the implementation.
 
 **Key Findings**:
 - Current implementation uses **argparse** + **Rich** - a solid foundation
@@ -250,7 +250,7 @@ prompt-toolkit >= 3.0.0 # ❌ Not used yet
 
 | Feature | Status | Difficulty | Impact |
 |---------|--------|------------|--------|
-| `.testcodeagent/settings.json` | ❌ Not implemented | Low | High |
+| `.agentic-coder/settings.json` | ❌ Not implemented | Low | High |
 | Model selection | ❌ CLI arg only | Low | Medium |
 | Theme customization | ❌ Not implemented | Medium | Low |
 | Workspace defaults | ❌ Not implemented | Low | Medium |
@@ -325,7 +325,7 @@ from prompt_toolkit.completion import WordCompleter
 
 # In TerminalUI.start_interactive()
 session = PromptSession(
-    history=FileHistory('.testcodeagent/history.txt'),
+    history=FileHistory('.agentic-coder/history.txt'),
     auto_suggest=AutoSuggestFromHistory(),
     completer=WordCompleter(['/help', '/status', '/preview', ...])
 )
@@ -372,7 +372,7 @@ user_input = session.prompt("You: ")
 |----------|---------|------|--------|--------|
 | 🔥 **P0** | Command history (↑↓) | prompt_toolkit | 3h | High |
 | 🔥 **P0** | Autocomplete slash commands | prompt_toolkit | 2h | High |
-| 🔥 **P0** | Settings system (.testcodeagent/settings.json) | stdlib | 4h | High |
+| 🔥 **P0** | Settings system (.agentic-coder/settings.json) | stdlib | 4h | High |
 | **P1** | `/diff <file>` command | difflib + Rich | 3h | High |
 | **P1** | `/tree` command | Rich Tree | 2h | Medium |
 | **P1** | Session export to Markdown | stdlib | 3h | High |
@@ -416,7 +416,7 @@ class TerminalUI:
 
         # Add prompt session with history
         self.prompt_session = PromptSession(
-            history=FileHistory(str(session_mgr.workspace / '.testcodeagent' / 'history.txt')),
+            history=FileHistory(str(session_mgr.workspace / '.agentic-coder' / 'history.txt')),
             auto_suggest=AutoSuggestFromHistory(),
             completer=WordCompleter([
                 '/help', '/status', '/history', '/context',
@@ -478,7 +478,7 @@ class CLIConfig:
 
     def __init__(self, workspace: Path):
         self.workspace = workspace
-        self.config_dir = workspace / ".testcodeagent"
+        self.config_dir = workspace / ".agentic-coder"
         self.config_file = self.config_dir / "settings.json"
         self.settings = self._load_settings()
 

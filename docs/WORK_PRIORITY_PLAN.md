@@ -163,7 +163,7 @@
 **Deliverables**:
 - ✅ Command history (↑↓ arrows)
 - ✅ Tab autocomplete
-- ✅ Settings system (.testcodeagent/settings.json)
+- ✅ Settings system (.agentic-coder/settings.json)
 - ✅ /diff, /tree, /export commands
 - ✅ Updated CLI documentation
 
@@ -185,7 +185,7 @@
 - ✅ HttpRequestTool
 
 **Success Criteria**:
-- LangChain tools work with TestCodeAgent
+- LangChain tools work with Agentic Coder
 - Cache hit rate >50% for repeated searches
 - HTTP requests work for API testing
 

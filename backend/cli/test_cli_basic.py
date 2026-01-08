@@ -155,7 +155,7 @@ def test_session_persistence():
 def main():
     """Run all tests"""
     print("="*60)
-    print("TestCodeAgent CLI - Basic Functionality Tests")
+    print("Agentic Coder CLI - Basic Functionality Tests")
     print("="*60)
     print()
 

@@ -2,7 +2,7 @@
 
 ## 🎯 Overview
 
-This document describes the production-grade **Refinement Cycle** system implemented in the TestCodeAgent project. The system provides:
+This document describes the production-grade **Refinement Cycle** system implemented in the Agentic Coder project. The system provides:
 
 1. **Automated code review and refinement**
 2. **Human-in-the-loop approval**

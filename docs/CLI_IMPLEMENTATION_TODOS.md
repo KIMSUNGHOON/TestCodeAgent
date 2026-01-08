@@ -1,4 +1,4 @@
-# TestCodeAgent CLI Implementation - Detailed Todos
+# Agentic Coder CLI Implementation - Detailed Todos
 
 **기준일**: 2026-01-08
 **연관 문서**: `CLI_MIGRATION_PLAN.md`
@@ -20,7 +20,7 @@
   - argparse 기반 명령어 파싱
   - 기본 옵션: --workspace, --session-id, --model, --help, --version
 
-- [ ] **T1.1.3** `bin/testcodeagent` 실행 스크립트 생성
+- [ ] **T1.1.3** `bin/agentic-coder` 실행 스크립트 생성
   ```bash
   mkdir -p bin
   ```
@@ -32,7 +32,7 @@
   ```
 
 - [ ] **T1.1.4** `setup.py` 또는 `pyproject.toml` 작성
-  - Entry point: `testcodeagent = backend.cli.__main__:main`
+  - Entry point: `agentic-coder = backend.cli.__main__:main`
   - Dependencies: rich, click, prompt-toolkit
   - Version: 1.0.0
 
@@ -45,7 +45,7 @@
   - 대화 히스토리 관리 (리스트)
 
 - [ ] **T1.2.2** Session persistence
-  - `.testcodeagent/sessions/` 디렉토리 사용
+  - `.agentic-coder/sessions/` 디렉토리 사용
   - JSON 형식으로 대화 히스토리 저장
   - 세션 복원 기능
 
@@ -203,7 +203,7 @@
 
 ### Todo 3.2: 설정 시스템
 
-- [ ] **T3.2.1** `.testcodeagent/settings.json` 지원
+- [ ] **T3.2.1** `.agentic-coder/settings.json` 지원
   ```json
   {
     "model": "deepseek-r1:14b",
@@ -224,7 +224,7 @@
 
 - [ ] **T3.3.1** 자동 저장
   - 각 대화 후 세션 저장
-  - `.testcodeagent/sessions/{session-id}.json`
+  - `.agentic-coder/sessions/{session-id}.json`
 
 - [ ] **T3.3.2** 세션 복원
   - `--session-id` 옵션으로 복원
@@ -257,12 +257,12 @@
 - [ ] **T4.1.1** `setup.py` 완성
   ```python
   setup(
-      name="testcodeagent",
+      name="agentic-coder",
       version="1.0.0",
       packages=find_packages(),
       entry_points={
           "console_scripts": [
-              "testcodeagent=backend.cli.__main__:main"
+              "agentic-coder=backend.cli.__main__:main"
           ]
       },
       install_requires=[
@@ -286,19 +286,19 @@
 - [ ] **T4.2.1** `install.sh` (Linux/MacOS)
   ```bash
   #!/bin/bash
-  pip install testcodeagent
+  pip install agentic-coder
   ```
 
 - [ ] **T4.2.2** `install.ps1` (Windows)
   ```powershell
-  pip install testcodeagent
+  pip install agentic-coder
   ```
 
 - [ ] **T4.2.3** Docker 이미지 (선택)
   ```dockerfile
   FROM python:3.11-slim
-  RUN pip install testcodeagent
-  ENTRYPOINT ["testcodeagent"]
+  RUN pip install agentic-coder
+  ENTRYPOINT ["agentic-coder"]
   ```
 
 ### Todo 4.3: 문서 작성
@@ -328,7 +328,7 @@
   python -m venv test_env
   source test_env/bin/activate
   pip install .
-  testcodeagent --version
+  agentic-coder --version
   ```
 
 - [ ] **T4.4.2** Cross-platform 테스트
@@ -346,7 +346,7 @@
 
 ### Todo 5.1: Plugin 시스템 (claude-code 스타일)
 
-- [ ] **T5.1.1** `.testcodeagent/plugins/` 지원
+- [ ] **T5.1.1** `.agentic-coder/plugins/` 지원
   - Plugin discovery
   - Plugin loading
 
@@ -415,7 +415,7 @@
 
 ### 코드 재사용
 
-기존 TestCodeAgent backend 코드를 최대한 재사용:
+기존 Agentic Coder backend 코드를 최대한 재사용:
 - ✅ `app/agent/` - 모든 LangGraph agent
 - ✅ `app/core/` - Supervisor, config
 - ✅ `app/utils/` - ContextManager, RepositoryEmbedder

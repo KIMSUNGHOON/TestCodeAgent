@@ -63,7 +63,7 @@ class SandboxConfig:
     max_timeout: int = 300  # 최대 5분
 
     # 컨테이너 설정
-    container_name: str = "testcodeagent-sandbox"
+    container_name: str = "agentic-coder-sandbox"
     auto_start: bool = True  # 컨테이너 자동 시작
     auto_stop: bool = False  # 세션 종료 시 자동 중지
 

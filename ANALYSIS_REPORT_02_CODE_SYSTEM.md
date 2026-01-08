@@ -488,4 +488,4 @@ Based on this analysis, the following optimization targets are identified:
 
 ---
 
-*This report provides a comprehensive code and system analysis for the TestCodeAgent project.*
+*This report provides a comprehensive code and system analysis for the Agentic Coder project.*

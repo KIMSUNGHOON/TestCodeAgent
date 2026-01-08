@@ -1,6 +1,6 @@
-"""TestCodeAgent CLI - Command Line Interface
+"""Agentic Coder CLI - Command Line Interface
 
-Interactive CLI for TestCodeAgent that provides:
+Interactive CLI for Agentic Coder that provides:
 - Interactive REPL mode for conversational coding
 - One-shot mode for single commands
 - Session management and persistence
@@ -37,15 +37,15 @@ from cli.session_manager import SessionManager
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description="TestCodeAgent - Interactive AI coding assistant",
+        description="Agentic Coder - Interactive AI coding assistant",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  testcodeagent                           # Start interactive mode
-  testcodeagent "Create a Python calculator"  # One-shot mode
-  testcodeagent -w ./myproject            # Specify workspace
-  testcodeagent -s session-123            # Resume session
-  testcodeagent -m qwen2.5-coder:32b      # Use different model
+  agentic-coder                           # Start interactive mode
+  agentic-coder "Create a Python calculator"  # One-shot mode
+  agentic-coder -w ./myproject            # Specify workspace
+  agentic-coder -s session-123            # Resume session
+  agentic-coder -m qwen2.5-coder:32b      # Use different model
 
 Slash Commands (in interactive mode):
   /help       - Show available commands
@@ -84,7 +84,7 @@ Slash Commands (in interactive mode):
     parser.add_argument(
         "--version",
         action="version",
-        version="TestCodeAgent CLI v1.0.0"
+        version="Agentic Coder CLI v1.0.0"
     )
 
     parser.add_argument(
@@ -136,7 +136,7 @@ def main():
             ui.start_interactive()
 
     except KeyboardInterrupt:
-        print("\n\nExiting TestCodeAgent CLI...")
+        print("\n\nExiting Agentic Coder CLI...")
         return 0
     except Exception as e:
         print(f"\n❌ Error: {e}")

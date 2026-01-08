@@ -33,7 +33,7 @@ Phase 3 focuses on **essential enhancements** that significantly improve user ex
 - Session export to Markdown
 
 ✅ **Configuration**:
-- Settings file (.testcodeagent/settings.json)
+- Settings file (.agentic-coder/settings.json)
 - Model selection
 - Theme preferences
 
@@ -130,7 +130,7 @@ class EnhancedInput:
 # backend/cli/test_input.py
 def test_enhanced_input():
     inp = EnhancedInput(
-        Path('.testcodeagent/history.txt'),
+        Path('.agentic-coder/history.txt'),
         ['/help', '/status', '/exit']
     )
     # Manual test: type /h and press Tab
@@ -150,7 +150,7 @@ class TerminalUI:
         self.console = Console()
 
         # Initialize enhanced input
-        history_file = session_mgr.workspace / '.testcodeagent' / 'history.txt'
+        history_file = session_mgr.workspace / '.agentic-coder' / 'history.txt'
         slash_commands = [
             '/help', '/status', '/history', '/context',
             '/files', '/preview', '/sessions', '/clear', '/exit',
@@ -216,7 +216,7 @@ class CLIConfig:
             workspace: Workspace directory
         """
         self.workspace = workspace
-        self.config_dir = workspace / ".testcodeagent"
+        self.config_dir = workspace / ".agentic-coder"
         self.config_file = self.config_dir / "settings.json"
         self.settings = self._load_settings()
 
@@ -709,7 +709,7 @@ Manage settings with `/config`:
 /config reset              # Reset to defaults
 ```
 
-Settings file: `.testcodeagent/settings.json`
+Settings file: `.agentic-coder/settings.json`
 
 ### File Management
 

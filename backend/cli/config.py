@@ -1,8 +1,8 @@
 """CLI Configuration Management
 
 Handles CLI configuration with support for:
-- User configuration file (~/.testcodeagent/config.yaml)
-- Project configuration file (.testcodeagent/config.yaml)
+- User configuration file (~/.agentic-coder/config.yaml)
+- Project configuration file (.agentic-coder/config.yaml)
 - Environment variable overrides
 - Default configuration
 """
@@ -31,13 +31,13 @@ class CLIConfig:
     word_wrap: bool = False
 
     # History Settings
-    history_file: str = "~/.testcodeagent/history"
+    history_file: str = "~/.agentic-coder/history"
     max_history_lines: int = 10000
     save_history: bool = True
 
     # Session Settings
     auto_save: bool = True
-    session_dir: str = ".testcodeagent/sessions"
+    session_dir: str = ".agentic-coder/sessions"
 
     # Workspace Settings
     default_workspace: str = "."
@@ -142,9 +142,9 @@ class CLIConfig:
 class ConfigManager:
     """Manages CLI configuration loading and saving"""
 
-    USER_CONFIG_DIR = Path.home() / ".testcodeagent"
+    USER_CONFIG_DIR = Path.home() / ".agentic-coder"
     USER_CONFIG_FILE = USER_CONFIG_DIR / "config.yaml"
-    PROJECT_CONFIG_FILE = ".testcodeagent/config.yaml"
+    PROJECT_CONFIG_FILE = ".agentic-coder/config.yaml"
 
     def __init__(self, workspace: Optional[str] = None):
         """Initialize config manager
@@ -212,7 +212,7 @@ class ConfigManager:
         Args:
             config: Configuration to save
         """
-        project_dir = self.workspace / ".testcodeagent"
+        project_dir = self.workspace / ".agentic-coder"
         project_dir.mkdir(parents=True, exist_ok=True)
         self._save_yaml(project_dir / "config.yaml", config.to_dict())
 
@@ -238,7 +238,7 @@ class ConfigManager:
 
     def _save_yaml(self, path: Path, data: Dict[str, Any]):
         """Save YAML file with comments"""
-        header = """# TestCodeAgent CLI Configuration
+        header = """# Agentic Coder CLI Configuration
 # See documentation for all options
 
 """

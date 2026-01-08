@@ -63,4 +63,4 @@ workspace/
 
 # Vector databases and CLI sessions
 chroma_db/
-.testcodeagent/sessions/
+.agentic-coder/sessions/

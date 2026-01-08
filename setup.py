@@ -1,4 +1,4 @@
-"""Setup configuration for TestCodeAgent
+"""Setup configuration for Agentic Coder
 
 Installation:
     # Development mode (editable install)
@@ -45,14 +45,14 @@ all_requirements = requirements + [
 ]
 
 setup(
-    name="testcodeagent",
+    name="agentic-coder",
     version="1.0.0",
-    description="Interactive AI coding assistant with CLI and web interfaces",
+    description="Enterprise-grade AI coding assistant with unified workflow architecture",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="TestCodeAgent Team",
+    author="Agentic Coder Team",
     author_email="",
-    url="https://github.com/KIMSUNGHOON/TestCodeAgent",
+    url="https://github.com/KIMSUNGHOON/agentic-coder",
     packages=find_packages(where="backend"),
     package_dir={"": "backend"},
     python_requires=">=3.9",
@@ -69,10 +69,10 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "testcodeagent=cli.__main__:main",
+            "agentic-coder=cli.__main__:main",
         ],
     },
-    scripts=["bin/testcodeagent"],
+    scripts=["bin/agentic-coder"],
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
@@ -87,8 +87,8 @@ setup(
     ],
     keywords="ai coding assistant llm cli interactive",
     project_urls={
-        "Documentation": "https://github.com/KIMSUNGHOON/TestCodeAgent/blob/main/README.md",
-        "Source": "https://github.com/KIMSUNGHOON/TestCodeAgent",
-        "Tracker": "https://github.com/KIMSUNGHOON/TestCodeAgent/issues",
+        "Documentation": "https://github.com/KIMSUNGHOON/agentic-coder/blob/main/README.md",
+        "Source": "https://github.com/KIMSUNGHOON/agentic-coder",
+        "Tracker": "https://github.com/KIMSUNGHOON/agentic-coder/issues",
     },
 )
