@@ -60,3 +60,7 @@ htmlcov/
 # Data and workspace directories
 data/
 workspace/
+
+# Vector databases and CLI sessions
+chroma_db/
+.testcodeagent/sessions/
