@@ -8,8 +8,8 @@ Interactive command-line interface for Agentic Coder - an AI-powered coding assi
 
 ```bash
 # Clone the repository
-git clone https://github.com/KIMSUNGHOON/Agentic Coder.git
-cd Agentic Coder
+git clone https://github.com/KIMSUNGHOON/agentic-coder.git
+cd agentic-coder
 
 # Install in development mode
 pip install -e .
@@ -263,29 +263,18 @@ async for update in workflow_mgr.execute_streaming_workflow(
 
 ## 🚧 Current Status
 
-### ✅ Phase 1 Complete (Basic CLI Structure)
+### ✅ Phase 1-3 Complete
 
 - [x] CLI entry point with argparse
 - [x] SessionManager for persistence
 - [x] TerminalUI with Rich console
 - [x] Slash command system
 - [x] Session save/resume
-- [x] Basic tests passing
+- [x] Streaming UI with progress indicators
+- [x] Command history (prompt_toolkit)
+- [x] Auto-completion for commands and files
+- [x] Configuration management (YAML)
 - [x] Package configuration (setup.py)
-
-### 🔜 Phase 2 Next (Streaming UI)
-
-- [ ] Enhanced progress indicators with agent-specific messages
-- [ ] Real-time content streaming with Live display
-- [ ] Artifact display with file previews
-- [ ] Markdown rendering improvements
-- [ ] Code syntax highlighting
-
-### 📅 Future Phases
-
-- **Phase 3**: Settings system, advanced slash commands, file preview
-- **Phase 4**: Packaging, documentation, cross-platform testing
-- **Phase 5**: Plugin system, RAG integration, full TUI (optional)
 
 ## 🐛 Troubleshooting
 
@@ -293,7 +282,7 @@ async for update in workflow_mgr.execute_streaming_workflow(
 
 ```bash
 # Ensure backend is in Python path
-export PYTHONPATH=/path/to/Agentic Coder/backend:$PYTHONPATH
+export PYTHONPATH=/path/to/agentic-coder/backend:$PYTHONPATH
 
 # Or run from backend directory
 cd backend
@@ -324,9 +313,9 @@ agentic-coder
 
 ## 📚 Related Documentation
 
-- [CLI Migration Plan](./CLI_MIGRATION_PLAN.md) - Detailed migration strategy
-- [CLI Implementation Todos](./CLI_IMPLEMENTATION_TODOS.md) - Task breakdown
 - [Main README](../README.md) - Project overview
+- [Architecture](./ARCHITECTURE.md) - System architecture
+- [Agent Tools](./AGENT_TOOLS_PHASE2_README.md) - All 20 tools documentation
 
 ## 📄 License
 
@@ -334,6 +323,6 @@ Same as Agentic Coder project (MIT License)
 
 ---
 
-**Version**: 1.0.0
+**Version**: 3.0.0
 **Last Updated**: 2026-01-08
-**Status**: Phase 1 Complete ✅
+**Status**: Production Ready ✅
