@@ -349,18 +349,17 @@ class HttpRequestTool(BaseTool):
                         "status_text": response.reason,
                         "headers": dict(response.headers),
                         "body": response_json if response_json else response_text,
-                        "is_json": response_json is not None
+                        "is_json": response_json is not None,
+                        "message": f"HTTP {method} {url} -> {response.status} {response.reason}"
                     }
 
                     success = 200 <= response.status < 400
-                    message = f"HTTP {method} {url} -> {response.status} {response.reason}"
 
-                    logger.info(f"{'✅' if success else '⚠️'} {message}")
+                    logger.info(f"{'✅' if success else '⚠️'} {result_output['message']}")
 
                     return ToolResult(
                         success=success,
                         output=result_output,
-                        message=message,
                         metadata={
                             "tool": self.name,
                             "method": method,
@@ -598,9 +597,9 @@ class DownloadFileTool(BaseTool):
                     "output_path": str(output_file),
                     "file_size_bytes": file_size,
                     "file_size_mb": round(file_size_mb, 2),
-                    "downloader": downloader
+                    "downloader": downloader,
+                    "message": message
                 },
-                message=message,
                 metadata={
                     "tool": self.name,
                     "url": url,
