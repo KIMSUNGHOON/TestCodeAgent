@@ -6,6 +6,9 @@ on:
       - 'v*'  # 버전 태그 푸시 시 자동 빌드 (예: v1.0.0)
   workflow_dispatch:  # GitHub UI에서 수동 실행 가능
 
+permissions:
+  contents: write  # Required for creating releases and uploading assets
+
 jobs:
   build:
     name: Build on ${{ matrix.os }}
