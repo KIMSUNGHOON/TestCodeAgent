@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-20.04  # Use older Ubuntu for better GLIBC compatibility
             artifact_name: agentic-coder-client-linux
             binary_path: dist/agentic-coder-client
           - os: windows-latest
