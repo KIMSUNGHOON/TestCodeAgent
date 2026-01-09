@@ -1058,6 +1058,9 @@ Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} a
                     for tool_call in message.tool_calls:
                         tool_name = tool_call.function.name
 
+                        # Normalize tool name (handle common variations)
+                        tool_name = self._normalize_tool_name(tool_name)
+
                         # Parse tool arguments with error handling
                         try:
                             tool_args = json.loads(tool_call.function.arguments)
@@ -1068,28 +1071,54 @@ Strategy: {self._build_workflow_strategy(request)} approach with {len(agents)} a
                             # Try to fix common JSON errors
                             try:
                                 raw = tool_call.function.arguments
+                                import re
 
                                 # Fix 1: Remove trailing commas
                                 fixed = raw.replace(',}', '}').replace(',]', ']').replace(', }', '}').replace(', ]', ']')
 
-                                # Fix 2: Remove extra quotes around keys
-                                import re
-                                fixed = re.sub(r'(\w+):', r'"\1":', fixed)  # Ensure keys are quoted
-                                fixed = re.sub(r'""(\w+)"":', r'"\1":', fixed)  # Fix double quotes
+                                # Fix 2: Handle truncated JSON (missing closing braces)
+                                # Count open/close for strings (respect string literals)
+                                in_string = False
+                                escape_next = False
+                                open_braces = 0
+                                close_braces = 0
+                                open_brackets = 0
+                                close_brackets = 0
 
-                                # Fix 3: Handle truncated JSON (missing closing braces)
-                                open_braces = fixed.count('{')
-                                close_braces = fixed.count('}')
+                                for char in fixed:
+                                    if escape_next:
+                                        escape_next = False
+                                        continue
+                                    if char == '\\':
+                                        escape_next = True
+                                        continue
+                                    if char == '"':
+                                        in_string = not in_string
+                                        continue
+                                    if not in_string:
+                                        if char == '{':
+                                            open_braces += 1
+                                        elif char == '}':
+                                            close_braces += 1
+                                        elif char == '[':
+                                            open_brackets += 1
+                                        elif char == ']':
+                                            close_brackets += 1
+
+                                # Add missing closures
                                 if open_braces > close_braces:
+                                    # Close any open strings first
+                                    if in_string:
+                                        fixed += '"'
+                                        logger.warning("Closed unclosed string")
                                     fixed += '}' * (open_braces - close_braces)
-                                    logger.warning("Added missing closing braces")
+                                    logger.warning(f"Added {open_braces - close_braces} missing closing braces")
 
-                                open_brackets = fixed.count('[')
-                                close_brackets = fixed.count(']')
                                 if open_brackets > close_brackets:
                                     fixed += ']' * (open_brackets - close_brackets)
-                                    logger.warning("Added missing closing brackets")
+                                    logger.warning(f"Added {open_brackets - close_brackets} missing closing brackets")
 
+                                # Try to parse
                                 tool_args = json.loads(fixed)
                                 logger.warning("✓ Fixed malformed JSON arguments")
                             except Exception as fix_error:
@@ -1441,6 +1470,59 @@ For each task, select the right tools and use them effectively."""
             "answer": answer,
             "feedback": response.feedback
         }
+
+    def _normalize_tool_name(self, tool_name: str) -> str:
+        """Normalize tool name to handle LLM variations
+
+        LLMs sometimes generate tool names with slight variations:
+        - writefile -> write_file
+        - readfile -> read_file
+        - listdirectory -> list_directory
+        - gitcommit -> git_commit
+        etc.
+
+        Args:
+            tool_name: Original tool name from LLM
+
+        Returns:
+            Normalized tool name
+        """
+        # Common aliases mapping
+        aliases = {
+            "writefile": "write_file",
+            "readfile": "read_file",
+            "searchfiles": "search_files",
+            "listdirectory": "list_directory",
+            "executepython": "execute_python",
+            "runtests": "run_tests",
+            "lintcode": "lint_code",
+            "formatcode": "format_code",
+            "shellcommand": "shell_command",
+            "generatedocstring": "generate_docstring",
+            "gitstatus": "git_status",
+            "gitdiff": "git_diff",
+            "gitlog": "git_log",
+            "gitbranch": "git_branch",
+            "gitcommit": "git_commit",
+            "websearch": "web_search",
+            "httprequest": "http_request",
+            "downloadfile": "download_file",
+            "codesearch": "code_search",
+            "sandboxexecute": "sandbox_execute",
+            "askhuman": "ask_human",
+            "completetask": "complete_task",
+        }
+
+        # Convert to lowercase for lookup
+        normalized = tool_name.lower()
+
+        # Check if it's an alias
+        if normalized in aliases:
+            corrected = aliases[normalized]
+            logger.info(f"   ℹ️ Normalized tool name: '{tool_name}' → '{corrected}'")
+            return corrected
+
+        return tool_name
 
 
 # Global supervisor instance (with API mode enabled by default)
