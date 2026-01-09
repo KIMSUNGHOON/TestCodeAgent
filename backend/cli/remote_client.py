@@ -269,7 +269,12 @@ Add unit tests for calculator.py
 
     async def close(self):
         """Clean up resources"""
-        await self.client.aclose()
+        try:
+            if not self.client.is_closed:
+                await self.client.aclose()
+        except Exception as e:
+            # Ignore cleanup errors on exit
+            pass
 
 
 async def main():
@@ -296,13 +301,13 @@ async def main():
                 border_style="cyan",
                 padding=(1, 2)
             ))
-            return
+            return 0
 
         # Handle --version
         if arg in ["--version", "-v"]:
             console.print("[cyan]Agentic Coder Remote Client[/cyan]")
             console.print("[dim]Version: 1.0.0[/dim]")
-            return
+            return 0
 
     # Show banner
     console.print(Panel(
@@ -356,23 +361,34 @@ async def main():
             console.print("  1. Server is running")
             console.print("  2. IP/Port is correct")
             console.print("  3. Firewall allows connection")
-            return
+            return 1
 
         progress.update(task, description="Creating session...")
         if not await client.create_session():
             console.print("\n[red]✗ Failed to create session[/red]")
-            return
+            return 1
 
     # Start interactive mode
     try:
         await client.interactive_mode()
+    except Exception as e:
+        console.print(f"\n[red]Error: {e}[/red]")
+        return 1
     finally:
         await client.close()
 
+    return 0
+
 
 if __name__ == "__main__":
+    exit_code = 0
     try:
-        asyncio.run(main())
+        exit_code = asyncio.run(main())
     except KeyboardInterrupt:
         print("\n\nInterrupted by user")
-        sys.exit(0)
+        exit_code = 0
+    except Exception as e:
+        print(f"\nError: {e}")
+        exit_code = 1
+    finally:
+        sys.exit(exit_code)
