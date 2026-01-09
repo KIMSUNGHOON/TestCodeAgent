@@ -138,9 +138,11 @@ class RemoteClient:
                     self.console.print(f"[red]✗[/red] Request failed: {error_text.decode()}")
                     return
 
-                # Parse SSE stream
+                # Parse SSE stream (Tool Use pattern - same as local CLI)
                 current_status = "Processing..."
                 current_event = None
+                current_iteration = 0
+                max_iterations = 15
 
                 with Progress(
                     SpinnerColumn(),
@@ -167,45 +169,99 @@ class RemoteClient:
 
                         try:
                             import json
-                            event_data = json.loads(data_str)
+                            update = json.loads(data_str)
+                            update_type = update.get("type", "update")
 
-                            # Handle different event types
-                            if current_event == "supervisor":
-                                node_data = event_data.get("data", {})
-                                decision = node_data.get("supervisor_decision", {})
-                                if decision:
-                                    progress.update(task, description=f"[cyan]Supervisor: {decision.get('action', 'thinking')}[/cyan]")
+                            # Handle different update types (same as terminal_ui.py)
+                            if update_type == "tool_iteration":
+                                # New iteration starting
+                                current_iteration = update.get("iteration", 0)
+                                max_iterations = update.get("max_iterations", 15)
+                                progress.update(task, description=f"[cyan]Iteration {current_iteration}/{max_iterations}[/cyan]")
 
-                            elif current_event == "tool":
-                                node_data = event_data.get("data", {})
-                                tool_name = node_data.get("tool_name", "unknown")
-                                progress.update(task, description=f"[yellow]Executing: {tool_name}[/yellow]")
-
-                            elif current_event == "response":
-                                node_data = event_data.get("data", {})
-                                response_text = node_data.get("response", "")
-                                if response_text:
+                            elif update_type == "reasoning" or current_event == "reasoning":
+                                # LLM reasoning/thinking
+                                reasoning = update.get("content", "")
+                                if reasoning and len(reasoning.strip()) > 10:
                                     progress.stop()
+                                    # Show reasoning preview
+                                    reasoning_preview = reasoning[:300] + "..." if len(reasoning) > 300 else reasoning
                                     self.console.print(Panel(
-                                        f"[bold white]{response_text}[/bold white]",
-                                        title="[bold green]✅ Response[/bold green]",
-                                        border_style="green",
+                                        f"[italic dim]{reasoning_preview}[/italic dim]",
+                                        title="[bold cyan]💭 AI Reasoning[/bold cyan]",
+                                        border_style="cyan",
                                         padding=(1, 2)
                                     ))
                                     progress.start()
+                                    progress.update(task, description="[green]✓ Reasoning complete[/green]")
 
-                            elif current_event == "error":
-                                node_data = event_data.get("data", {})
-                                error_msg = node_data.get("error", "Unknown error")
+                            elif update_type == "tool_call_start" or current_event == "tool_start":
+                                # Tool execution starting
+                                tool_name = update.get("tool", "unknown")
+                                arguments = update.get("arguments", {})
+
+                                # Human-readable descriptions
+                                tool_desc = {
+                                    "write_file": "📝 Writing file",
+                                    "read_file": "📖 Reading file",
+                                    "execute_python": "🐍 Running Python",
+                                    "execute_bash": "⚡ Executing command",
+                                    "search_files": "🔍 Searching files",
+                                    "git_commit": "📦 Committing changes",
+                                    "web_search": "🌐 Searching web",
+                                }.get(tool_name, f"🔧 {tool_name}")
+
+                                detail = ""
+                                if "path" in arguments:
+                                    detail = f": {arguments['path']}"
+                                elif "command" in arguments:
+                                    detail = f": {arguments['command'][:30]}"
+
+                                progress.update(task, description=f"[yellow]{tool_desc}{detail}[/yellow]")
+
+                            elif update_type == "tool_call_result" or current_event == "tool_result":
+                                # Tool execution completed
+                                tool_name = update.get("tool", "unknown")
+                                result = update.get("result", {})
+                                success = result.get("success", False)
+
+                                if success:
+                                    progress.update(task, description=f"[green]✓ {tool_name} completed[/green]")
+                                else:
+                                    error = result.get("error", "Unknown error")
+                                    progress.stop()
+                                    self.console.print(f"[red]✗ {tool_name} failed: {error[:100]}[/red]")
+                                    progress.start()
+
+                            elif update_type == "final_response" or current_event == "response":
+                                # Final response from LLM
+                                response_text = update.get("content", "")
+                                if response_text:
+                                    progress.stop()
+                                    self.console.print()
+                                    self.console.print(Panel(
+                                        f"[bold white]{response_text}[/bold white]",
+                                        title="[bold green]✅ Complete[/bold green]",
+                                        border_style="green",
+                                        padding=(1, 2)
+                                    ))
+
+                            elif update_type == "error" or current_event == "error":
+                                error_msg = update.get("error", "Unknown error")
                                 progress.stop()
-                                self.console.print(f"[red]✗ Error: {error_msg}[/red]")
-                                progress.start()
+                                self.console.print(Panel(
+                                    f"[red]{error_msg}[/red]",
+                                    title="[bold red]❌ Error[/bold red]",
+                                    border_style="red"
+                                ))
+                                break
 
-                            elif current_event == "complete":
+                            elif update_type == "complete" or current_event == "complete":
                                 progress.update(task, description="[green]✓ Completed[/green]")
                                 break
 
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
+                            # Ignore malformed JSON
                             continue
 
         except Exception as e:

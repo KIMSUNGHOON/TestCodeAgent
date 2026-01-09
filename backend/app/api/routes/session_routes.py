@@ -14,7 +14,6 @@ from pydantic import BaseModel
 import json
 
 from app.core.config import settings
-from app.agent.langgraph.dynamic_workflow import dynamic_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -40,19 +39,18 @@ class SessionCreateResponse(BaseModel):
 class SessionExecuteRequest(BaseModel):
     """Request to execute code in a session"""
     user_request: str
-    execution_mode: str = "auto"  # "auto", "quick", "full"
-    enable_debug: bool = False
+    max_iterations: int = 15  # Maximum tool call iterations
 
 
 # ============================================================================
-# Session Store (in-memory for now)
+# Session Store (uses SessionManager for consistency with local CLI)
 # ============================================================================
 
 class SessionStore:
-    """Simple in-memory session storage"""
+    """Simple session storage using SessionManager"""
 
     def __init__(self):
-        self.sessions = {}
+        self.sessions = {}  # session_id -> SessionManager
 
     def create_session(self, workspace: Optional[str] = None) -> dict:
         """Create a new session
@@ -63,6 +61,8 @@ class SessionStore:
         Returns:
             Session info dictionary
         """
+        from cli.session_manager import SessionManager
+
         session_id = f"session-{uuid.uuid4().hex[:12]}"
 
         # Generate workspace path: $DEFAULT_WORKSPACE/session_id
@@ -72,30 +72,35 @@ class SessionStore:
             base_workspace = os.getenv("DEFAULT_WORKSPACE", os.getcwd())
             workspace_path = os.path.join(base_workspace, session_id)
 
-        # Create workspace directory
-        os.makedirs(workspace_path, exist_ok=True)
+        # Create SessionManager (same as local CLI)
+        session_mgr = SessionManager(
+            workspace=workspace_path,
+            session_id=session_id,
+            model=os.getenv("LLM_MODEL", "deepseek-ai/DeepSeek-R1"),
+            auto_save=False  # Don't auto-save for remote sessions
+        )
 
         session_info = {
             "session_id": session_id,
             "workspace": workspace_path,
-            "created_at": None,  # Could add timestamp
+            "created_at": None,
             "status": "active"
         }
 
-        self.sessions[session_id] = session_info
+        self.sessions[session_id] = session_mgr
         logger.info(f"✅ Created session {session_id}")
         logger.info(f"   Workspace: {workspace_path}")
 
         return session_info
 
-    def get_session(self, session_id: str) -> Optional[dict]:
-        """Get session info by ID
+    def get_session(self, session_id: str):
+        """Get SessionManager by ID
 
         Args:
             session_id: Session identifier
 
         Returns:
-            Session info or None if not found
+            SessionManager or None if not found
         """
         return self.sessions.get(session_id)
 
@@ -144,12 +149,17 @@ async def get_session(session_id: str):
     Returns:
         Session information
     """
-    session_info = session_store.get_session(session_id)
+    session_mgr = session_store.get_session(session_id)
 
-    if not session_info:
+    if not session_mgr:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
-    return session_info
+    return {
+        "session_id": session_mgr.session_id,
+        "workspace": str(session_mgr.workspace),
+        "model": session_mgr.model,
+        "status": "active"
+    }
 
 
 @router.post("/sessions/{session_id}/execute")
@@ -157,6 +167,7 @@ async def execute_in_session(session_id: str, request: SessionExecuteRequest):
     """Execute a request in the session with Server-Sent Events (SSE) streaming
 
     This endpoint streams workflow execution updates in real-time using SSE.
+    Uses the same Tool Use workflow as local CLI for consistency.
 
     Args:
         session_id: Session identifier
@@ -165,17 +176,14 @@ async def execute_in_session(session_id: str, request: SessionExecuteRequest):
     Returns:
         StreamingResponse with SSE events
     """
-    # Verify session exists
-    session_info = session_store.get_session(session_id)
-    if not session_info:
+    # Get session manager
+    session_mgr = session_store.get_session(session_id)
+    if not session_mgr:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
-
-    workspace = session_info["workspace"]
 
     logger.info(f"🚀 Executing request in session {session_id}")
     logger.info(f"   Request: {request.user_request[:100]}")
-    logger.info(f"   Workspace: {workspace}")
-    logger.info(f"   Mode: {request.execution_mode}")
+    logger.info(f"   Workspace: {session_mgr.workspace}")
 
     async def event_stream() -> AsyncGenerator[str, None]:
         """Generate SSE events from workflow execution
@@ -185,35 +193,36 @@ async def execute_in_session(session_id: str, request: SessionExecuteRequest):
             data: <json_data>
         """
         try:
-            # Stream workflow execution using dynamic_workflow.execute()
-            async for update in dynamic_workflow.execute(
+            # Use Tool Use workflow (same as local CLI)
+            async for update in session_mgr.execute_tool_use_workflow(
                 user_request=request.user_request,
-                workspace_root=workspace,
-                task_type="general",
-                enable_debug=request.enable_debug
+                max_iterations=request.max_iterations
             ):
-                # Each update has: node, status, agent_title, agent_description, agent_icon, updates, timestamp
-                node_name = update.get("node", "system")
-                status = update.get("status", "running")
-                update_data = update.get("updates", {})
+                # update format from supervisor.execute_with_tools():
+                # {"type": "reasoning"|"tool_call_start"|"tool_call_result"|"final_response", ...}
 
-                # Determine event type based on node and status
+                update_type = update.get("type", "update")
+
+                # Map to SSE event types
                 event_type = "update"
-                if "supervisor" in node_name.lower():
-                    event_type = "supervisor"
-                elif status == "error":
+                if update_type == "reasoning":
+                    event_type = "reasoning"
+                elif update_type == "tool_call_start":
+                    event_type = "tool_start"
+                elif update_type == "tool_call_result":
+                    event_type = "tool_result"
+                elif update_type == "final_response":
+                    event_type = "response"
+                elif update_type == "error":
                     event_type = "error"
-                elif status == "completed" or "complete" in status.lower():
-                    event_type = "complete"
-                elif "coder" in node_name.lower() or "tool" in str(update_data).lower():
-                    event_type = "tool"
 
-                # Format as SSE
+                # Send as SSE
                 yield f"event: {event_type}\n"
                 yield f"data: {json.dumps(update)}\n\n"
 
             # Send completion event
             completion_data = {
+                "type": "complete",
                 "session_id": session_id,
                 "status": "completed"
             }
@@ -221,8 +230,9 @@ async def execute_in_session(session_id: str, request: SessionExecuteRequest):
             yield f"data: {json.dumps(completion_data)}\n\n"
 
         except Exception as e:
-            logger.error(f"Error during execution: {e}")
+            logger.error(f"Error during execution: {e}", exc_info=True)
             error_data = {
+                "type": "error",
                 "error": str(e),
                 "session_id": session_id
             }
@@ -250,9 +260,9 @@ async def delete_session(session_id: str):
     Returns:
         Confirmation message
     """
-    session_info = session_store.get_session(session_id)
+    session_mgr = session_store.get_session(session_id)
 
-    if not session_info:
+    if not session_mgr:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     # Remove from store
