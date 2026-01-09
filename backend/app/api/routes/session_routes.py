@@ -185,40 +185,32 @@ async def execute_in_session(session_id: str, request: SessionExecuteRequest):
             data: <json_data>
         """
         try:
-            # Prepare workflow input
-            workflow_input = {
-                "user_request": request.user_request,
-                "workspace_root": workspace,
-                "task_type": "general",
-                "execution_mode": request.execution_mode,
-                "enable_debug": request.enable_debug
-            }
+            # Stream workflow execution using dynamic_workflow.execute()
+            async for update in dynamic_workflow.execute(
+                user_request=request.user_request,
+                workspace_root=workspace,
+                task_type="general",
+                enable_debug=request.enable_debug
+            ):
+                # Each update has: node, status, agent_title, agent_description, agent_icon, updates, timestamp
+                node_name = update.get("node", "system")
+                status = update.get("status", "running")
+                update_data = update.get("updates", {})
 
-            # Stream workflow execution
-            async for chunk in dynamic_workflow.astream(workflow_input):
-                # Each chunk is a dict with node outputs
-                for node_name, node_output in chunk.items():
-                    if isinstance(node_output, dict):
-                        # Determine event type from node output
-                        event_type = "update"
+                # Determine event type based on node and status
+                event_type = "update"
+                if "supervisor" in node_name.lower():
+                    event_type = "supervisor"
+                elif status == "error":
+                    event_type = "error"
+                elif status == "completed" or "complete" in status.lower():
+                    event_type = "complete"
+                elif "coder" in node_name.lower() or "tool" in str(update_data).lower():
+                    event_type = "tool"
 
-                        if "supervisor_decision" in node_output:
-                            event_type = "supervisor"
-                        elif "tool_name" in node_output:
-                            event_type = "tool"
-                        elif "response" in node_output:
-                            event_type = "response"
-                        elif "error" in node_output:
-                            event_type = "error"
-
-                        # Format as SSE
-                        event_data = {
-                            "node": node_name,
-                            "data": node_output
-                        }
-
-                        yield f"event: {event_type}\n"
-                        yield f"data: {json.dumps(event_data)}\n\n"
+                # Format as SSE
+                yield f"event: {event_type}\n"
+                yield f"data: {json.dumps(update)}\n\n"
 
             # Send completion event
             completion_data = {
