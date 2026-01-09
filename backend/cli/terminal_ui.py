@@ -175,10 +175,17 @@ class TerminalUI:
                     elif update_type == "reasoning":
                         # LLM reasoning/thinking (CoT)
                         reasoning = update.get("content", "")
-                        if reasoning:
+                        if reasoning and len(reasoning.strip()) > 10:
                             progress.stop()
-                            self.console.print("\n[dim italic]💭 Thinking:[/dim italic]")
-                            self.console.print(f"[dim]{reasoning[:200]}...[/dim]")  # Show first 200 chars
+                            from rich.panel import Panel
+                            # Show reasoning in a panel for better visibility
+                            reasoning_text = reasoning[:300] + "..." if len(reasoning) > 300 else reasoning
+                            self.console.print(Panel(
+                                f"[dim]{reasoning_text}[/dim]",
+                                title="[bold cyan]💭 Thinking[/bold cyan]",
+                                border_style="blue",
+                                padding=(0, 1)
+                            ))
                             progress.start()
 
                     elif update_type == "tool_call_start":
@@ -195,25 +202,48 @@ class TerminalUI:
                         success = result.get("success", False)
 
                         if success:
-                            # Show successful tool execution
-                            output_preview = str(result.get("output", ""))[:100]
                             progress.stop()
-                            self.console.print(f"[green]✓[/green] {tool_name}: {output_preview}")
-                            progress.start()
 
-                            # Collect artifacts from write_file tool
+                            # Special handling for file operations with full paths
                             if tool_name == "write_file":
-                                path = result.get("metadata", {}).get("path", "unknown")
+                                metadata = result.get("metadata", {})
+                                path = metadata.get("path", "unknown")
+                                lines = metadata.get("lines", 0)
+                                size = metadata.get("bytes", 0)  # write_file uses "bytes" not "size_bytes"
+
+                                # Show full path with file icon
+                                self.console.print(f"[green]✓ Created:[/green] [cyan]{path}[/cyan]")
+                                self.console.print(f"   [dim]→ {lines} lines, {size:,} bytes[/dim]")
+
                                 artifacts.append({
                                     "action": "created",
                                     "filename": path,
-                                    "language": "python"
+                                    "lines": lines,
+                                    "size": size
                                 })
+                            elif tool_name == "read_file":
+                                metadata = result.get("metadata", {})
+                                path = metadata.get("path", "unknown")
+                                lines = metadata.get("lines", 0)
+                                size_mb = metadata.get("size_mb", 0)
+
+                                self.console.print(f"[green]✓ Read:[/green] [cyan]{path}[/cyan]")
+                                self.console.print(f"   [dim]→ {lines} lines, {size_mb:.2f} MB[/dim]")
+                            else:
+                                # Generic tool success
+                                output_preview = str(result.get("output", ""))[:80]
+                                if output_preview:
+                                    self.console.print(f"[green]✓[/green] {tool_name}: [dim]{output_preview}...[/dim]")
+                                else:
+                                    self.console.print(f"[green]✓[/green] {tool_name}")
+
+                            progress.start()
                         else:
-                            # Show tool error
+                            # Show tool error with more detail
                             error = result.get("error", "Unknown error")
                             progress.stop()
-                            self.console.print(f"[red]✗[/red] {tool_name}: {error}")
+                            self.console.print(f"[red]✗ {tool_name} failed:[/red]")
+                            self.console.print(f"   [red dim]{error}[/red dim]")
                             progress.start()
 
                     elif update_type == "final_response":
@@ -234,11 +264,24 @@ class TerminalUI:
                                 pass  # Keep original response if parsing fails
 
                         progress.stop()
-                        self.console.print("\n[bold green]✅ Task Complete[/bold green]")
+                        from rich.panel import Panel
+
+                        # Build final response panel
+                        final_content = []
                         if summary and summary != "Completed without additional tools":
-                            self.console.print(f"[dim]{summary}[/dim]\n")
+                            final_content.append(f"[bold]{summary}[/bold]\n")
                         if response:
-                            self.console.print(Markdown(response))
+                            final_content.append(response)
+
+                        if final_content:
+                            self.console.print(Panel(
+                                Markdown("\n".join(final_content)),
+                                title="[bold green]✅ Complete[/bold green]",
+                                border_style="green",
+                                padding=(1, 2)
+                            ))
+                        else:
+                            self.console.print("[bold green]✅ Task Complete[/bold green]")
 
                     elif update_type == "error":
                         # Execution error
